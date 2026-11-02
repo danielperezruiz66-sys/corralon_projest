@@ -1,5 +1,11 @@
+from django.contrib.auth.models import AbstractUser
 from django.db import models
+from simple_history.models import HistoricalRecords
 
+
+# =============================================================================
+# GEOGRAFIA — Pais, Provincia, Localidad, Ubicacion
+# =============================================================================
 
 class Pais(models.Model):
     nombre = models.CharField(max_length=60, unique=True)
@@ -71,6 +77,10 @@ class Ubicacion(models.Model):
         return f'{self.calle or ""} {self.nro_calle or ""}'.strip() or f'Ubicacion {self.pk}'
 
 
+# =============================================================================
+# ORGANIZACION — Empresa, Sucursal, Usuario, Empleado, Rol, EmpleadoXRol, SucursalXEmpleado
+# =============================================================================
+
 class Empresa(models.Model):
     cuit = models.CharField(max_length=30, unique=True)
     nombre = models.CharField(max_length=80)
@@ -119,14 +129,56 @@ class Sucursal(models.Model):
         return self.nombre
 
 
+class Usuario(AbstractUser):
+    # Datos de login unicamente. La informacion personal/laboral vive en Empleado.
+    # Se eliminan los campos heredados que no se usan.
+    first_name = None
+    last_name = None
+
+    history = HistoricalRecords(excluded_fields=['password'])
+
+    class Meta:
+        db_table = 'USUARIOS'
+        ordering = ['username']
+        verbose_name = 'Usuario'
+        verbose_name_plural = 'Usuarios'
+
+    def get_full_name(self):
+        return self.username
+
+    def get_short_name(self):
+        return self.username
+
+    def __str__(self):
+        return self.username
+
+
 class Empleado(models.Model):
-    dni_empleado = models.CharField(max_length=15, unique=True)
+    class EstadoEmpleado(models.TextChoices):
+        ACTIVO = 'AC', 'Activo'
+        BAJA_TEMPORAL = 'BT', 'Baja temporal'
+        SUSPENDIDO = 'SU', 'Suspendido'
+        INACTIVO = 'IN', 'Inactivo'
+
+    usuario = models.OneToOneField(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='empleado',
+    )
+    dni = models.CharField(max_length=15, unique=True)
     legajo = models.CharField(max_length=15, unique=True)
     nombre = models.CharField(max_length=50)
     apellido = models.CharField(max_length=50)
     telefono = models.CharField(max_length=30, null=True, blank=True)
-    email = models.EmailField(max_length=80, null=True, blank=True)
-    estado = models.BooleanField(default=True)
+    estado = models.CharField(
+        max_length=2,
+        choices=EstadoEmpleado.choices,
+        default=EstadoEmpleado.ACTIVO,
+    )
+
+    history = HistoricalRecords()
 
     class Meta:
         db_table = 'EMPLEADOS'
@@ -163,10 +215,18 @@ class EmpleadoXRol(models.Model):
         on_delete=models.PROTECT,
         related_name='empleados_asignados',
     )
-    contrasena = models.CharField(max_length=255, null=True, blank=True)
     hora_entrada = models.TimeField(null=True, blank=True)
     hora_salida = models.TimeField(null=True, blank=True)
-    estado = models.BooleanField(default=True)
+    estado = models.CharField(
+        max_length=2,
+        choices=[
+            ('AC', 'Activo'),
+            ('BT', 'Baja temporal'),
+            ('SU', 'Suspendido'),
+            ('IN', 'Inactivo'),
+        ],
+        default='AC',
+    )
 
     class Meta:
         db_table = 'EMPLEADOS_X_ROLES'
@@ -199,6 +259,10 @@ class SucursalXEmpleado(models.Model):
     def __str__(self):
         return f'{self.sucursal} - {self.empleado}'
 
+
+# =============================================================================
+# CAJA — Caja, SeccionCaja
+# =============================================================================
 
 class Caja(models.Model):
     class EstadoCaja(models.TextChoices):
@@ -257,6 +321,8 @@ class SeccionCaja(models.Model):
         default=EstadoSeccion.ABIERTA,
     )
 
+    history = HistoricalRecords()
+
     class Meta:
         db_table = 'SECCIONES_CAJA'
         verbose_name = 'Seccion de Caja'
@@ -286,6 +352,10 @@ class SeccionCaja(models.Model):
                 {'fecha_hora_cierre': 'El cierre no puede ser anterior a la apertura.'}
             )
 
+
+# =============================================================================
+# CATALOGO — Categoria, Marca, Unidad, Producto, ProductoXSucursal
+# =============================================================================
 
 class Categoria(models.Model):
     categorias = models.CharField(max_length=50)
@@ -352,6 +422,8 @@ class Producto(models.Model):
         related_name='productos',
     )
 
+    history = HistoricalRecords()
+
     class Meta:
         db_table = 'PRODUCTOS'
         ordering = ['nombre']
@@ -384,6 +456,10 @@ class ProductoXSucursal(models.Model):
         return f'{self.producto} - {self.sucursal}'
 
 
+# =============================================================================
+# STOCK — Deposito, Stock, DetalleStock
+# =============================================================================
+
 class Deposito(models.Model):
     nombre = models.CharField(max_length=50)
     descripcion = models.CharField(max_length=150, null=True, blank=True)
@@ -412,8 +488,10 @@ class Stock(models.Model):
     cantidad = models.IntegerField(default=0)
     cant_min = models.IntegerField(default=0)
 
+    history = HistoricalRecords()
+
     class Meta:
-        db_table = 'STOCK'
+        db_table = 'STOCKS'
         verbose_name = 'Stock'
         verbose_name_plural = 'Stocks'
 
@@ -437,6 +515,8 @@ class DetalleStock(models.Model):
     fecha_ingreso = models.DateTimeField(auto_now_add=True)
     fecha_venc = models.DateField(null=True, blank=True)
 
+    history = HistoricalRecords()
+
     class Meta:
         db_table = 'DETALLES_DE_STOCK'
         verbose_name = 'Detalle de Stock'
@@ -446,6 +526,10 @@ class DetalleStock(models.Model):
         return f'Detalle {self.pk} - {self.stock}'
 
 
+# =============================================================================
+# PROVEEDORES — Proveedor, ProveedorXSucursal, ProductoXProveedor
+# =============================================================================
+
 class Proveedor(models.Model):
     cuit = models.CharField(max_length=30, unique=True)
     nombre = models.CharField(max_length=80)
@@ -453,6 +537,8 @@ class Proveedor(models.Model):
     contacto = models.CharField(max_length=30, null=True, blank=True)
     email_prov = models.EmailField(max_length=80, null=True, blank=True)
     estado_prov = models.BooleanField(default=True)
+
+    history = HistoricalRecords()
 
     class Meta:
         db_table = 'PROVEEDORES'
@@ -510,6 +596,10 @@ class ProductoXProveedor(models.Model):
         return f'{self.producto} - {self.proveedor}'
 
 
+# =============================================================================
+# PAGOS — MetodoPago
+# =============================================================================
+
 class MetodoPago(models.Model):
     metodo_pago = models.CharField(max_length=30)
     estado = models.BooleanField(default=True)
@@ -524,6 +614,10 @@ class MetodoPago(models.Model):
         return self.metodo_pago
 
 
+# =============================================================================
+# VENTAS — Cliente, Venta, DetalleVenta, Factura, MetodoPagoXVenta
+# =============================================================================
+
 class Cliente(models.Model):
     dni = models.CharField(max_length=15, unique=True, null=True, blank=True)
     razon_social = models.CharField(max_length=100, null=True, blank=True)
@@ -533,6 +627,8 @@ class Cliente(models.Model):
     telefono = models.CharField(max_length=20, null=True, blank=True)
     direccion = models.CharField(max_length=120, null=True, blank=True)
     condicion_iva = models.CharField(max_length=30, null=True, blank=True)
+
+    history = HistoricalRecords()
 
     class Meta:
         db_table = 'CLIENTES'
@@ -571,6 +667,8 @@ class Venta(models.Model):
         default=EstadoVenta.PENDIENTE,
     )
 
+    history = HistoricalRecords()
+
     class Meta:
         db_table = 'VENTAS'
         ordering = ['-fecha_venta']
@@ -595,6 +693,8 @@ class DetalleVenta(models.Model):
     cantidad_venta = models.DecimalField(max_digits=10, decimal_places=2)
     precio_venta = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+
+    history = HistoricalRecords()
 
     class Meta:
         db_table = 'DETALLES_DE_VENTAS'
@@ -646,6 +746,8 @@ class MetodoPagoXVenta(models.Model):
     )
     monto_pagado = models.DecimalField(max_digits=10, decimal_places=2)
 
+    history = HistoricalRecords()
+
     class Meta:
         db_table = 'METODO_DE_PAGO_X_VENTAS'
         verbose_name = 'Metodo de Pago por Venta'
@@ -654,6 +756,10 @@ class MetodoPagoXVenta(models.Model):
     def __str__(self):
         return f'{self.metodo_pago} - Venta {self.venta_id}'
 
+
+# =============================================================================
+# COMPRAS — Compra, DetalleCompra, MetodoPagoXCompra
+# =============================================================================
 
 class Compra(models.Model):
     class EstadoCompra(models.TextChoices):
@@ -674,6 +780,8 @@ class Compra(models.Model):
         choices=EstadoCompra.choices,
         default=EstadoCompra.PENDIENTE,
     )
+
+    history = HistoricalRecords()
 
     class Meta:
         db_table = 'COMPRAS'
@@ -700,6 +808,8 @@ class DetalleCompra(models.Model):
     precio_compra = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
 
+    history = HistoricalRecords()
+
     class Meta:
         db_table = 'DETALLES_DE_COMPRAS'
         verbose_name = 'Detalle de Compra'
@@ -721,6 +831,8 @@ class MetodoPagoXCompra(models.Model):
         related_name='pagos',
     )
     monto_pagado = models.DecimalField(max_digits=10, decimal_places=2)
+
+    history = HistoricalRecords()
 
     class Meta:
         db_table = 'METODO_DE_PAGO_X_COMPRAS'

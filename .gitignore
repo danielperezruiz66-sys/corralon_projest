@@ -12,10 +12,20 @@ __pycache__/
 # Variables de entorno
 .env
 
+# Credenciales / datos sensibles
+credenciales_prueba.csv
+*.csv
+
 # Django
 *.sqlite3
 /staticfiles/
 /media/
+
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
 
 # Editores
 .idea/
