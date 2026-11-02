@@ -11,7 +11,7 @@
 > `INSTRUCCIONES.md` es otra cosa: es la guía de instalación para el equipo.
 > No mezclar ambos documentos.
 
-**Última actualización:** 2026-11-01
+**Última actualización:** 2026-11-02
 
 ---
 
@@ -39,15 +39,16 @@ Arquitectura **desacoplada**:
 | Comando de datos de prueba (`seed_data`) | ✅ Funcional |
 | Admin de Django | ✅ Configurado (Usuario + Empleado inline) |
 | API REST — configuración base (JWT, paginación, permisos, filtros) | ✅ Lista — `/api/token/` y `/api/token/refresh/` funcionando |
-| API REST — serializers, viewsets y rutas de negocio | ❌ **No empezada** |
+| API REST — serializers, viewsets y rutas de negocio | ✅ **Fase 1** — 33 endpoints registrados y probados |
+| API REST — escritura de ventas/compras/stock | ❌ Pendiente de `services/` (hoy esos modelos son de solo lectura) |
 | Lógica de negocio (`services/`) | ❌ **No empezada** — el paquete existe pero está vacío |
 | Frontend | ❌ Scaffold de Vite sin tocar (sin llamadas a la API) |
 | Tests | ❌ Solo el archivo `tests.py` vacío |
 
 **Lo que sigue está en `DIA_SIGUIENTE.md`.**
 
-> Estado del repo: la reestructuración (`backend/`, `frontend/`) está
-> en el working tree **sin commitear**. Hay un solo commit previo (`30cadfb bd y migraciones`).
+> Estado del repo: la reestructuración y la Fase 1 de la API están commiteadas.
+> La base de desarrollo tiene las migraciones aplicadas y datos de `seed_data`.
 
 ## 3. Stack y versiones
 
@@ -90,7 +91,7 @@ corralon_projest/
 │   │   ├── services/      # lógica de negocio (vacío por ahora)
 │   │   ├── management/commands/seed_data.py
 │   │   ├── migrations/    # 0001_initial + 0002 (tablas de historial)
-│   │   ├── admin.py  apps.py  backends.py  urls.py  views.py  tests.py
+│   │   ├── admin.py  apps.py  backends.py  serializers.py  urls.py  views.py  tests.py
 │   ├── manage.py
 │   └── requirements.txt
 ├── frontend/              # scaffold Vite estándar
@@ -145,11 +146,17 @@ agregar un modelo, ubicarlo en su sección (mover la sección solo si es necesar
 
 Hechos del esquema actual (la acción de resolverlos está en `DIA_SIGUIENTE.md`):
 
-- `Compra` no tiene FK a `Proveedor`: una compra no registra a quién se le compró.
-- `DetalleCompra` no tiene depósito ni lote, así que al reponer stock no se sabe
-  en qué `DetalleStock` entra.
-- El stock está duplicado: `Stock.cantidad` (total por producto/sucursal) y
-  `DetalleStock.cantidad` (por depósito/lote). Falta definir la fuente de verdad.
+- Las cantidades son enteras en stock (`Stock.cantidad`, `Stock.cant_min`,
+  `DetalleStock.cantidad`) pero decimales en ventas y compras. Decisión: **todas
+  las cantidades pasan a `DecimalField`**, porque la unidad del producto puede
+  ser kilo, metro o litro.
+- `Stock.cantidad` duplica la suma de `DetalleStock.cantidad`. Decisión:
+  `DetalleStock` es la fuente de verdad; `Stock.cantidad` debe derivarse de sus
+  detalles o eliminarse del modelo.
+- `Compra` no tiene FK a `Proveedor`. `ProductoXProveedor` solo indica qué
+  proveedores pueden vender un producto, no a quién se le compró esa compra.
+- `DetalleCompra` no tiene depósito ni lote. Al recibir una compra hay que saber
+  en qué `DetalleStock` entra; el producto y la sucursal no determinan el depósito.
 
 ### `services/` — lógica de negocio
 
@@ -164,6 +171,10 @@ services/stock.py    → movimientos y actualización de stock
 Las vistas deben validar la entrada y **delegar** en los servicios, para que la
 lógica sea reutilizable y testeable sin HTTP.
 
+Hoy la API expone `Stock`, `DetalleStock`, `SeccionCaja`, `Venta`, `Compra` y sus
+detalles en **solo lectura**. La escritura se habilita cuando existan los
+servicios transaccionales; `Caja` (el registro físico) sí es CRUD.
+
 ### API REST — configuración base
 
 Todo cuelga de `/api/` (`config/urls.py` → `app/urls.py`).
@@ -177,10 +188,32 @@ Todo cuelga de `/api/` (`config/urls.py` → `app/urls.py`).
 | Permisos | `IsAuthenticated` global; solo los endpoints de token son públicos |
 | Paginación | `PageNumberPagination`, `PAGE_SIZE = 20` |
 | Filtros | `DjangoFilterBackend` + `SearchFilter` + `OrderingFilter` |
-| Routers | `DefaultRouter` en `app/urls.py` (todavía sin viewsets registrados) |
+| Routers | `DefaultRouter` en `app/urls.py` — 33 viewsets registrados |
 
 El esquema sirve para web (React) y mobile (React Native): el cliente solo
 necesita los dos endpoints de token y el header `Authorization`.
+
+#### Rutas de la Fase 1
+
+| Dominio | Prefijos |
+|---|---|
+| GEOGRAFIA | `paises`, `provincias`, `localidades`, `ubicaciones` |
+| ORGANIZACION | `empresas`, `sucursales`, `usuarios`, `empleados`, `roles`, `empleados-roles`, `sucursales-empleados` |
+| CAJA | `cajas` (CRUD), `secciones-caja` (solo lectura) |
+| CATALOGO | `categorias`, `marcas`, `unidades`, `productos`, `productos-sucursales` |
+| STOCK | `depositos` (CRUD), `stocks` y `detalles-stock` (solo lectura) |
+| PROVEEDORES | `proveedores`, `proveedores-sucursales`, `productos-proveedores` |
+| PAGOS | `metodos-pago` |
+| VENTAS | `clientes` (CRUD), `ventas`, `detalles-venta`, `facturas`, `metodos-pago-ventas` (solo lectura) |
+| COMPRAS | `compras`, `detalles-compra`, `metodos-pago-compras` (solo lectura) |
+
+Reglas de escritura:
+
+- `Usuario` exige `IsAdminUser`; la contraseña es write-only y se guarda con
+  `set_password()` (nunca se devuelve). `is_superuser` es de solo lectura.
+- `Producto` no expone `sucursales` (M2M con `through`); se gestiona con
+  `productos-sucursales`.
+- Las tablas puente tienen endpoint propio.
 
 ### Auditoría — `django-simple-history`
 

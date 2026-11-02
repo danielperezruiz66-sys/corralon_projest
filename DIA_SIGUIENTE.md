@@ -4,29 +4,57 @@
 > anterior; lo terminado o descartado se borra. No es un historial.
 > Contexto del proyecto: ver `AGENTS.md`.
 
-**Cerrado el:** 2026-11-01
+**Cerrado el:** 2026-11-02
 
-## 1. Serializers + viewsets
+## 1. Modelo — migración `0003`
 
-- [ ] Crear `serializers.py` y `views.py` únicos, con secciones `# ==== DOMINIO ====`.
-- [ ] Registrar los viewsets en el `router` de `app/urls.py`.
-- [ ] Orden: GEOGRAFIA → ORGANIZACION → CATALOGO → PAGOS → PROVEEDORES → STOCK/CAJA (solo lectura).
-- [ ] Casos especiales: `Usuario` (password write-only), `Producto` (`through=ProductoXSucursal`), tablas puente con serializer propio.
+Decisiones tomadas:
 
-## 2. Decisiones de modelo (antes de implementar compras)
+- [ ] Pasar a `DecimalField` todas las cantidades: `Stock.cantidad`,
+      `Stock.cant_min`, `DetalleStock.cantidad`, `DetalleVenta.cantidad_venta`
+      y `DetalleCompra.cantidad_compra`. Definir `max_digits`/`decimal_places`
+      (propuesta: `12,3`).
+- [ ] Dejar `DetalleStock` como **fuente de verdad** del stock. Resolver
+      `Stock.cantidad`: eliminarlo y exponer la suma de sus detalles, o
+      mantenerlo como caché que recalculan los servicios.
+- [ ] Actualizar `seed_data` y generar la migración con `makemigrations`.
 
-- [ ] Agregar FK a `Proveedor` en `Compra`.
-- [ ] Definir depósito/lote en `DetalleCompra` para reponer stock.
-- [ ] Definir la fuente de verdad del stock: `Stock.cantidad` o `DetalleStock.cantidad`.
+Decisiones a cerrar con el usuario:
 
-## 3. Lógica de negocio
+- [ ] `Compra.proveedor`: agregar FK (recomendado) o derivarlo desde
+      `ProductoXProveedor`. Ojo: `ProductoXProveedor` dice qué proveedores
+      pueden vender un producto, no a quién se le compró esa compra.
+- [ ] `DetalleCompra.deposito`/`lote`: agregarlos para saber en qué
+      `DetalleStock` entra la mercadería, o definir un depósito por defecto por
+      sucursal y que el servicio lo resuelva.
 
-- [ ] `services/ventas.py`: registrar venta, totales, descuento de stock, factura.
-- [ ] `services/caja.py`: apertura/cierre de sección.
-- [ ] `services/compras.py`: registro y reposición de stock.
+## 2. Lógica de negocio (`services/`)
 
-## 4. Frontend y tests
+- [ ] `services/stock.py`: alta y movimiento de `DetalleStock`, recálculo de
+      `Stock`, con `select_for_update` para evitar carreras.
+- [ ] `services/caja.py`: apertura/cierre de `SeccionCaja` (una abierta por
+      caja, montos y fechas obligatorias al cerrar).
+- [ ] `services/ventas.py`: venta + detalles + descuento de stock + factura,
+      todo en `transaction.atomic`.
+- [ ] `services/compras.py`: compra + detalles + reposición en depósito/lote.
+- [ ] Endpoints de escritura para ventas/compras/stock que deleguen en los
+      servicios (hoy son de solo lectura).
 
-- [ ] Cliente HTTP con JWT (login + refresh) en React.
+## 3. API y permisos
+
+- [ ] Definir permisos de escritura por rol. Hoy cualquier usuario autenticado
+      puede escribir catálogo; solo `Usuario` exige `IsAdminUser`.
+- [ ] Evaluar `HistoricalRecords` para `Factura`.
+
+## 4. Frontend
+
+- [ ] Cliente HTTP con JWT (login + refresh automático) en React.
 - [ ] Proxy de Vite hacia el backend en desarrollo.
-- [ ] Tests de servicios críticos (ventas, caja).
+- [ ] Pantalla de login (usuario o legajo) y listado de productos con búsqueda
+      y paginación.
+
+## 5. Tests
+
+- [ ] `APITestCase` de autenticación, permisos y endpoints principales.
+- [ ] Tests de servicios: venta descuenta stock, caja no cierra dos veces,
+      compra repone en el depósito correcto.
