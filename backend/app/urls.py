@@ -50,6 +50,11 @@ router.register(
 router.register('depositos', views.DepositoViewSet, basename='deposito')
 router.register('stocks', views.StockViewSet, basename='stock')
 router.register('detalles-stock', views.DetalleStockViewSet, basename='detalle-stock')
+router.register(
+    'movimientos-stock',
+    views.MovimientoStockViewSet,
+    basename='movimiento-stock',
+)
 
 # PROVEEDORES
 router.register('proveedores', views.ProveedorViewSet, basename='proveedor')

@@ -315,6 +315,18 @@ class SeccionCaja(models.Model):
         null=True,
         blank=True,
     )
+    monto_teorico = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Total calculado por el sistema al cerrar la seccion.',
+    )
+    observaciones = models.TextField(
+        null=True,
+        blank=True,
+        help_text='Detalle u observaciones del cierre.',
+    )
     estado = models.CharField(
         max_length=2,
         choices=EstadoSeccion.choices,
@@ -351,6 +363,42 @@ class SeccionCaja(models.Model):
             raise ValidationError(
                 {'fecha_hora_cierre': 'El cierre no puede ser anterior a la apertura.'}
             )
+
+
+class DetalleCierreCaja(models.Model):
+    seccion_caja = models.ForeignKey(
+        SeccionCaja,
+        on_delete=models.CASCADE,
+        related_name='detalles_cierre',
+    )
+    metodo_pago = models.ForeignKey(
+        'MetodoPago',
+        on_delete=models.PROTECT,
+        related_name='detalles_cierre',
+    )
+    monto_sistema = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    monto_real = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    history = HistoricalRecords()
+
+    class Meta:
+        db_table = 'DETALLES_CIERRE_CAJA'
+        ordering = ['metodo_pago__metodo_pago']
+        verbose_name = 'Detalle de Cierre de Caja'
+        verbose_name_plural = 'Detalles de Cierre de Caja'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['seccion_caja', 'metodo_pago'],
+                name='un_metodo_por_cierre_caja',
+            ),
+        ]
+
+    @property
+    def diferencia(self):
+        return self.monto_real - self.monto_sistema
+
+    def __str__(self):
+        return f'{self.seccion_caja} - {self.metodo_pago}'
 
 
 # =============================================================================
@@ -508,13 +556,26 @@ class Stock(models.Model):
     # Lo mantiene services/stock.py dentro de la misma transaccion.
     cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     cant_min = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    cant_negativa_max = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        default=-10,
+        help_text='Limite negativo permitido antes de bloquear ventas.',
+    )
 
     history = HistoricalRecords()
 
     class Meta:
         db_table = 'STOCKS'
+        ordering = ['producto__nombre', 'sucursal__nombre']
         verbose_name = 'Stock'
         verbose_name_plural = 'Stocks'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['producto', 'sucursal'],
+                name='un_stock_por_producto_y_sucursal',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.producto} en {self.sucursal}'
@@ -540,6 +601,7 @@ class DetalleStock(models.Model):
 
     class Meta:
         db_table = 'DETALLES_DE_STOCK'
+        ordering = ['stock', 'fecha_ingreso']
         verbose_name = 'Detalle de Stock'
         verbose_name_plural = 'Detalles de Stock'
 
@@ -624,6 +686,10 @@ class ProductoXProveedor(models.Model):
 class MetodoPago(models.Model):
     metodo_pago = models.CharField(max_length=30)
     estado = models.BooleanField(default=True)
+    es_efectivo = models.BooleanField(
+        default=False,
+        help_text='Marca el metodo que afecta el efectivo inicial de la caja.',
+    )
 
     class Meta:
         db_table = 'METODO_DE_PAGO'
@@ -664,6 +730,7 @@ class Cliente(models.Model):
 class Venta(models.Model):
     class EstadoVenta(models.TextChoices):
         PENDIENTE = 'PE', 'Pendiente'
+        CONFIRMADA = 'CO', 'Confirmada'
         PAGADA = 'PA', 'Pagada'
         PARCIAL = 'PC', 'Parcial'
         ANULADA = 'AN', 'Anulada'
@@ -806,6 +873,11 @@ class Compra(models.Model):
         blank=True,
     )
     fecha_compra = models.DateTimeField(auto_now_add=True)
+    fecha_recepcion = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Cuando se recibio la mercaderia y se repuso el stock.',
+    )
     monto_compra = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     estado = models.CharField(
         max_length=2,
@@ -873,3 +945,57 @@ class MetodoPagoXCompra(models.Model):
 
     def __str__(self):
         return f'{self.metodo_pago} - Compra {self.compra_id}'
+
+
+# =============================================================================
+# STOCK — MovimientoStock (libro de movimientos)
+# =============================================================================
+
+class MovimientoStock(models.Model):
+    class TipoMovimiento(models.TextChoices):
+        VENTA = 'VE', 'Venta'
+        CANCELACION = 'CA', 'Cancelacion de venta'
+        COMPRA = 'CO', 'Compra'
+        AJUSTE = 'AJ', 'Ajuste'
+
+    stock = models.ForeignKey(
+        Stock,
+        on_delete=models.CASCADE,
+        related_name='movimientos',
+    )
+    detalle_stock = models.ForeignKey(
+        DetalleStock,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='movimientos',
+    )
+    tipo = models.CharField(max_length=2, choices=TipoMovimiento.choices)
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3)
+    venta = models.ForeignKey(
+        Venta,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='movimientos_stock',
+    )
+    compra = models.ForeignKey(
+        Compra,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='movimientos_stock',
+    )
+    referencia = models.CharField(max_length=100, blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    history = HistoricalRecords()
+
+    class Meta:
+        db_table = 'MOVIMIENTOS_STOCK'
+        ordering = ['-fecha', '-id']
+        verbose_name = 'Movimiento de Stock'
+        verbose_name_plural = 'Movimientos de Stock'
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} {self.cantidad} - {self.stock}'

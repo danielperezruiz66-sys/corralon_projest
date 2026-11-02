@@ -33,15 +33,15 @@ Arquitectura **desacoplada**:
 | Área | Estado |
 |---|---|
 | Estructura del repo (`backend/` + `frontend/`) | ✅ Hecha |
-| Modelos de datos (33) en `models.py` por secciones | ✅ Hechos |
-| Migraciones (`0001`–`0003`) | ✅ Aplicadas y consistentes (`makemigrations --check` sin cambios) |
+| Modelos de datos (35) en `models.py` por secciones | ✅ Hechos |
+| Migraciones (`0001`–`0005`) | ✅ Aplicadas y consistentes (`makemigrations --check` sin cambios) |
 | Autenticación (login por usuario **o** legajo) | ✅ Funcional |
 | Comando de datos de prueba (`seed_data`) | ✅ Funcional |
 | Admin de Django | ✅ Configurado (Usuario + Empleado inline) |
 | API REST — configuración base (JWT, paginación, permisos, filtros) | ✅ Lista — `/api/token/` y `/api/token/refresh/` funcionando |
-| API REST — serializers, viewsets y rutas de negocio | ✅ **Fase 1** — 33 endpoints registrados y probados |
-| API REST — escritura de ventas/compras/stock | ❌ Pendiente de `services/` (hoy esos modelos son de solo lectura) |
-| Lógica de negocio (`services/`) | ❌ **No empezada** — el paquete existe pero está vacío |
+| API REST — serializers, viewsets y rutas de negocio | ✅ **Fase 1** — 34 endpoints registrados y probados |
+| API REST — acciones de escritura de ventas/compras/caja | ❌ Pendiente — los servicios existen, faltan los endpoints que deleguen en ellos |
+| Lógica de negocio (`services/`) | ✅ Implementada — stock, caja, ventas y compras (probada en shell) |
 | Frontend | ❌ Scaffold de Vite sin tocar (sin llamadas a la API) |
 | Tests | ❌ Solo el archivo `tests.py` vacío |
 
@@ -87,10 +87,10 @@ corralon_projest/
 ├── backend/
 │   ├── config/            # settings.py, urls.py, asgi.py, wsgi.py
 │   ├── app/               # ÚNICA Django app del proyecto
-│   │   ├── models.py      # 33 modelos, agrupados por dominio con comentarios
-│   │   ├── services/      # lógica de negocio (vacío por ahora)
-│   │   ├── management/commands/seed_data.py
-│   │   ├── migrations/    # 0001_initial, 0002 (historial) y 0003 (modelo)
+│   │   ├── models.py      # 35 modelos, agrupados por dominio con comentarios
+│   │   ├── services/      # stock, caja, ventas y compras (lógica transaccional)
+│   │   ├── management/commands/  # seed_data, cancelar_ventas_vencidas
+│   │   ├── migrations/    # 0001–0005 (historial, modelo y orden por defecto)
 │   │   ├── admin.py  apps.py  backends.py  serializers.py  urls.py  views.py  tests.py
 │   ├── manage.py
 │   └── requirements.txt
@@ -162,32 +162,67 @@ Decisiones ya aplicadas en `migrations/0003_*`:
 - `Deposito.sucursal` es nullable por compatibilidad; un depósito predeterminado
   debe tener sucursal (lo valida el serializer).
 - **`Factura` tiene `HistoricalRecords`**, igual que el resto de VENTAS.
+- **Stock negativo controlado**: `Stock.cant_negativa_max` (default `-10`) es el
+  piso permitido. Por debajo de ese piso la venta se rechaza. El faltante se
+  guarda como un `DetalleStock` negativo sin lote en el depósito predeterminado,
+  para que la suma de detalles siga igualando `Stock.cantidad`.
+- **`MovimientoStock`** es el libro de movimientos (`VE` venta, `CA` cancelación,
+  `CO` compra, `AJ` ajuste). Permite revertir una venta cancelada sobre los
+  mismos lotes. Se registra dentro de la transacción del servicio.
+- **`Venta.EstadoVenta`** incluye `CONFIRMADA` (`CO`). Una venta nace
+  `PENDIENTE` y descuenta stock; si no se confirma en **1 hora** se cancela y
+  restaura el stock.
+- **`Compra.fecha_recepcion`** marca cuándo se repuso el stock. La compra se
+  registra sin tocar stock y solo repone al recibirse.
+- **Cierre de caja con teórico y real**: `SeccionCaja.monto_teorico` lo calcula
+  el sistema y `monto_final` es lo contado por el usuario. El detalle por método
+  de pago vive en `DetalleCierreCaja` (`monto_sistema` vs `monto_real`).
+- **`MetodoPago.es_efectivo`** identifica el método que suma el `monto_inicial`
+  de la sección al calcular el teórico.
 
 ### `services/` — lógica de negocio
 
 Convención: un módulo por dominio, con el mismo nombre que su sección de `models.py`.
 
 ```text
-services/ventas.py   → registrar venta, calcular totales, aplicar pagos
-services/caja.py     → abrir/cerrar sección de caja
-services/stock.py    → movimientos y actualización de stock
-services/compras.py  → registrar compra y reponer stock
+services/stock.py    → movimientos, FEFO/FIFO, stock negativo y restauración
+services/caja.py     → apertura, cálculo del teórico y cierre con montos reales
+services/ventas.py   → crear/confirmar/cancelar ventas y auto-cancelación
+services/compras.py  → registrar compra y reponer stock al recibirla
 ```
 
-Reglas que deben respetar:
+Funciones principales:
+
+| Módulo | Funciones |
+|---|---|
+| `stock.py` | `obtener_stock`, `consumir_stock`, `reponer_stock`, `restaurar_stock`, `recalcular_stock`, `deposito_predeterminado` |
+| `caja.py` | `abrir_seccion`, `calcular_teorico`, `cerrar_seccion`, `auditar_seccion` |
+| `ventas.py` | `crear_venta`, `confirmar_venta`, `cancelar_venta`, `cancelar_ventas_vencidas` |
+| `compras.py` | `registrar_compra`, `recibir_compra` |
+
+Reglas que respetan:
 
 - `services/stock.py` es el único que escribe `DetalleStock` y recalcula
   `Stock.cantidad` como la suma de los detalles, dentro de la transacción.
-- `services/ventas.py` descuenta de `DetalleStock` y vuelve a calcular el total.
-- `services/compras.py` exige `Compra.proveedor` y recibe en el `Deposito` con
+  Usa `select_for_update` (con `of=('self',)` cuando hay joins nullable).
+- `services/ventas.py` descuenta stock al crear la venta y lo restaura al
+  cancelarla, revirtiendo los `MovimientoStock` originales. Rechaza con
+  `StockInsuficiente` si se supera `Stock.cant_negativa_max`.
+- `services/compras.py` exige proveedor activo y repone en el `Deposito` con
   `es_predeterminado=True` de la sucursal de la caja.
+- `services/caja.py` calcula el teórico como pagos de ventas − pagos de compras
+  + `monto_inicial` del método `es_efectivo`, y guarda el detalle por método.
+- La auto-cancelación de ventas corre con
+  `manage.py cancelar_ventas_vencidas [--horas 1]` (pensado para cron o
+  Task Scheduler; todavía no está instalado).
 
 Las vistas deben validar la entrada y **delegar** en los servicios, para que la
 lógica sea reutilizable y testeable sin HTTP.
 
-Hoy la API expone `Stock`, `DetalleStock`, `SeccionCaja`, `Venta`, `Compra` y sus
-detalles en **solo lectura**. La escritura se habilita cuando existan los
-servicios transaccionales; `Caja` (el registro físico) sí es CRUD.
+Hoy la API expone `Stock`, `DetalleStock`, `MovimientoStock`, `SeccionCaja`,
+`Venta`, `Compra` y sus detalles en **solo lectura**. La escritura por HTTP se
+habilita cuando existan las acciones que deleguen en los servicios; `Caja` (el
+registro físico) sí es CRUD.
 
 ### API REST — configuración base
 
@@ -202,7 +237,7 @@ Todo cuelga de `/api/` (`config/urls.py` → `app/urls.py`).
 | Permisos | `IsAuthenticated` global; solo los endpoints de token son públicos |
 | Paginación | `PageNumberPagination`, `PAGE_SIZE = 20` |
 | Filtros | `DjangoFilterBackend` + `SearchFilter` + `OrderingFilter` |
-| Routers | `DefaultRouter` en `app/urls.py` — 33 viewsets registrados |
+| Routers | `DefaultRouter` en `app/urls.py` — 34 viewsets registrados |
 
 El esquema sirve para web (React) y mobile (React Native): el cliente solo
 necesita los dos endpoints de token y el header `Authorization`.
@@ -215,7 +250,7 @@ necesita los dos endpoints de token y el header `Authorization`.
 | ORGANIZACION | `empresas`, `sucursales`, `usuarios`, `empleados`, `roles`, `empleados-roles`, `sucursales-empleados` |
 | CAJA | `cajas` (CRUD), `secciones-caja` (solo lectura) |
 | CATALOGO | `categorias`, `marcas`, `unidades`, `productos`, `productos-sucursales` |
-| STOCK | `depositos` (CRUD, con sucursal y predeterminado), `stocks` y `detalles-stock` (solo lectura) |
+| STOCK | `depositos` (CRUD, con sucursal y predeterminado), `stocks`, `detalles-stock` y `movimientos-stock` (solo lectura) |
 | PROVEEDORES | `proveedores`, `proveedores-sucursales`, `productos-proveedores` |
 | PAGOS | `metodos-pago` |
 | VENTAS | `clientes` (CRUD), `ventas`, `detalles-venta`, `facturas`, `metodos-pago-ventas` (solo lectura) |
@@ -235,15 +270,16 @@ Reglas de escritura:
 
 - ORGANIZACION: `Usuario` (con `excluded_fields=['password']`) y `Empleado`
 - CATALOGO: `Producto`
-- STOCK: `Stock`, `DetalleStock`
+- STOCK: `Stock`, `DetalleStock`, `MovimientoStock`
 - PROVEEDORES: `Proveedor`
-- CAJA: `SeccionCaja`
+- CAJA: `SeccionCaja`, `DetalleCierreCaja`
 - VENTAS: `Cliente`, `Venta`, `DetalleVenta`, `Factura`, `MetodoPagoXVenta`
 - COMPRAS: `Compra`, `DetalleCompra`, `MetodoPagoXCompra`
 
 `HistoryRequestMiddleware` guarda el usuario autenticado en `history_user`
 (solo cuando la operación pasa por una request; en shell queda `None`).
-Las tablas `Historical*` se crean en `0002_*` y `0003_*` (`HistoricalFactura`).
+Las tablas `Historical*` se crean en `0002_*`, `0003_*` (`HistoricalFactura`) y
+`0004_*` (`HistoricalDetalleCierreCaja`, `HistoricalMovimientoStock`).
 
 ### Autenticación — `app/backends.py`
 
@@ -276,7 +312,9 @@ python manage.py seed_data [--reset] [--ventas 50] [--compras 20]
 - Los depósitos quedan repartidos entre las sucursales, con uno predeterminado
   por sucursal. Cada lote está en un depósito de la misma sucursal que su stock
   y `Stock.cantidad` coincide con la suma de sus detalles.
-- Las compras se generan con `proveedor`.
+- Las compras se generan con `proveedor` y con `fecha_recepcion` histórica.
+- Las ventas `PENDIENTE` quedan dentro de la última hora para que el comando de
+  cancelación automática no las anule al ejecutarse.
 - Credenciales que crea: superusuario `admin` / `admin1234` y empleados demo
   con contraseña `test1234` (se listan al final de la ejecución).
 

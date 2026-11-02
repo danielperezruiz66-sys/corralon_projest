@@ -34,6 +34,7 @@ from .models import (
     MetodoPago,
     MetodoPagoXCompra,
     MetodoPagoXVenta,
+    MovimientoStock,
     Pais,
     Producto,
     ProductoXProveedor,
@@ -162,7 +163,9 @@ class CajaViewSet(viewsets.ModelViewSet):
 
 
 class SeccionCajaViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = SeccionCaja.objects.select_related('caja__sucursal', 'empleado')
+    queryset = SeccionCaja.objects.select_related(
+        'caja__sucursal', 'empleado'
+    ).prefetch_related('detalles_cierre__metodo_pago')
     serializer_class = serializers.SeccionCajaSerializer
     filterset_fields = ['caja', 'empleado', 'estado']
     search_fields = ['caja__sucursal__nombre', 'empleado__apellido', 'empleado__nombre']
@@ -353,3 +356,20 @@ class MetodoPagoXCompraViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = serializers.MetodoPagoXCompraSerializer
     filterset_fields = ['compra', 'metodo_pago']
     ordering_fields = ['monto_pagado']
+
+
+# =============================================================================
+# STOCK — MOVIMIENTOS
+# =============================================================================
+
+class MovimientoStockViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = MovimientoStock.objects.select_related(
+        'stock__producto',
+        'detalle_stock__deposito',
+        'venta',
+        'compra',
+    )
+    serializer_class = serializers.MovimientoStockSerializer
+    filterset_fields = ['stock', 'detalle_stock', 'tipo', 'venta', 'compra']
+    search_fields = ['referencia', 'stock__producto__nombre']
+    ordering_fields = ['fecha', 'cantidad']

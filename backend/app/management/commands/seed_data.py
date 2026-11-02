@@ -13,6 +13,7 @@ from app.models import (
     Cliente,
     Compra,
     Deposito,
+    DetalleCierreCaja,
     DetalleCompra,
     DetalleStock,
     DetalleVenta,
@@ -25,6 +26,7 @@ from app.models import (
     MetodoPago,
     MetodoPagoXCompra,
     MetodoPagoXVenta,
+    MovimientoStock,
     Pais,
     Producto,
     ProductoXProveedor,
@@ -208,6 +210,7 @@ class Command(BaseCommand):
     def _reset(self):
         self.stdout.write('Borrando tablas de negocio...')
         modelos = [
+            DetalleCierreCaja, MovimientoStock,
             MetodoPagoXCompra, MetodoPagoXVenta, DetalleCompra, DetalleVenta,
             Factura, Compra, Venta, Cliente, MetodoPago,
             DetalleStock, Stock, ProductoXSucursal, ProductoXProveedor,
@@ -466,6 +469,7 @@ class Command(BaseCommand):
                     defaults={
                         'cantidad': Decimal('0.000'),
                         'cant_min': Decimal(random.randint(5, 30)),
+                        'cant_negativa_max': Decimal('-10.000'),
                     },
                 )
                 result.append(stock)
@@ -586,7 +590,13 @@ class Command(BaseCommand):
     # ---------------------------------------------------------------- pagos
     def _metodos_pago(self):
         return [
-            MetodoPago.objects.get_or_create(metodo_pago=m, defaults={'estado': True})[0]
+            MetodoPago.objects.update_or_create(
+                metodo_pago=m,
+                defaults={
+                    'estado': True,
+                    'es_efectivo': m == 'Efectivo',
+                },
+            )[0]
             for m in METODOS_PAGO
         ]
 
@@ -619,7 +629,12 @@ class Command(BaseCommand):
         for _ in range(cantidad):
             seccion = random.choice(secciones)
             cliente = random.choice(clientes)
+            estado_pago = random.choice(['PAGADA', 'PAGADA', 'PARCIAL', 'PENDIENTE'])
             fecha = ahora - timedelta(days=random.randint(0, DIAS_HISTORIAL))
+            if estado_pago == 'PENDIENTE':
+                # Las pendientes quedan dentro de la hora para no autocalcularse
+                # como vencidas al ejecutar el comando de cancelacion.
+                fecha = ahora - timedelta(minutes=random.randint(0, 50))
 
             venta = Venta.objects.create(
                 seccion_caja=seccion,
@@ -627,6 +642,9 @@ class Command(BaseCommand):
                 fecha_venta=fecha,
                 monto_venta=Decimal('0.00'),
             )
+            # `fecha_venta` es auto_now_add: se corrige despues de crear.
+            Venta.objects.filter(pk=venta.pk).update(fecha_venta=fecha)
+            venta.refresh_from_db()
 
             total = Decimal('0.00')
             for prod in random.sample(productos, random.randint(1, 4)):
@@ -643,7 +661,6 @@ class Command(BaseCommand):
                 total += subtotal
 
             venta.monto_venta = total
-            estado_pago = random.choice(['PAGADA', 'PAGADA', 'PARCIAL', 'PENDIENTE'])
             if estado_pago == 'PAGADA':
                 venta.estado = Venta.EstadoVenta.PAGADA
                 self._pagar(venta, total, metodos, 'venta')
@@ -689,12 +706,19 @@ class Command(BaseCommand):
 
         for _ in range(cantidad):
             seccion = random.choice(secciones)
+            fecha_compra = ahora - timedelta(days=random.randint(0, DIAS_HISTORIAL))
             compra = Compra.objects.create(
                 seccion_caja=seccion,
                 proveedor=random.choice(proveedores),
-                fecha_compra=ahora - timedelta(days=random.randint(0, DIAS_HISTORIAL)),
+                fecha_compra=fecha_compra,
                 monto_compra=Decimal('0.00'),
             )
+            # `fecha_compra` es auto_now_add: se corrige despues de crear.
+            Compra.objects.filter(pk=compra.pk).update(
+                fecha_compra=fecha_compra,
+                fecha_recepcion=fecha_compra + timedelta(hours=2),
+            )
+            compra.refresh_from_db()
 
             total = Decimal('0.00')
             for prod in random.sample(productos, random.randint(1, 3)):

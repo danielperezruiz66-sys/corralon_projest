@@ -18,6 +18,7 @@ from .models import (
     Cliente,
     Compra,
     Deposito,
+    DetalleCierreCaja,
     DetalleCompra,
     DetalleStock,
     DetalleVenta,
@@ -30,6 +31,7 @@ from .models import (
     MetodoPago,
     MetodoPagoXCompra,
     MetodoPagoXVenta,
+    MovimientoStock,
     Pais,
     Producto,
     ProductoXProveedor,
@@ -269,10 +271,35 @@ class CajaSerializer(serializers.ModelSerializer):
         fields = ['id', 'sucursal', 'sucursal_detalle', 'estado', 'estado_detalle']
 
 
+class DetalleCierreCajaSerializer(serializers.ModelSerializer):
+    metodo_pago_detalle = serializers.StringRelatedField(
+        source='metodo_pago',
+        read_only=True,
+    )
+    diferencia = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        read_only=True,
+    )
+
+    class Meta:
+        model = DetalleCierreCaja
+        fields = [
+            'id',
+            'seccion_caja',
+            'metodo_pago',
+            'metodo_pago_detalle',
+            'monto_sistema',
+            'monto_real',
+            'diferencia',
+        ]
+
+
 class SeccionCajaSerializer(serializers.ModelSerializer):
     caja_detalle = serializers.StringRelatedField(source='caja', read_only=True)
     empleado_detalle = serializers.StringRelatedField(source='empleado', read_only=True)
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
+    detalles_cierre = DetalleCierreCajaSerializer(many=True, read_only=True)
 
     class Meta:
         model = SeccionCaja
@@ -285,9 +312,12 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
             'fecha_hora_apertura',
             'fecha_hora_cierre',
             'monto_inicial',
+            'monto_teorico',
             'monto_final',
+            'observaciones',
             'estado',
             'estado_detalle',
+            'detalles_cierre',
         ]
 
 
@@ -403,6 +433,7 @@ class DepositoSerializer(serializers.ModelSerializer):
 class StockSerializer(serializers.ModelSerializer):
     producto_detalle = serializers.StringRelatedField(source='producto', read_only=True)
     sucursal_detalle = serializers.StringRelatedField(source='sucursal', read_only=True)
+    alerta = serializers.SerializerMethodField()
 
     class Meta:
         model = Stock
@@ -414,7 +445,16 @@ class StockSerializer(serializers.ModelSerializer):
             'sucursal_detalle',
             'cantidad',
             'cant_min',
+            'cant_negativa_max',
+            'alerta',
         ]
+
+    def get_alerta(self, obj):
+        if obj.cantidad < 0:
+            return 'NEGATIVO'
+        if obj.cantidad <= obj.cant_min:
+            return 'MINIMO'
+        return 'OK'
 
 
 class DetalleStockSerializer(serializers.ModelSerializer):
@@ -496,7 +536,7 @@ class ProductoXProveedorSerializer(serializers.ModelSerializer):
 class MetodoPagoSerializer(serializers.ModelSerializer):
     class Meta:
         model = MetodoPago
-        fields = ['id', 'metodo_pago', 'estado']
+        fields = ['id', 'metodo_pago', 'estado', 'es_efectivo']
 
 
 # =============================================================================
@@ -581,6 +621,7 @@ class CompraSerializer(serializers.ModelSerializer):
     seccion_caja_detalle = serializers.StringRelatedField(source='seccion_caja', read_only=True)
     proveedor_detalle = serializers.StringRelatedField(source='proveedor', read_only=True)
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
+    recibida = serializers.SerializerMethodField()
 
     class Meta:
         model = Compra
@@ -591,11 +632,16 @@ class CompraSerializer(serializers.ModelSerializer):
             'proveedor',
             'proveedor_detalle',
             'fecha_compra',
+            'fecha_recepcion',
+            'recibida',
             'monto_compra',
             'estado',
             'estado_detalle',
         ]
-        read_only_fields = ['fecha_compra']
+        read_only_fields = ['fecha_compra', 'fecha_recepcion']
+
+    def get_recibida(self, obj):
+        return obj.fecha_recepcion is not None
 
 
 class DetalleCompraSerializer(serializers.ModelSerializer):
@@ -620,3 +666,34 @@ class MetodoPagoXCompraSerializer(serializers.ModelSerializer):
     class Meta:
         model = MetodoPagoXCompra
         fields = ['id', 'metodo_pago', 'metodo_pago_detalle', 'compra', 'monto_pagado']
+
+
+# =============================================================================
+# STOCK — MOVIMIENTOS
+# =============================================================================
+
+class MovimientoStockSerializer(serializers.ModelSerializer):
+    stock_detalle = serializers.StringRelatedField(source='stock', read_only=True)
+    detalle_stock_detalle = serializers.StringRelatedField(
+        source='detalle_stock',
+        read_only=True,
+    )
+    tipo_detalle = serializers.CharField(source='get_tipo_display', read_only=True)
+
+    class Meta:
+        model = MovimientoStock
+        fields = [
+            'id',
+            'stock',
+            'stock_detalle',
+            'detalle_stock',
+            'detalle_stock_detalle',
+            'tipo',
+            'tipo_detalle',
+            'cantidad',
+            'venta',
+            'compra',
+            'referencia',
+            'fecha',
+        ]
+        read_only_fields = fields
