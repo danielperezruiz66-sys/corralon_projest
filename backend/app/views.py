@@ -215,9 +215,10 @@ class ProductoXSucursalViewSet(viewsets.ModelViewSet):
 # =============================================================================
 
 class DepositoViewSet(viewsets.ModelViewSet):
-    queryset = Deposito.objects.all()
+    queryset = Deposito.objects.select_related('sucursal')
     serializer_class = serializers.DepositoSerializer
-    search_fields = ['nombre', 'descripcion']
+    filterset_fields = ['sucursal', 'es_predeterminado']
+    search_fields = ['nombre', 'descripcion', 'sucursal__nombre']
     ordering_fields = ['nombre']
 
 
@@ -332,9 +333,10 @@ class MetodoPagoXVentaViewSet(viewsets.ReadOnlyModelViewSet):
 # =============================================================================
 
 class CompraViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Compra.objects.select_related('seccion_caja__caja')
+    queryset = Compra.objects.select_related('seccion_caja__caja', 'proveedor')
     serializer_class = serializers.CompraSerializer
-    filterset_fields = ['seccion_caja', 'estado']
+    filterset_fields = ['seccion_caja', 'proveedor', 'estado']
+    search_fields = ['proveedor__razon_social', 'proveedor__nombre', 'proveedor__cuit']
     ordering_fields = ['fecha_compra', 'monto_compra']
 
 

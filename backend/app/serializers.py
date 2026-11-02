@@ -358,9 +358,46 @@ class ProductoXSucursalSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 class DepositoSerializer(serializers.ModelSerializer):
+    sucursal_detalle = serializers.StringRelatedField(source='sucursal', read_only=True)
+
     class Meta:
         model = Deposito
-        fields = ['id', 'nombre', 'descripcion']
+        fields = [
+            'id',
+            'sucursal',
+            'sucursal_detalle',
+            'nombre',
+            'descripcion',
+            'es_predeterminado',
+        ]
+
+    def validate(self, attrs):
+        es_predeterminado = attrs.get(
+            'es_predeterminado',
+            getattr(self.instance, 'es_predeterminado', False),
+        )
+        sucursal = attrs.get('sucursal', getattr(self.instance, 'sucursal', None))
+
+        if es_predeterminado:
+            if sucursal is None:
+                raise serializers.ValidationError(
+                    {'sucursal': 'Un deposito predeterminado debe tener sucursal.'}
+                )
+            existentes = Deposito.objects.filter(
+                sucursal=sucursal,
+                es_predeterminado=True,
+            )
+            if self.instance:
+                existentes = existentes.exclude(pk=self.instance.pk)
+            if existentes.exists():
+                raise serializers.ValidationError(
+                    {
+                        'es_predeterminado': (
+                            'Ya existe un deposito predeterminado para esta sucursal.'
+                        )
+                    }
+                )
+        return attrs
 
 
 class StockSerializer(serializers.ModelSerializer):
@@ -542,6 +579,7 @@ class MetodoPagoXVentaSerializer(serializers.ModelSerializer):
 
 class CompraSerializer(serializers.ModelSerializer):
     seccion_caja_detalle = serializers.StringRelatedField(source='seccion_caja', read_only=True)
+    proveedor_detalle = serializers.StringRelatedField(source='proveedor', read_only=True)
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
 
     class Meta:
@@ -550,6 +588,8 @@ class CompraSerializer(serializers.ModelSerializer):
             'id',
             'seccion_caja',
             'seccion_caja_detalle',
+            'proveedor',
+            'proveedor_detalle',
             'fecha_compra',
             'monto_compra',
             'estado',

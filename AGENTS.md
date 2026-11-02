@@ -28,13 +28,13 @@ Arquitectura **desacoplada**:
 - `backend/` → API REST con Django + DRF, PostgreSQL
 - `frontend/` → React con Vite (JavaScript, sin TypeScript)
 
-## 2. Estado actual (2026-11-01)
+## 2. Estado actual (2026-11-02)
 
 | Área | Estado |
 |---|---|
 | Estructura del repo (`backend/` + `frontend/`) | ✅ Hecha |
 | Modelos de datos (33) en `models.py` por secciones | ✅ Hechos |
-| Migración inicial (`0001_initial`) | ✅ Consistente con los modelos (`makemigrations --check` sin cambios) |
+| Migraciones (`0001`–`0003`) | ✅ Aplicadas y consistentes (`makemigrations --check` sin cambios) |
 | Autenticación (login por usuario **o** legajo) | ✅ Funcional |
 | Comando de datos de prueba (`seed_data`) | ✅ Funcional |
 | Admin de Django | ✅ Configurado (Usuario + Empleado inline) |
@@ -90,7 +90,7 @@ corralon_projest/
 │   │   ├── models.py      # 33 modelos, agrupados por dominio con comentarios
 │   │   ├── services/      # lógica de negocio (vacío por ahora)
 │   │   ├── management/commands/seed_data.py
-│   │   ├── migrations/    # 0001_initial + 0002 (tablas de historial)
+│   │   ├── migrations/    # 0001_initial, 0002 (historial) y 0003 (modelo)
 │   │   ├── admin.py  apps.py  backends.py  serializers.py  urls.py  views.py  tests.py
 │   ├── manage.py
 │   └── requirements.txt
@@ -142,21 +142,26 @@ Como es un solo archivo, **el orden importa**: cada clase debe definirse *despu�
 de los modelos que referencia. El orden actual de las secciones ya es válido; al
 agregar un modelo, ubicarlo en su sección (mover la sección solo si es necesario).
 
-### Deuda conocida del modelo
+### Modelo — reglas vigentes
 
-Hechos del esquema actual (la acción de resolverlos está en `DIA_SIGUIENTE.md`):
+Decisiones ya aplicadas en `migrations/0003_*`:
 
-- Las cantidades son enteras en stock (`Stock.cantidad`, `Stock.cant_min`,
-  `DetalleStock.cantidad`) pero decimales en ventas y compras. Decisión: **todas
-  las cantidades pasan a `DecimalField`**, porque la unidad del producto puede
-  ser kilo, metro o litro.
-- `Stock.cantidad` duplica la suma de `DetalleStock.cantidad`. Decisión:
-  `DetalleStock` es la fuente de verdad; `Stock.cantidad` debe derivarse de sus
-  detalles o eliminarse del modelo.
-- `Compra` no tiene FK a `Proveedor`. `ProductoXProveedor` solo indica qué
-  proveedores pueden vender un producto, no a quién se le compró esa compra.
-- `DetalleCompra` no tiene depósito ni lote. Al recibir una compra hay que saber
-  en qué `DetalleStock` entra; el producto y la sucursal no determinan el depósito.
+- **Todas las cantidades son `DecimalField(12,3)`**: `Stock.cantidad`,
+  `Stock.cant_min`, `DetalleStock.cantidad`, `DetalleVenta.cantidad_venta` y
+  `DetalleCompra.cantidad_compra`. La unidad del producto puede ser kilo, metro
+  o litro.
+- **`DetalleStock` es la fuente de verdad** del stock. `Stock.cantidad` es el
+  **total** (producto + sucursal) y debe mantenerse igual a la suma de sus
+  detalles. Lo recalculan los servicios dentro de la transacción.
+- **`Compra.proveedor`** es una FK a `Proveedor`. Queda `null=True` para no
+  romper compras históricas; los servicios deben exigirlo en compras nuevas.
+- **Recepción de compras con depósito predeterminado**: `DetalleCompra` no
+  tiene depósito ni lote. Cada `Deposito` pertenece a una `Sucursal` y puede
+  marcarse `es_predeterminado=True` (uno solo por sucursal). El servicio de
+  compras usa ese depósito.
+- `Deposito.sucursal` es nullable por compatibilidad; un depósito predeterminado
+  debe tener sucursal (lo valida el serializer).
+- **`Factura` tiene `HistoricalRecords`**, igual que el resto de VENTAS.
 
 ### `services/` — lógica de negocio
 
@@ -166,7 +171,16 @@ Convención: un módulo por dominio, con el mismo nombre que su sección de `mod
 services/ventas.py   → registrar venta, calcular totales, aplicar pagos
 services/caja.py     → abrir/cerrar sección de caja
 services/stock.py    → movimientos y actualización de stock
+services/compras.py  → registrar compra y reponer stock
 ```
+
+Reglas que deben respetar:
+
+- `services/stock.py` es el único que escribe `DetalleStock` y recalcula
+  `Stock.cantidad` como la suma de los detalles, dentro de la transacción.
+- `services/ventas.py` descuenta de `DetalleStock` y vuelve a calcular el total.
+- `services/compras.py` exige `Compra.proveedor` y recibe en el `Deposito` con
+  `es_predeterminado=True` de la sucursal de la caja.
 
 Las vistas deben validar la entrada y **delegar** en los servicios, para que la
 lógica sea reutilizable y testeable sin HTTP.
@@ -201,7 +215,7 @@ necesita los dos endpoints de token y el header `Authorization`.
 | ORGANIZACION | `empresas`, `sucursales`, `usuarios`, `empleados`, `roles`, `empleados-roles`, `sucursales-empleados` |
 | CAJA | `cajas` (CRUD), `secciones-caja` (solo lectura) |
 | CATALOGO | `categorias`, `marcas`, `unidades`, `productos`, `productos-sucursales` |
-| STOCK | `depositos` (CRUD), `stocks` y `detalles-stock` (solo lectura) |
+| STOCK | `depositos` (CRUD, con sucursal y predeterminado), `stocks` y `detalles-stock` (solo lectura) |
 | PROVEEDORES | `proveedores`, `proveedores-sucursales`, `productos-proveedores` |
 | PAGOS | `metodos-pago` |
 | VENTAS | `clientes` (CRUD), `ventas`, `detalles-venta`, `facturas`, `metodos-pago-ventas` (solo lectura) |
@@ -224,12 +238,12 @@ Reglas de escritura:
 - STOCK: `Stock`, `DetalleStock`
 - PROVEEDORES: `Proveedor`
 - CAJA: `SeccionCaja`
-- VENTAS: `Cliente`, `Venta`, `DetalleVenta`, `MetodoPagoXVenta`
+- VENTAS: `Cliente`, `Venta`, `DetalleVenta`, `Factura`, `MetodoPagoXVenta`
 - COMPRAS: `Compra`, `DetalleCompra`, `MetodoPagoXCompra`
 
 `HistoryRequestMiddleware` guarda el usuario autenticado en `history_user`
 (solo cuando la operación pasa por una request; en shell queda `None`).
-Las tablas `Historical*` se crean en `migrations/0002_*`.
+Las tablas `Historical*` se crean en `0002_*` y `0003_*` (`HistoricalFactura`).
 
 ### Autenticación — `app/backends.py`
 
@@ -259,6 +273,10 @@ python manage.py seed_data [--reset] [--ventas 50] [--compras 20]
 - Idempotente para el usuario admin; `--reset` borra las tablas de negocio antes de poblar.
 - Es determinista (`random.seed(42)`).
 - Genera 180 días de historial de ventas/compras.
+- Los depósitos quedan repartidos entre las sucursales, con uno predeterminado
+  por sucursal. Cada lote está en un depósito de la misma sucursal que su stock
+  y `Stock.cantidad` coincide con la suma de sus detalles.
+- Las compras se generan con `proveedor`.
 - Credenciales que crea: superusuario `admin` / `admin1234` y empleados demo
   con contraseña `test1234` (se listan al final de la ejecución).
 

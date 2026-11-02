@@ -461,14 +461,33 @@ class ProductoXSucursal(models.Model):
 # =============================================================================
 
 class Deposito(models.Model):
+    sucursal = models.ForeignKey(
+        Sucursal,
+        on_delete=models.PROTECT,
+        related_name='depositos',
+        null=True,
+        blank=True,
+        help_text='Sucursal a la que pertenece el deposito.',
+    )
     nombre = models.CharField(max_length=50)
     descripcion = models.CharField(max_length=150, null=True, blank=True)
+    es_predeterminado = models.BooleanField(
+        default=False,
+        help_text='Deposito donde se reciben las compras de la sucursal.',
+    )
 
     class Meta:
         db_table = 'DEPOSITOS'
         ordering = ['nombre']
         verbose_name = 'Deposito'
         verbose_name_plural = 'Depositos'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sucursal'],
+                condition=models.Q(es_predeterminado=True),
+                name='un_deposito_predeterminado_por_sucursal',
+            ),
+        ]
 
     def __str__(self):
         return self.nombre
@@ -485,8 +504,10 @@ class Stock(models.Model):
         on_delete=models.PROTECT,
         related_name='stocks',
     )
-    cantidad = models.IntegerField(default=0)
-    cant_min = models.IntegerField(default=0)
+    # Total del stock: suma de las cantidades de sus DetalleStock.
+    # Lo mantiene services/stock.py dentro de la misma transaccion.
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    cant_min = models.DecimalField(max_digits=12, decimal_places=3, default=0)
 
     history = HistoricalRecords()
 
@@ -511,7 +532,7 @@ class DetalleStock(models.Model):
         related_name='detalles_stock',
     )
     lote = models.CharField(max_length=30, null=True, blank=True)
-    cantidad = models.IntegerField(default=0)
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     fecha_ingreso = models.DateTimeField(auto_now_add=True)
     fecha_venc = models.DateField(null=True, blank=True)
 
@@ -690,7 +711,7 @@ class DetalleVenta(models.Model):
         on_delete=models.PROTECT,
         related_name='detalles_venta',
     )
-    cantidad_venta = models.DecimalField(max_digits=10, decimal_places=2)
+    cantidad_venta = models.DecimalField(max_digits=12, decimal_places=3)
     precio_venta = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
 
@@ -722,6 +743,8 @@ class Factura(models.Model):
     tipo = models.CharField(max_length=2, choices=TipoFactura.choices)
     fecha_emision = models.DateTimeField(auto_now_add=True)
     direccion_pdf = models.CharField(max_length=255, null=True, blank=True)
+
+    history = HistoricalRecords()
 
     class Meta:
         db_table = 'FACTURAS'
@@ -773,6 +796,15 @@ class Compra(models.Model):
         on_delete=models.PROTECT,
         related_name='compras',
     )
+    # Nullable para no romper compras historicas; los servicios exigen
+    # proveedor en toda compra nueva.
+    proveedor = models.ForeignKey(
+        Proveedor,
+        on_delete=models.PROTECT,
+        related_name='compras',
+        null=True,
+        blank=True,
+    )
     fecha_compra = models.DateTimeField(auto_now_add=True)
     monto_compra = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     estado = models.CharField(
@@ -804,7 +836,7 @@ class DetalleCompra(models.Model):
         on_delete=models.PROTECT,
         related_name='detalles_compra',
     )
-    cantidad_compra = models.DecimalField(max_digits=10, decimal_places=2)
+    cantidad_compra = models.DecimalField(max_digits=12, decimal_places=3)
     precio_compra = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
 

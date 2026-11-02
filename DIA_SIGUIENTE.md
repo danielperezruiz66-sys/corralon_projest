@@ -6,55 +6,39 @@
 
 **Cerrado el:** 2026-11-02
 
-## 1. Modelo — migración `0003`
-
-Decisiones tomadas:
-
-- [ ] Pasar a `DecimalField` todas las cantidades: `Stock.cantidad`,
-      `Stock.cant_min`, `DetalleStock.cantidad`, `DetalleVenta.cantidad_venta`
-      y `DetalleCompra.cantidad_compra`. Definir `max_digits`/`decimal_places`
-      (propuesta: `12,3`).
-- [ ] Dejar `DetalleStock` como **fuente de verdad** del stock. Resolver
-      `Stock.cantidad`: eliminarlo y exponer la suma de sus detalles, o
-      mantenerlo como caché que recalculan los servicios.
-- [ ] Actualizar `seed_data` y generar la migración con `makemigrations`.
-
-Decisiones a cerrar con el usuario:
-
-- [ ] `Compra.proveedor`: agregar FK (recomendado) o derivarlo desde
-      `ProductoXProveedor`. Ojo: `ProductoXProveedor` dice qué proveedores
-      pueden vender un producto, no a quién se le compró esa compra.
-- [ ] `DetalleCompra.deposito`/`lote`: agregarlos para saber en qué
-      `DetalleStock` entra la mercadería, o definir un depósito por defecto por
-      sucursal y que el servicio lo resuelva.
-
-## 2. Lógica de negocio (`services/`)
+## 1. Lógica de negocio (`services/`)
 
 - [ ] `services/stock.py`: alta y movimiento de `DetalleStock`, recálculo de
-      `Stock`, con `select_for_update` para evitar carreras.
+      `Stock.cantidad` como suma de sus detalles, con `select_for_update` para
+      evitar carreras.
 - [ ] `services/caja.py`: apertura/cierre de `SeccionCaja` (una abierta por
       caja, montos y fechas obligatorias al cerrar).
-- [ ] `services/ventas.py`: venta + detalles + descuento de stock + factura,
-      todo en `transaction.atomic`.
-- [ ] `services/compras.py`: compra + detalles + reposición en depósito/lote.
+- [ ] `services/ventas.py`: venta + detalles + descuento de `DetalleStock` +
+      recálculo de `Stock.cantidad` + factura, todo en `transaction.atomic`.
+- [ ] `services/compras.py`: compra + detalles + reposición en el `Deposito`
+      predeterminado de la sucursal de la caja. Exigir `Compra.proveedor`.
 - [ ] Endpoints de escritura para ventas/compras/stock que deleguen en los
       servicios (hoy son de solo lectura).
 
-## 3. API y permisos
+## 2. API y permisos
 
 - [ ] Definir permisos de escritura por rol. Hoy cualquier usuario autenticado
       puede escribir catálogo; solo `Usuario` exige `IsAdminUser`.
-- [ ] Evaluar `HistoricalRecords` para `Factura`.
+- [ ] Validar en los servicios que la sucursal tenga depósito predeterminado y
+      que el proveedor esté activo.
 
-## 4. Frontend
+## 3. Frontend
 
 - [ ] Cliente HTTP con JWT (login + refresh automático) en React.
 - [ ] Proxy de Vite hacia el backend en desarrollo.
 - [ ] Pantalla de login (usuario o legajo) y listado de productos con búsqueda
       y paginación.
 
-## 5. Tests
+## 4. Tests
 
 - [ ] `APITestCase` de autenticación, permisos y endpoints principales.
-- [ ] Tests de servicios: venta descuenta stock, caja no cierra dos veces,
-      compra repone en el depósito correcto.
+- [ ] Tests de servicios: venta descuenta stock y recalcula el total; caja no
+      cierra dos veces; compra repone en el depósito predeterminado y exige
+      proveedor.
+- [ ] Test de que no se pueden crear dos depósitos predeterminados en la misma
+      sucursal.

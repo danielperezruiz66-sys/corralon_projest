@@ -187,7 +187,7 @@ class Command(BaseCommand):
         ids['marca'] = self._marcas()
         ids['unidad'] = self._unidades()
         ids['producto'] = self._productos(ids['cat'], ids['marca'], ids['unidad'])
-        ids['deposito'] = self._depositos()
+        ids['deposito'] = self._depositos(ids['sucursal'])
         self._productos_x_sucursal(ids['producto'], ids['sucursal'])
         ids['stock'] = self._stocks(ids['producto'], ids['sucursal'])
         ids['proveedor'] = self._proveedores()
@@ -429,11 +429,24 @@ class Command(BaseCommand):
             result.append(prod)
         return result
 
-    def _depositos(self):
-        nombres = ['Deposito Central', 'Deposito Obra', 'Deposito Norte', 'Deposito Sur', 'Deposito Anexo']
+    def _depositos(self, sucursales):
+        datos = [
+            ('Deposito Central', 0, True),
+            ('Deposito Obra', 1, True),
+            ('Deposito Norte', 2, True),
+            ('Deposito Sur', 3, True),
+            ('Deposito Anexo', 0, False),
+        ]
         return [
-            Deposito.objects.get_or_create(nombre=n, defaults={'descripcion': f'Deposito {n}'})[0]
-            for n in nombres
+            Deposito.objects.update_or_create(
+                nombre=nombre,
+                defaults={
+                    'descripcion': f'Deposito {nombre}',
+                    'sucursal': sucursales[indice],
+                    'es_predeterminado': predeterminado,
+                },
+            )[0]
+            for nombre, indice, predeterminado in datos
         ]
 
     def _productos_x_sucursal(self, productos, sucursales):
@@ -451,8 +464,8 @@ class Command(BaseCommand):
                     producto=prod,
                     sucursal=suc,
                     defaults={
-                        'cantidad': random.randint(20, 300),
-                        'cant_min': random.randint(5, 30),
+                        'cantidad': Decimal('0.000'),
+                        'cant_min': Decimal(random.randint(5, 30)),
                     },
                 )
                 result.append(stock)
@@ -460,16 +473,26 @@ class Command(BaseCommand):
 
     def _detalles_stock(self, stocks, depositos):
         result = []
-        for stock in stocks[:40]:
+        for stock in stocks:
+            depositos_sucursal = [
+                deposito
+                for deposito in depositos
+                if deposito.sucursal_id == stock.sucursal_id
+            ] or depositos
             for _ in range(random.randint(1, 2)):
                 det = DetalleStock.objects.create(
                     stock=stock,
-                    deposito=random.choice(depositos),
+                    deposito=random.choice(depositos_sucursal),
                     lote=f'L{random.randint(1000, 9999)}',
-                    cantidad=random.randint(10, 100),
+                    cantidad=Decimal(random.randint(10, 100)),
                     fecha_venc=(timezone.now() + timedelta(days=random.randint(30, 365))).date(),
                 )
                 result.append(det)
+            stock.cantidad = sum(
+                (detalle.cantidad for detalle in stock.detalles.all()),
+                Decimal('0.000'),
+            )
+            stock.save(update_fields=['cantidad'])
         return result
 
     # ------------------------------------------------------------- proveedores
@@ -661,12 +684,14 @@ class Command(BaseCommand):
         productos = ids['producto']
         secciones = ids['seccion']
         metodos = ids['metodo']
+        proveedores = ids['proveedor']
         ahora = timezone.now()
 
         for _ in range(cantidad):
             seccion = random.choice(secciones)
             compra = Compra.objects.create(
                 seccion_caja=seccion,
+                proveedor=random.choice(proveedores),
                 fecha_compra=ahora - timedelta(days=random.randint(0, DIAS_HISTORIAL)),
                 monto_compra=Decimal('0.00'),
             )
