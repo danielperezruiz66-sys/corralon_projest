@@ -8,6 +8,8 @@ Los campos `*_detalle` son de solo lectura y muestran el `__str__` de la
 relacion, para que el frontend no tenga que resolver cada FK por separado.
 """
 
+from decimal import Decimal
+
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
@@ -218,9 +220,11 @@ class EmpleadoSerializer(serializers.ModelSerializer):
 
 
 class RolSerializer(serializers.ModelSerializer):
+    codigo_detalle = serializers.CharField(source='get_codigo_display', read_only=True)
+
     class Meta:
         model = Rol
-        fields = ['id', 'ocupacion', 'descripcion']
+        fields = ['id', 'ocupacion', 'codigo', 'codigo_detalle', 'descripcion']
 
 
 class EmpleadoXRolSerializer(serializers.ModelSerializer):
@@ -319,6 +323,57 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
             'estado_detalle',
             'detalles_cierre',
         ]
+
+
+class AperturaCajaSerializer(serializers.Serializer):
+    caja = serializers.PrimaryKeyRelatedField(queryset=Caja.objects.all())
+    monto_inicial = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('0.00'),
+    )
+    # Solo un administrador puede abrir la caja a nombre de otro empleado.
+    empleado = serializers.PrimaryKeyRelatedField(
+        queryset=Empleado.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
+
+class CierreCajaSerializer(serializers.Serializer):
+    montos_reales = serializers.DictField(
+        child=serializers.DecimalField(
+            max_digits=12,
+            decimal_places=2,
+            min_value=Decimal('0.00'),
+        ),
+        allow_empty=False,
+    )
+    observaciones = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+
+    def validate_montos_reales(self, value):
+        ids = []
+        for clave in value:
+            try:
+                ids.append(int(clave))
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(
+                    f'El metodo de pago "{clave}" no es valido.'
+                )
+
+        existentes = set(
+            MetodoPago.objects.filter(pk__in=ids).values_list('pk', flat=True)
+        )
+        faltantes = set(ids) - existentes
+        if faltantes:
+            raise serializers.ValidationError(
+                f'No existe el metodo de pago {sorted(faltantes)[0]}.'
+            )
+        return value
 
 
 # =============================================================================
@@ -559,27 +614,6 @@ class ClienteSerializer(serializers.ModelSerializer):
         ]
 
 
-class VentaSerializer(serializers.ModelSerializer):
-    seccion_caja_detalle = serializers.StringRelatedField(source='seccion_caja', read_only=True)
-    cliente_detalle = serializers.StringRelatedField(source='cliente', read_only=True)
-    estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
-
-    class Meta:
-        model = Venta
-        fields = [
-            'id',
-            'seccion_caja',
-            'seccion_caja_detalle',
-            'cliente',
-            'cliente_detalle',
-            'fecha_venta',
-            'monto_venta',
-            'estado',
-            'estado_detalle',
-        ]
-        read_only_fields = ['fecha_venta']
-
-
 class DetalleVentaSerializer(serializers.ModelSerializer):
     producto_detalle = serializers.StringRelatedField(source='producto', read_only=True)
 
@@ -596,6 +630,39 @@ class DetalleVentaSerializer(serializers.ModelSerializer):
         ]
 
 
+class MetodoPagoXVentaSerializer(serializers.ModelSerializer):
+    metodo_pago_detalle = serializers.StringRelatedField(source='metodo_pago', read_only=True)
+
+    class Meta:
+        model = MetodoPagoXVenta
+        fields = ['id', 'metodo_pago', 'metodo_pago_detalle', 'venta', 'monto_pagado']
+
+
+class VentaSerializer(serializers.ModelSerializer):
+    seccion_caja_detalle = serializers.StringRelatedField(source='seccion_caja', read_only=True)
+    cliente_detalle = serializers.StringRelatedField(source='cliente', read_only=True)
+    estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
+    detalles = DetalleVentaSerializer(many=True, read_only=True)
+    pagos = MetodoPagoXVentaSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Venta
+        fields = [
+            'id',
+            'seccion_caja',
+            'seccion_caja_detalle',
+            'cliente',
+            'cliente_detalle',
+            'fecha_venta',
+            'monto_venta',
+            'estado',
+            'estado_detalle',
+            'detalles',
+            'pagos',
+        ]
+        read_only_fields = ['fecha_venta']
+
+
 class FacturaSerializer(serializers.ModelSerializer):
     tipo_detalle = serializers.CharField(source='get_tipo_display', read_only=True)
 
@@ -605,44 +672,45 @@ class FacturaSerializer(serializers.ModelSerializer):
         read_only_fields = ['fecha_emision']
 
 
-class MetodoPagoXVentaSerializer(serializers.ModelSerializer):
-    metodo_pago_detalle = serializers.StringRelatedField(source='metodo_pago', read_only=True)
+class VentaItemSerializer(serializers.Serializer):
+    producto = serializers.PrimaryKeyRelatedField(queryset=Producto.objects.all())
+    cantidad = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        min_value=Decimal('0.001'),
+    )
+    precio = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('0.00'),
+        required=False,
+        allow_null=True,
+    )
 
-    class Meta:
-        model = MetodoPagoXVenta
-        fields = ['id', 'metodo_pago', 'metodo_pago_detalle', 'venta', 'monto_pagado']
+
+class VentaCreateSerializer(serializers.Serializer):
+    seccion_caja = serializers.PrimaryKeyRelatedField(queryset=SeccionCaja.objects.all())
+    cliente = serializers.PrimaryKeyRelatedField(
+        queryset=Cliente.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    items = VentaItemSerializer(many=True, allow_empty=False)
+
+
+class PagoVentaCreateSerializer(serializers.Serializer):
+    venta = serializers.PrimaryKeyRelatedField(queryset=Venta.objects.all())
+    metodo_pago = serializers.PrimaryKeyRelatedField(queryset=MetodoPago.objects.all())
+    monto_pagado = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('0.01'),
+    )
 
 
 # =============================================================================
 # COMPRAS
 # =============================================================================
-
-class CompraSerializer(serializers.ModelSerializer):
-    seccion_caja_detalle = serializers.StringRelatedField(source='seccion_caja', read_only=True)
-    proveedor_detalle = serializers.StringRelatedField(source='proveedor', read_only=True)
-    estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
-    recibida = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Compra
-        fields = [
-            'id',
-            'seccion_caja',
-            'seccion_caja_detalle',
-            'proveedor',
-            'proveedor_detalle',
-            'fecha_compra',
-            'fecha_recepcion',
-            'recibida',
-            'monto_compra',
-            'estado',
-            'estado_detalle',
-        ]
-        read_only_fields = ['fecha_compra', 'fecha_recepcion']
-
-    def get_recibida(self, obj):
-        return obj.fecha_recepcion is not None
-
 
 class DetalleCompraSerializer(serializers.ModelSerializer):
     producto_detalle = serializers.StringRelatedField(source='producto', read_only=True)
@@ -666,6 +734,69 @@ class MetodoPagoXCompraSerializer(serializers.ModelSerializer):
     class Meta:
         model = MetodoPagoXCompra
         fields = ['id', 'metodo_pago', 'metodo_pago_detalle', 'compra', 'monto_pagado']
+
+
+class CompraSerializer(serializers.ModelSerializer):
+    seccion_caja_detalle = serializers.StringRelatedField(source='seccion_caja', read_only=True)
+    proveedor_detalle = serializers.StringRelatedField(source='proveedor', read_only=True)
+    estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
+    recibida = serializers.SerializerMethodField()
+    detalles = DetalleCompraSerializer(many=True, read_only=True)
+    pagos = MetodoPagoXCompraSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Compra
+        fields = [
+            'id',
+            'seccion_caja',
+            'seccion_caja_detalle',
+            'proveedor',
+            'proveedor_detalle',
+            'fecha_compra',
+            'fecha_recepcion',
+            'recibida',
+            'monto_compra',
+            'estado',
+            'estado_detalle',
+            'detalles',
+            'pagos',
+        ]
+        read_only_fields = ['fecha_compra', 'fecha_recepcion']
+
+    def get_recibida(self, obj):
+        return obj.fecha_recepcion is not None
+
+
+class CompraItemSerializer(serializers.Serializer):
+    producto = serializers.PrimaryKeyRelatedField(queryset=Producto.objects.all())
+    cantidad = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        min_value=Decimal('0.001'),
+    )
+    precio = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('0.00'),
+        required=False,
+        allow_null=True,
+    )
+
+
+class CompraCreateSerializer(serializers.Serializer):
+    seccion_caja = serializers.PrimaryKeyRelatedField(queryset=SeccionCaja.objects.all())
+    proveedor = serializers.PrimaryKeyRelatedField(queryset=Proveedor.objects.all())
+    items = CompraItemSerializer(many=True, allow_empty=False)
+
+
+class PagoCompraCreateSerializer(serializers.Serializer):
+    compra = serializers.PrimaryKeyRelatedField(queryset=Compra.objects.all())
+    metodo_pago = serializers.PrimaryKeyRelatedField(queryset=MetodoPago.objects.all())
+    monto_pagado = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('0.01'),
+    )
 
 
 # =============================================================================

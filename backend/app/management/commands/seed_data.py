@@ -2,6 +2,7 @@ import random
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -43,6 +44,7 @@ from app.models import (
     Unidad,
     Venta,
 )
+from app.services import stock as stock_service
 
 Usuario = get_user_model()
 
@@ -117,25 +119,25 @@ PRODUCTOS = [
 ]
 
 ROLES = [
-    ('Vendedor', 'Atencion al publico y carga de ventas'),
-    ('Cajero', 'Manejo de caja y cobros'),
-    ('Encargado', 'Supervision de sucursal'),
-    ('Repositor', 'Reposicion de mercaderia'),
-    ('Chofer', 'Reparto de mercaderia'),
-    ('Administrativo', 'Tareas administrativas'),
+    ('AD', 'Admin', 'Acceso total al sistema'),
+    ('GE', 'Gerente', 'Supervision general y gestion de catalogos'),
+    ('CA', 'Cajero', 'Manejo de caja y cobros'),
+    ('VE', 'Vendedor', 'Atencion al publico y carga de ventas'),
+    ('ED', 'Encargado de deposito', 'Compras, recepcion y depositos'),
+    (None, 'Chofer', 'Reparto de mercaderia'),
 ]
 
 EMPLEADOS = [
     ('30211222', '0001', 'Juan', 'Perez', 'Vendedor'),
     ('31445566', '0002', 'Maria', 'Gomez', 'Cajero'),
-    ('28556677', '0003', 'Carlos', 'Rodriguez', 'Encargado'),
-    ('27889900', '0004', 'Ana', 'Fernandez', 'Administrativo'),
-    ('33998877', '0005', 'Lautaro', 'Diaz', 'Repositor'),
+    ('28556677', '0003', 'Carlos', 'Rodriguez', 'Gerente'),
+    ('27889900', '0004', 'Ana', 'Fernandez', 'Gerente'),
+    ('33998877', '0005', 'Lautaro', 'Diaz', 'Encargado de deposito'),
     ('29556611', '0006', 'Sofia', 'Martinez', 'Vendedor'),
     ('32112233', '0007', 'Diego', 'Lopez', 'Chofer'),
     ('35667788', '0008', 'Lucia', 'Romero', 'Cajero'),
     ('30334455', '0009', 'Martina', 'Sosa', 'Vendedor'),
-    ('NULL', '0010', 'Pablo', 'Torres', 'Repositor'),
+    ('NULL', '0010', 'Pablo', 'Torres', 'Encargado de deposito'),
 ]
 
 CLIENTES = [
@@ -201,8 +203,10 @@ class Command(BaseCommand):
         ids['cliente'] = self._clientes()
         ids['stock_detalle'] = self._detalles_stock(ids['stock'], ids['deposito'])
 
-        self._ventas(ids, options['ventas'])
+        # Las compras reponen stock antes de que las ventas lo consuman, asi el
+        # libro de movimientos queda completo y no se dispara `StockInsuficiente`.
         self._compras(ids, options['compras'])
+        self._ventas(ids, options['ventas'])
 
         self._reporte()
 
@@ -373,10 +377,17 @@ class Command(BaseCommand):
         return empleados
 
     def _roles(self):
-        return [
-            Rol.objects.get_or_create(ocupacion=o, defaults={'descripcion': d})[0]
-            for o, d in ROLES
-        ]
+        roles = []
+        for codigo, ocupacion, descripcion in ROLES:
+            rol, creado = Rol.objects.get_or_create(
+                ocupacion=ocupacion,
+                defaults={'codigo': codigo, 'descripcion': descripcion},
+            )
+            if not creado and rol.codigo != codigo:
+                rol.codigo = codigo
+                rol.save(update_fields=['codigo'])
+            roles.append(rol)
+        return roles
 
     def _empleados_x_roles(self, empleados, roles):
         rol_por_nombre = {r.ocupacion: r for r in roles}
@@ -477,6 +488,11 @@ class Command(BaseCommand):
 
     def _detalles_stock(self, stocks, depositos):
         result = []
+        # El stock inicial es anterior a todo el historial de ventas/compras.
+        fecha_inicial = timezone.now() - timedelta(
+            days=DIAS_HISTORIAL + 30,
+            minutes=random.randint(0, 600),
+        )
         for stock in stocks:
             depositos_sucursal = [
                 deposito
@@ -488,9 +504,14 @@ class Command(BaseCommand):
                     stock=stock,
                     deposito=random.choice(depositos_sucursal),
                     lote=f'L{random.randint(1000, 9999)}',
-                    cantidad=Decimal(random.randint(10, 100)),
+                    cantidad=Decimal(random.randint(100, 300)),
                     fecha_venc=(timezone.now() + timedelta(days=random.randint(30, 365))).date(),
                 )
+                # `fecha_ingreso` es auto_now_add: se corrige despues de crear.
+                DetalleStock.objects.filter(pk=det.pk).update(
+                    fecha_ingreso=fecha_inicial
+                )
+                det.fecha_ingreso = fecha_inicial
                 result.append(det)
             stock.cantidad = sum(
                 (detalle.cantidad for detalle in stock.detalles.all()),
@@ -632,9 +653,10 @@ class Command(BaseCommand):
             estado_pago = random.choice(['PAGADA', 'PAGADA', 'PARCIAL', 'PENDIENTE'])
             fecha = ahora - timedelta(days=random.randint(0, DIAS_HISTORIAL))
             if estado_pago == 'PENDIENTE':
-                # Las pendientes quedan dentro de la hora para no autocalcularse
-                # como vencidas al ejecutar el comando de cancelacion.
-                fecha = ahora - timedelta(minutes=random.randint(0, 50))
+                # Las pendientes quedan dentro de la ventana de auto-cancelacion
+                # para que el barrido no anule el historial de prueba.
+                margen = max(settings.VENTAS_MINUTOS_PARA_CONFIRMAR - 5, 1)
+                fecha = ahora - timedelta(minutes=random.randint(0, margen))
 
             venta = Venta.objects.create(
                 seccion_caja=seccion,
@@ -647,8 +669,15 @@ class Command(BaseCommand):
             venta.refresh_from_db()
 
             total = Decimal('0.00')
+            vendidos = 0
             for prod in random.sample(productos, random.randint(1, 4)):
                 cant = Decimal(random.randint(1, 20))
+                stock = stock_service.obtener_stock(prod, seccion.caja.sucursal)
+                # Si no hay stock suficiente se omite el producto: el seed tiene
+                # que poder correr sobre una base con historial ya cargado.
+                if stock.cantidad - cant < stock.cant_negativa_max:
+                    continue
+
                 precio = prod.precio_unidad
                 subtotal = (cant * precio).quantize(Decimal('0.01'))
                 DetalleVenta.objects.create(
@@ -658,7 +687,23 @@ class Command(BaseCommand):
                     precio_venta=precio,
                     subtotal=subtotal,
                 )
+                movimientos = stock_service.consumir_stock(
+                    stock,
+                    cant,
+                    referencia=f'Venta {venta.pk}',
+                    venta=venta,
+                )
+                # El movimiento nace con `auto_now_add`: se fecha con la venta.
+                MovimientoStock.objects.filter(
+                    pk__in=[movimiento.pk for movimiento in movimientos]
+                ).update(fecha=fecha)
                 total += subtotal
+                vendidos += 1
+
+            if vendidos == 0:
+                # Ninguna linea tenia stock: no se deja una venta vacia.
+                venta.delete()
+                continue
 
             venta.monto_venta = total
             if estado_pago == 'PAGADA':
@@ -706,7 +751,10 @@ class Command(BaseCommand):
 
         for _ in range(cantidad):
             seccion = random.choice(secciones)
+            sucursal = seccion.caja.sucursal
             fecha_compra = ahora - timedelta(days=random.randint(0, DIAS_HISTORIAL))
+            fecha_recepcion = fecha_compra + timedelta(hours=2)
+            deposito = stock_service.deposito_predeterminado(sucursal)
             compra = Compra.objects.create(
                 seccion_caja=seccion,
                 proveedor=random.choice(proveedores),
@@ -716,7 +764,7 @@ class Command(BaseCommand):
             # `fecha_compra` es auto_now_add: se corrige despues de crear.
             Compra.objects.filter(pk=compra.pk).update(
                 fecha_compra=fecha_compra,
-                fecha_recepcion=fecha_compra + timedelta(hours=2),
+                fecha_recepcion=fecha_recepcion,
             )
             compra.refresh_from_db()
 
@@ -732,6 +780,27 @@ class Command(BaseCommand):
                     precio_compra=precio,
                     subtotal=subtotal,
                 )
+
+                stock = stock_service.obtener_stock(prod, sucursal)
+                detalle_stock, movimiento = stock_service.reponer_stock(
+                    stock,
+                    cant,
+                    deposito,
+                    lote=f'C{compra.pk}-{prod.pk}',
+                    fecha_venc=(
+                        fecha_recepcion + timedelta(days=random.randint(90, 540))
+                    ).date(),
+                    referencia=f'Compra {compra.pk}',
+                    compra=compra,
+                )
+                # `fecha_ingreso` y `fecha` son auto_now_add.
+                DetalleStock.objects.filter(pk=detalle_stock.pk).update(
+                    fecha_ingreso=fecha_recepcion
+                )
+                MovimientoStock.objects.filter(pk=movimiento.pk).update(
+                    fecha=fecha_recepcion
+                )
+
                 total += subtotal
 
             compra.monto_compra = total

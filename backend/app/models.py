@@ -191,7 +191,22 @@ class Empleado(models.Model):
 
 
 class Rol(models.Model):
+    class CodigoRol(models.TextChoices):
+        ADMIN = 'AD', 'Admin'
+        GERENTE = 'GE', 'Gerente'
+        CAJERO = 'CA', 'Cajero'
+        VENDEDOR = 'VE', 'Vendedor'
+        DEPOSITO = 'ED', 'Encargado de deposito'
+
     ocupacion = models.CharField(max_length=50)
+    codigo = models.CharField(
+        max_length=2,
+        choices=CodigoRol.choices,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text='Rol funcional usado por los permisos de la API.',
+    )
     descripcion = models.CharField(max_length=150, null=True, blank=True)
 
     class Meta:

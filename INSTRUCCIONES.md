@@ -120,6 +120,13 @@ npm run dev
 
 El servidor de Vite queda disponible en: **http://localhost:5173/**
 
+Vite redirige las llamadas a `/api` hacia el backend en **http://localhost:8000**,
+así que el servidor de Django tiene que estar levantado. Para apuntar a otro
+backend, definí `VITE_API_URL` al iniciar Vite.
+
+La pantalla de login acepta **usuario o legajo**. Con los datos de `seed_data`
+podés entrar con `admin` / `admin1234` o con `maria.gomez` / `test1234`.
+
 Para compilar la versión de producción:
 
 ```bash
@@ -139,20 +146,29 @@ corralon_projest/
 │   ├── app/                # Aplicación principal (gestión)
 │   │   ├── migrations/     # Migraciones de la base de datos
 │   │   ├── management/     # Comandos personalizados (seed_data)
-│   │   ├── models.py       # Modelos de datos (33) agrupados por dominio
+│   │   ├── models.py       # Modelos de datos (35) agrupados por dominio
 │   │   ├── services/       # Lógica de negocio por dominio
+│   │   ├── tests/          # Tests automatizados de la API
+│   │   ├── exceptions.py   # Errores de negocio → respuestas HTTP
+│   │   ├── permissions.py  # Permisos por rol
 │   │   ├── views.py
 │   │   ├── admin.py
 │   │   ├── apps.py
-│   │   ├── backends.py     # Autenticación (login por usuario o legajo)
-│   │   └── tests.py
+│   │   └── backends.py     # Autenticación (login por usuario o legajo)
+│   ├── logs/               # Salida del barrido de ventas vencidas
 │   ├── manage.py           # Utilidad de línea de comandos de Django
 │   └── requirements.txt    # Dependencias del proyecto
 │
+├── scripts/                # Tareas programadas de Windows (.bat)
 ├── frontend/               # Entorno Frontend (React + Vite + JS)
 │   ├── public/
 │   ├── src/
+│   │   ├── api/            # Cliente HTTP con JWT y refresh automático
+│   │   ├── auth/           # Sesión, perfil y permisos por rol
+│   │   ├── components/     # Login y layout general
+│   │   ├── pages/          # Inicio, Productos y Facturación
 │   │   ├── assets/
+│   │   ├── secciones.js    # Definición del menú
 │   │   ├── App.css
 │   │   ├── App.jsx
 │   │   ├── index.css
@@ -186,6 +202,9 @@ corralon_projest/
 | Aplicar migraciones | `python manage.py migrate` |
 | Crear superusuario | `python manage.py createsuperuser` |
 | Levantar servidor | `python manage.py runserver` |
+| Correr los tests | `python manage.py test app` |
+| Cancelar ventas vencidas | `python manage.py cancelar_ventas_vencidas --minutos 30` |
+| Cargar datos de prueba | `python manage.py seed_data --reset` |
 
 | Acción | Comando (desde `frontend/`) |
 |---|---|
@@ -193,3 +212,29 @@ corralon_projest/
 | Levantar servidor de desarrollo | `npm run dev` |
 | Compilar para producción | `npm run build` |
 | Analizar el código | `npm run lint` |
+
+## Tareas programadas
+
+Las ventas `PENDIENTE` se cancelan solas cuando superan el umbral configurado en
+`.env` (`VENTAS_MINUTOS_PARA_CONFIRMAR`, 30 minutos por defecto). El barrido
+debe correr cada `VENTAS_BARRIDO_MINUTOS` (10 minutos por defecto).
+
+**Windows (Programador de tareas).** Ejecutar una vez:
+
+```bat
+scripts\programar_cancelacion.bat
+```
+
+Crea la tarea `Corralon\CancelarVentasVencidas`, que corre
+`scripts\cancelar_ventas_vencidas.bat` cada 10 minutos y escribe el resultado
+en `backend\logs\cancelar_ventas_vencidas.log`.
+
+> Por defecto la tarea corre con la sesión del usuario abierta. Si el servidor
+> queda sin sesión iniciada, registrarla con las credenciales de una cuenta de
+> servicio (`schtasks /Create ... /RU USUARIO /RP CONTRASEÑA`).
+
+**Linux (cron).** Agregar al crontab del usuario que corre el backend:
+
+```cron
+*/10 * * * * cd /ruta/al/proyecto/backend && ../venv/bin/python manage.py cancelar_ventas_vencidas >> logs/cancelar_ventas_vencidas.log 2>&1
+```

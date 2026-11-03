@@ -20,6 +20,7 @@ credenciales_prueba.csv
 *.sqlite3
 /staticfiles/
 /media/
+/backend/logs/
 
 # Node / Frontend
 node_modules/

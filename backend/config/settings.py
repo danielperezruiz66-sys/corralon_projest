@@ -84,7 +84,23 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ),
+    # Traduce las excepciones de negocio (ValueError, StockInsuficiente) a 400.
+    'EXCEPTION_HANDLER': 'app.exceptions.corralon_exception_handler',
 }
+
+
+# Reglas de negocio
+# https://docs.djangoproject.com/en/6.1/ref/settings/
+
+# Minutos que tiene una venta PENDIENTE antes de cancelarse sola.
+VENTAS_MINUTOS_PARA_CONFIRMAR = config(
+    'VENTAS_MINUTOS_PARA_CONFIRMAR',
+    default=30,
+    cast=int,
+)
+
+# Cada cuantos minutos debe correr el barrido de auto-cancelacion.
+VENTAS_BARRIDO_MINUTOS = config('VENTAS_BARRIDO_MINUTOS', default=10, cast=int)
 
 
 # JSON Web Tokens (web y app movil)

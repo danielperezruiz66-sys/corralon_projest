@@ -1,5 +1,6 @@
 """Cancela ventas pendientes vencidas y restaura el stock."""
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from app.services.ventas import cancelar_ventas_vencidas
@@ -7,20 +8,24 @@ from app.services.ventas import cancelar_ventas_vencidas
 
 class Command(BaseCommand):
     help = (
-        'Cancela las ventas pendientes con mas de 1 hora y restaura el stock. '
-        'Pensado para ejecutarse periodicamente (cron o Task Scheduler).'
+        'Cancela las ventas pendientes que superaron el umbral configurado '
+        'y restaura el stock. Pensado para ejecutarse periodicamente '
+        '(cron o Task Scheduler).'
     )
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--horas',
+            '--minutos',
             type=int,
-            default=1,
-            help='Antiguedad minima en horas para cancelar (default: 1).',
+            default=None,
+            help=(
+                'Antiguedad minima en minutos para cancelar '
+                f'(default: {settings.VENTAS_MINUTOS_PARA_CONFIRMAR}).'
+            ),
         )
 
     def handle(self, *args, **options):
-        cantidad = cancelar_ventas_vencidas(horas=options['horas'])
+        cantidad = cancelar_ventas_vencidas(minutos=options['minutos'])
         self.stdout.write(
             self.style.SUCCESS(f'{cantidad} ventas canceladas.')
         )

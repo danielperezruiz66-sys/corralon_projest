@@ -5,13 +5,13 @@
 > no sea cierto o ya no aporte. Si algo deja de ser verdad, **se elimina** (no se deja
 > tachado ni "histórico").
 >
-> Lo que **falta hacer** no va acá: va en `DIA_SIGUIENTE.md` (ver sección 9), que se
+> Lo que **falta hacer** no va acá: va en `DIA_SIGUIENTE.md` (ver sección 10), que se
 > reescribe en cada sesión y solo contiene lo pendiente del día anterior.
 >
 > `INSTRUCCIONES.md` es otra cosa: es la guía de instalación para el equipo.
 > No mezclar ambos documentos.
 
-**Última actualización:** 2026-11-02
+**Última actualización:** 2026-11-03
 
 ---
 
@@ -28,27 +28,33 @@ Arquitectura **desacoplada**:
 - `backend/` → API REST con Django + DRF, PostgreSQL
 - `frontend/` → React con Vite (JavaScript, sin TypeScript)
 
-## 2. Estado actual (2026-11-02)
+## 2. Estado actual (2026-11-03)
 
 | Área | Estado |
 |---|---|
 | Estructura del repo (`backend/` + `frontend/`) | ✅ Hecha |
 | Modelos de datos (35) en `models.py` por secciones | ✅ Hechos |
-| Migraciones (`0001`–`0005`) | ✅ Aplicadas y consistentes (`makemigrations --check` sin cambios) |
+| Migraciones (`0001`–`0007`) | ✅ Aplicadas y consistentes (`makemigrations --check` sin cambios) |
 | Autenticación (login por usuario **o** legajo) | ✅ Funcional |
 | Comando de datos de prueba (`seed_data`) | ✅ Funcional |
 | Admin de Django | ✅ Configurado (Usuario + Empleado inline) |
 | API REST — configuración base (JWT, paginación, permisos, filtros) | ✅ Lista — `/api/token/` y `/api/token/refresh/` funcionando |
-| API REST — serializers, viewsets y rutas de negocio | ✅ **Fase 1** — 34 endpoints registrados y probados |
-| API REST — acciones de escritura de ventas/compras/caja | ❌ Pendiente — los servicios existen, faltan los endpoints que deleguen en ellos |
-| Lógica de negocio (`services/`) | ✅ Implementada — stock, caja, ventas y compras (probada en shell) |
-| Frontend | ❌ Scaffold de Vite sin tocar (sin llamadas a la API) |
-| Tests | ❌ Solo el archivo `tests.py` vacío |
+| API REST — serializers, viewsets y rutas de negocio | ✅ **Fase 1** — 34 viewsets + `GET /api/perfil/` |
+| API REST — escritura transaccional (ventas, compras, caja, pagos) | ✅ **Fase 2** — acciones que delegan en `services/` |
+| Lógica de negocio (`services/`) | ✅ stock, caja, ventas, compras y pagos |
+| Permisos por rol (Admin, Gerente, Cajero, Vendedor, Enc. depósito) | ✅ Aplicados por viewset y acción |
+| Auto-cancelación de ventas | ✅ Umbral 30 min · barrido cada 10 min (tarea de Windows registrada) |
+| Seed con libro de movimientos | ✅ Ventas y compras generan `MovimientoStock` e histórico coherente |
+| Tests | ✅ 51 tests (`manage.py test app`) |
+| Facturación (ARCA) | ⛔ Bloqueada: sin CUIT, certificado ni punto de venta |
+| Frontend — base | ✅ Login JWT (usuario o legajo), perfil, productos y facturación en mantenimiento |
+| Frontend — rediseño visual (referencia `Fer-Cons-feature-api-rest-auth`) | ⏳ **Planificado, sin implementar** — detalle en `DIA_SIGUIENTE.md` |
 
 **Lo que sigue está en `DIA_SIGUIENTE.md`.**
 
-> Estado del repo: la reestructuración y la Fase 1 de la API están commiteadas.
-> La base de desarrollo tiene las migraciones aplicadas y datos de `seed_data`.
+> Estado del repo: la Fase 2 de la API (escritura + roles + tests) y el seed con
+> libro de movimientos están en la base de desarrollo; falta commitear. La tarea
+> programada `Corralon\CancelarVentasVencidas` ya está registrada en este equipo.
 
 ## 3. Stack y versiones
 
@@ -88,13 +94,17 @@ corralon_projest/
 │   ├── config/            # settings.py, urls.py, asgi.py, wsgi.py
 │   ├── app/               # ÚNICA Django app del proyecto
 │   │   ├── models.py      # 35 modelos, agrupados por dominio con comentarios
-│   │   ├── services/      # stock, caja, ventas y compras (lógica transaccional)
+│   │   ├── services/      # stock, caja, ventas, compras y pagos
 │   │   ├── management/commands/  # seed_data, cancelar_ventas_vencidas
-│   │   ├── migrations/    # 0001–0005 (historial, modelo y orden por defecto)
-│   │   ├── admin.py  apps.py  backends.py  serializers.py  urls.py  views.py  tests.py
+│   │   ├── migrations/    # 0001–0007 (historial, modelo, roles canónicos)
+│   │   ├── tests/         # tests de API, servicios y permisos
+│   │   ├── admin.py  apps.py  backends.py  exceptions.py  permissions.py
+│   │   ├── serializers.py  urls.py  views.py
+│   ├── logs/              # salida del barrido (no se commitea)
 │   ├── manage.py
 │   └── requirements.txt
-├── frontend/              # scaffold Vite estándar
+├── frontend/              # React + Vite (cliente de la API)
+├── scripts/               # tareas programadas de Windows (.bat)
 ├── .env                   # NO se commitea (está en .gitignore)
 ├── .env.example
 ├── INSTRUCCIONES.md       # guía de instalación para el equipo
@@ -170,8 +180,8 @@ Decisiones ya aplicadas en `migrations/0003_*`:
   `CO` compra, `AJ` ajuste). Permite revertir una venta cancelada sobre los
   mismos lotes. Se registra dentro de la transacción del servicio.
 - **`Venta.EstadoVenta`** incluye `CONFIRMADA` (`CO`). Una venta nace
-  `PENDIENTE` y descuenta stock; si no se confirma en **1 hora** se cancela y
-  restaura el stock.
+  `PENDIENTE` y descuenta stock; si no se confirma en **30 minutos**
+  (`VENTAS_MINUTOS_PARA_CONFIRMAR`) se cancela y restaura el stock.
 - **`Compra.fecha_recepcion`** marca cuándo se repuso el stock. La compra se
   registra sin tocar stock y solo repone al recibirse.
 - **Cierre de caja con teórico y real**: `SeccionCaja.monto_teorico` lo calcula
@@ -179,6 +189,10 @@ Decisiones ya aplicadas en `migrations/0003_*`:
   de pago vive en `DetalleCierreCaja` (`monto_sistema` vs `monto_real`).
 - **`MetodoPago.es_efectivo`** identifica el método que suma el `monto_inicial`
   de la sección al calcular el teórico.
+- **`Rol.codigo`** identifica el rol funcional que usan los permisos
+  (`AD`, `GE`, `CA`, `VE`, `ED`). Es único y nullable: los roles que no son
+  funcionales (ej. Chofer) quedan sin código y solo permiten lectura. La
+  `ocupacion` es el nombre visible y puede cambiar sin romper permisos.
 
 ### `services/` — lógica de negocio
 
@@ -189,6 +203,7 @@ services/stock.py    → movimientos, FEFO/FIFO, stock negativo y restauración
 services/caja.py     → apertura, cálculo del teórico y cierre con montos reales
 services/ventas.py   → crear/confirmar/cancelar ventas y auto-cancelación
 services/compras.py  → registrar compra y reponer stock al recibirla
+services/pagos.py    → registrar pagos de ventas/compras y recalcular estado
 ```
 
 Funciones principales:
@@ -199,6 +214,7 @@ Funciones principales:
 | `caja.py` | `abrir_seccion`, `calcular_teorico`, `cerrar_seccion`, `auditar_seccion` |
 | `ventas.py` | `crear_venta`, `confirmar_venta`, `cancelar_venta`, `cancelar_ventas_vencidas` |
 | `compras.py` | `registrar_compra`, `recibir_compra` |
+| `pagos.py` | `registrar_pago_venta`, `registrar_pago_compra` |
 
 Reglas que respetan:
 
@@ -212,17 +228,40 @@ Reglas que respetan:
   `es_predeterminado=True` de la sucursal de la caja.
 - `services/caja.py` calcula el teórico como pagos de ventas − pagos de compras
   + `monto_inicial` del método `es_efectivo`, y guarda el detalle por método.
+- `services/pagos.py` no permite pagar de más, ni sobre un documento anulado,
+  ni con un método inactivo. Recalcula el estado a `PARCIAL` o `PAGADA`.
 - La auto-cancelación de ventas corre con
-  `manage.py cancelar_ventas_vencidas [--horas 1]` (pensado para cron o
-  Task Scheduler; todavía no está instalado).
+  `manage.py cancelar_ventas_vencidas [--minutos 30]`. La tarea
+  `Corralon\CancelarVentasVencidas` la ejecuta cada 10 minutos
+  (`scripts/programar_cancelacion.bat`).
 
 Las vistas deben validar la entrada y **delegar** en los servicios, para que la
 lógica sea reutilizable y testeable sin HTTP.
 
-Hoy la API expone `Stock`, `DetalleStock`, `MovimientoStock`, `SeccionCaja`,
-`Venta`, `Compra` y sus detalles en **solo lectura**. La escritura por HTTP se
-habilita cuando existan las acciones que deleguen en los servicios; `Caja` (el
-registro físico) sí es CRUD.
+`Stock`, `DetalleStock`, `MovimientoStock`, `DetalleVenta`, `Factura` y
+`DetalleCompra` son de solo lectura. `Venta`, `Compra`, `SeccionCaja` y los
+pagos se escriben únicamente a través de acciones que llaman a los servicios;
+no aceptan `PUT`/`PATCH`/`DELETE`.
+
+### Facturación electrónica (ARCA) — bloqueada
+
+`Factura` existe y es de solo lectura: **no hay emisión**. La integración queda
+pendiente hasta tener CUIT del emisor, certificado `.crt`/`.key` y punto de venta
+habilitado en ARCA. Mientras tanto el frontend muestra la sección en
+mantenimiento.
+
+Cuando se retome, el flujo tiene dos capas:
+
+1. **WSAA** — se firma el TRA (PKCS#7) y ARCA devuelve `token` + `sign` por ~12 h.
+   Hay que cachearlos: pedir otro antes de tiempo se rechaza.
+2. **WSFEv1** — `FECompUltimoAutorizado` para el número siguiente y
+   `FECAESolicitar` para el CAE del comprobante.
+
+Reglas a respetar: empezar por **homologación**, no reintentar a ciegas después
+de un timeout (consultar `FECompConsultar` antes de repetir, porque la
+numeración es secuencial) y contemplar RG 5616 (`CondicionIVAReceptorId`) y
+RG 4892 (QR oficial). `Cliente.condicion_iva` es texto libre; habrá que
+normalizarlo a los códigos de ARCA.
 
 ### API REST — configuración base
 
@@ -234,10 +273,12 @@ Todo cuelga de `/api/` (`config/urls.py` → `app/urls.py`).
 | Login | `POST /api/token/` — acepta `username` **o** `legajo` (lo resuelve `UsuarioBackend`) |
 | Refresco | `POST /api/token/refresh/` — rota el refresh y blacklistea el anterior |
 | Tokens | Access 60 min · Refresh 7 días · header `Authorization: Bearer <token>` |
-| Permisos | `IsAuthenticated` global; solo los endpoints de token son públicos |
+| Permisos | `PermisoPorRol`: lectura para autenticados, escritura según el rol |
+| Errores de negocio | `app.exceptions.corralon_exception_handler` — `StockInsuficiente`/`ValueError` → `400` con `codigo` |
+| Perfil | `GET /api/perfil/` — usuario, empleado, roles y códigos activos |
 | Paginación | `PageNumberPagination`, `PAGE_SIZE = 20` |
 | Filtros | `DjangoFilterBackend` + `SearchFilter` + `OrderingFilter` |
-| Routers | `DefaultRouter` en `app/urls.py` — 34 viewsets registrados |
+| Routers | `DefaultRouter` en `app/urls.py` — 34 viewsets + `perfil` |
 
 El esquema sirve para web (React) y mobile (React Native): el cliente solo
 necesita los dos endpoints de token y el header `Authorization`.
@@ -248,13 +289,56 @@ necesita los dos endpoints de token y el header `Authorization`.
 |---|---|
 | GEOGRAFIA | `paises`, `provincias`, `localidades`, `ubicaciones` |
 | ORGANIZACION | `empresas`, `sucursales`, `usuarios`, `empleados`, `roles`, `empleados-roles`, `sucursales-empleados` |
-| CAJA | `cajas` (CRUD), `secciones-caja` (solo lectura) |
+| CAJA | `cajas` (CRUD, gerencia), `secciones-caja` (abrir/cerrar/auditar) |
 | CATALOGO | `categorias`, `marcas`, `unidades`, `productos`, `productos-sucursales` |
 | STOCK | `depositos` (CRUD, con sucursal y predeterminado), `stocks`, `detalles-stock` y `movimientos-stock` (solo lectura) |
 | PROVEEDORES | `proveedores`, `proveedores-sucursales`, `productos-proveedores` |
 | PAGOS | `metodos-pago` |
-| VENTAS | `clientes` (CRUD), `ventas`, `detalles-venta`, `facturas`, `metodos-pago-ventas` (solo lectura) |
-| COMPRAS | `compras`, `detalles-compra`, `metodos-pago-compras` (solo lectura) |
+| VENTAS | `clientes` (CRUD), `ventas` (crear/confirmar/cancelar), `detalles-venta` y `facturas` (solo lectura), `metodos-pago-ventas` (registrar pago) |
+| COMPRAS | `compras` (registrar/recibir), `detalles-compra` (solo lectura), `metodos-pago-compras` (registrar pago) |
+
+#### Endpoints de escritura (Fase 2)
+
+| Endpoint | Acción | Servicio |
+|---|---|---|
+| `POST /api/ventas/` | Crear venta pendiente y descontar stock | `ventas.crear_venta` |
+| `POST /api/ventas/{id}/confirmar/` | Confirmar venta | `ventas.confirmar_venta` |
+| `POST /api/ventas/{id}/cancelar/` | Anular y restaurar stock (`motivo` opcional) | `ventas.cancelar_venta` |
+| `POST /api/compras/` | Registrar compra (no toca stock) | `compras.registrar_compra` |
+| `POST /api/compras/{id}/recibir/` | Reponer stock en el depósito predeterminado | `compras.recibir_compra` |
+| `POST /api/secciones-caja/` | Abrir sección (`empleado` sale del usuario) | `caja.abrir_seccion` |
+| `POST /api/secciones-caja/{id}/cerrar/` | Cerrar con `montos_reales` por método | `caja.cerrar_seccion` |
+| `POST /api/secciones-caja/{id}/auditar/` | Auditar una sección cerrada | `caja.auditar_seccion` |
+| `POST /api/metodos-pago-ventas/` | Registrar pago de venta | `pagos.registrar_pago_venta` |
+| `POST /api/metodos-pago-compras/` | Registrar pago de compra | `pagos.registrar_pago_compra` |
+
+Los errores de negocio devuelven `400` con `{"detail": "...", "codigo": "..."}`;
+`codigo` es `stock_insuficiente`, `error_de_negocio`, `validacion` o
+`no_encontrado`.
+
+#### Permisos por rol
+
+Los roles funcionales viven en `Rol.codigo` (`AD`, `GE`, `CA`, `VE`, `ED`). Un
+`EmpleadoXRol` activo otorga el código; `is_superuser` y `AD` pueden todo.
+Sin rol, el usuario queda en solo lectura.
+
+| Módulo | Admin | Gerente | Cajero | Vendedor | Enc. depósito |
+|---|---|---|---|---|---|
+| Geografía / Organización | ✍️ | ✍️ | 👁 | 👁 | 👁 |
+| Usuarios | ✍️ | — | — | — | — |
+| Catálogo | ✍️ | ✍️ | 👁 | 👁 | 👁 |
+| Depósitos | ✍️ | ✍️ | 👁 | 👁 | ✍️ |
+| Stocks / movimientos | 👁 | 👁 | 👁 | 👁 | 👁 |
+| Proveedores | ✍️ | ✍️ | 👁 | 👁 | ✍️ |
+| Clientes | ✍️ | ✍️ | ✍️ | ✍️ | 👁 |
+| Cajas (registro) | ✍️ | ✍️ | 👁 | 👁 | 👁 |
+| Secciones: abrir/cerrar | ✍️ | ✍️ | ✍️ | — | — |
+| Secciones: auditar | ✍️ | ✍️ | — | — | — |
+| Ventas: crear/confirmar | ✍️ | ✍️ | ✍️ | ✍️ | — |
+| Ventas: cancelar | ✍️ | ✍️ | ✍️ | — | — |
+| Compras | ✍️ | ✍️ | — | — | ✍️ |
+| Pagos | ✍️ | ✍️ | ✍️ | — | ✍️ |
+| Métodos de pago | ✍️ | ✍️ | 👁 | 👁 | 👁 |
 
 Reglas de escritura:
 
@@ -263,6 +347,8 @@ Reglas de escritura:
 - `Producto` no expone `sucursales` (M2M con `through`); se gestiona con
   `productos-sucursales`.
 - Las tablas puente tienen endpoint propio.
+- Los viewsets de escritura transaccional son `GenericViewSet` con
+  `Create`/`List`/`Retrieve`: no aceptan `PUT`, `PATCH` ni `DELETE`.
 
 ### Auditoría — `django-simple-history`
 
@@ -299,7 +385,45 @@ Las tablas `Historical*` se crean en `0002_*`, `0003_*` (`HistoricalFactura`) y
 - Email en consola (`MAILERS` con `console.EmailBackend`).
 - `TIME_ZONE = 'UTC'`, `LANGUAGE_CODE = 'en-us'` (sin traducir todavía).
 
-## 6. Datos de prueba
+## 6. Frontend
+
+React 19 + Vite, JavaScript y `.jsx`. Sin router ni librería de estado: la
+navegación es un `useState` en `App.jsx` y el perfil vive en un contexto.
+
+```text
+frontend/src/
+├── api/client.js          # fetch con JWT, refresh automático y errores de la API
+├── api/auth.js            # login (usuario o legajo), perfil y logout
+├── auth/AuthProvider.jsx  # carga el perfil y expone la sesión
+├── auth/contexto.js       # AuthContext + useAuth
+├── components/Login.jsx
+├── components/Layout.jsx  # barra lateral, menú y cabecera
+├── pages/Inicio.jsx
+├── pages/Productos.jsx    # búsqueda y paginación contra /api/productos/
+├── pages/Facturacion.jsx  # cartel de mantenimiento (ARCA bloqueada)
+├── secciones.js           # definición del menú
+├── App.jsx  App.css  index.css  main.jsx
+```
+
+- Tokens en `localStorage` (`corralon.acceso` / `corralon.refresco`). Ante un
+  `401`, `pedir()` renueva el access y reintenta una vez; si el refresh falla,
+  limpia la sesión.
+- Vite hace proxy de `/api` a `http://localhost:8000` (`vite.config.js`). Para
+  apuntar a otro backend se usa `VITE_API_URL`.
+- `useAuth()` expone `perfil`, `codigos`, `login`, `logout` y `puedeEscribir(roles)`.
+  `puedeEscribir` replica la matriz de permisos para ocultar acciones; la API
+  sigue siendo la que valida.
+- Facturación se muestra con un cartel de **mantenimiento** hasta habilitar ARCA.
+- Verificación: `npm run lint` (0 warnings) y `npm run build`.
+
+> **Rediseño pendiente:** se va a migrar la UI al formato de
+> `Fer-Cons-feature-api-rest-auth` (Tailwind 4, Tabler, react-router,
+> SweetAlert2 y react-hook-form). Conserva la lógica real de `api/` y del
+> contexto de auth; el análisis completo, la paleta y las fases están en
+> `DIA_SIGUIENTE.md` (sección 1). Hoy esta sección describe la estructura
+> **actual**, todavía sin router ni Tailwind.
+
+## 7. Datos de prueba
 
 ```bash
 cd backend
@@ -312,13 +436,24 @@ python manage.py seed_data [--reset] [--ventas 50] [--compras 20]
 - Los depósitos quedan repartidos entre las sucursales, con uno predeterminado
   por sucursal. Cada lote está en un depósito de la misma sucursal que su stock
   y `Stock.cantidad` coincide con la suma de sus detalles.
-- Las compras se generan con `proveedor` y con `fecha_recepcion` histórica.
-- Las ventas `PENDIENTE` quedan dentro de la última hora para que el comando de
-  cancelación automática no las anule al ejecutarse.
+- Las compras se procesan **antes** que las ventas: reponen stock en el depósito
+  predeterminado de la sucursal y después las ventas lo consumen, así ninguna
+  venta se rechaza por `StockInsuficiente`.
+- Ventas y compras generan sus `MovimientoStock` (`VE`/`CO`) con la fecha del
+  documento, y cada lote de compra queda con `fecha_ingreso = fecha_recepcion`.
+- El stock inicial arranca con 100–300 unidades por lote (1–2 lotes por
+  producto/sucursal) y `fecha_ingreso` anterior a los 180 días de historial.
+- Las ventas `PENDIENTE` quedan dentro de la ventana de auto-cancelación (25
+  minutos como máximo) para que el barrido no las anule al ejecutarse.
+- Crea los roles funcionales con su `codigo` y asigna los empleados demo
+  (Gerente, Cajero, Vendedor, Encargado de depósito). El rol Chofer queda sin
+  código (solo lectura).
 - Credenciales que crea: superusuario `admin` / `admin1234` y empleados demo
   con contraseña `test1234` (se listan al final de la ejecución).
+- Cancelar una venta del seed restaura stock como en producción, porque el
+  libro de movimientos está completo. Cubierto por `tests/test_seed.py`.
 
-## 7. Convenciones de código
+## 8. Convenciones de código
 
 - **Idioma:** nombres de modelos, campos, `db_table` y `verbose_name` en español.
 - `db_table` en MAYÚSCULAS y plural (`USUARIOS`, `SECCIONES_CAJA`, `METODO_DE_PAGO_X_COMPRAS`).
@@ -328,19 +463,24 @@ python manage.py seed_data [--reset] [--ventas 50] [--compras 20]
 - No se usa `default_auto_field` explícito en los `AppConfig` (configuración mínima).
 - Frontend: JS (no TS), archivos `.jsx`.
 
-## 8. Verificación antes de cerrar cualquier cambio
+## 9. Verificación antes de cerrar cualquier cambio
 
 ```bash
 cd backend
-python manage.py check                         # 0 issues
-python manage.py makemigrations --check --dry-run  # "No changes detected" si no se tocaron modelos
-python manage.py migrate                       # aplicar migraciones pendientes
+python manage.py check                            # 0 issues
+python manage.py makemigrations --check --dry-run # "No changes detected" si no se tocaron modelos
+python manage.py migrate                          # aplicar migraciones pendientes
+python manage.py test app                         # 51 tests
+
+cd ../frontend
+npm run lint                                      # 0 warnings
+npm run build                                     # compila la SPA
 ```
 
 Si se tocaron modelos, generar la migración correspondiente y **no** editar
 migraciones a mano.
 
-## 9. Seguimiento diario — `DIA_SIGUIENTE.md`
+## 10. Seguimiento diario — `DIA_SIGUIENTE.md`
 
 En la raíz del repo existe `DIA_SIGUIENTE.md`, con **solo** lo que quedó pendiente
 al cerrar la sesión anterior.
@@ -354,7 +494,7 @@ al cerrar la sesión anterior.
 El contexto estable (arquitectura, convenciones, deuda técnica) vive en `AGENTS.md`.
 Las tareas del día viven en `DIA_SIGUIENTE.md`.
 
-## 10. Reglas para agentes
+## 11. Reglas para agentes
 
 - **No mover** la lógica de modelos/vistas/admin a `backends.py`. Ese archivo es
   solo autenticación.
@@ -363,5 +503,5 @@ Las tareas del día viven en `DIA_SIGUIENTE.md`.
 - **No dividir** `models.py` en un paquete `models/`: el agrupamiento es por comentarios.
 - Los endpoints nuevos se registran en el `router` de `app/urls.py`, no en `config/urls.py`.
 - **No inventar** archivos vacíos "por si acaso"; se crean cuando hay contenido real.
-- Antes de reorganizar: verificar con los comandos de la sección 8.
-- Al cerrar la sesión: actualizar `AGENTS.md` y reescribir `DIA_SIGUIENTE.md` (sección 9).
+- Antes de reorganizar: verificar con los comandos de la sección 9.
+- Al cerrar la sesión: actualizar `AGENTS.md` y reescribir `DIA_SIGUIENTE.md` (sección 10).

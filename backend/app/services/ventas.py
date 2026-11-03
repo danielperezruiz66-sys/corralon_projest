@@ -3,8 +3,8 @@
 Reglas:
 
 - La venta nace en `PENDIENTE` y descuenta stock en ese momento.
-- Si no se confirma dentro de `HORAS_PARA_CONFIRMAR`, se cancela y el stock se
-  restaura sobre los mismos lotes.
+- Si no se confirma dentro de `VENTAS_MINUTOS_PARA_CONFIRMAR` (30 por defecto),
+  se cancela y el stock se restaura sobre los mismos lotes.
 - Se permite stock negativo hasta `Stock.cant_negativa_max`; mas alla, la venta
   se rechaza con `StockInsuficiente`.
 - Una venta con pagos registrados no se puede cancelar sin revertir los pagos.
@@ -13,6 +13,7 @@ Reglas:
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -20,7 +21,12 @@ from django.utils import timezone
 from ..models import DetalleVenta, Producto, SeccionCaja, Venta
 from . import stock as stock_service
 
-HORAS_PARA_CONFIRMAR = 1
+MINUTOS_PARA_CONFIRMAR = 30
+
+
+def _minutos_para_confirmar():
+    """Lee la configuracion en cada llamada para respetar `override_settings`."""
+    return getattr(settings, 'VENTAS_MINUTOS_PARA_CONFIRMAR', MINUTOS_PARA_CONFIRMAR)
 
 
 def _decimal(valor):
@@ -130,9 +136,10 @@ def cancelar_venta(venta, motivo=''):
     return venta
 
 
-def cancelar_ventas_vencidas(horas=HORAS_PARA_CONFIRMAR):
-    """Cancela las ventas pendientes mas antiguas que `horas`."""
-    limite = timezone.now() - timedelta(hours=horas)
+def cancelar_ventas_vencidas(minutos=None):
+    """Cancela las ventas pendientes mas antiguas que `minutos`."""
+    minutos = _minutos_para_confirmar() if minutos is None else minutos
+    limite = timezone.now() - timedelta(minutes=minutos)
     ventas = Venta.objects.filter(
         estado=Venta.EstadoVenta.PENDIENTE,
         fecha_venta__lt=limite,
