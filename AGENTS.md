@@ -39,16 +39,17 @@ Arquitectura **desacoplada**:
 | Comando de datos de prueba (`seed_data`) | ✅ Funcional |
 | Admin de Django | ✅ Configurado (Usuario + Empleado inline) |
 | API REST — configuración base (JWT, paginación, permisos, filtros) | ✅ Lista — `/api/token/` y `/api/token/refresh/` funcionando |
-| API REST — serializers, viewsets y rutas de negocio | ✅ **Fase 1** — 34 viewsets + `GET /api/perfil/` |
+| API REST — serializers, viewsets y rutas de negocio | ✅ **Fase 1** — 34 viewsets + `GET /api/perfil/` + `GET /api/dashboard/` |
 | API REST — escritura transaccional (ventas, compras, caja, pagos) | ✅ **Fase 2** — acciones que delegan en `services/` |
 | Lógica de negocio (`services/`) | ✅ stock, caja, ventas, compras y pagos |
 | Permisos por rol (Admin, Gerente, Cajero, Vendedor, Enc. depósito) | ✅ Aplicados por viewset y acción |
 | Auto-cancelación de ventas | ✅ Umbral 30 min · barrido cada 10 min (tarea de Windows registrada) |
 | Seed con libro de movimientos | ✅ Ventas y compras generan `MovimientoStock` e histórico coherente |
-| Tests | ✅ 51 tests (`manage.py test app`) |
+| Tests | ✅ 53 tests (`manage.py test app`) |
 | Facturación (ARCA) | ⛔ Bloqueada: sin CUIT, certificado ni punto de venta |
-| Frontend — base | ✅ Login JWT (usuario o legajo), perfil, productos y facturación en mantenimiento |
-| Frontend — rediseño visual (referencia `Fer-Cons-feature-api-rest-auth`) | ⏳ **Planificado, sin implementar** — detalle en `DIA_SIGUIENTE.md` |
+| Frontend — base | ✅ Login JWT (usuario o legajo), perfil y dashboard real |
+| Frontend — rediseño visual (referencia `Fer-Cons-feature-api-rest-auth`) | ✅ **Fase 0–2 + login y dashboard** — Tailwind 4, router, sidebar, menú por roles y `/api/dashboard/`; el resto de los módulos muestra pantalla provisional |
+| Frontend — módulos de negocio | ⏳ Pendientes de conectar (ventas, compras, caja, productos, empleados, proveedores, perfil, actividad) |
 
 **Lo que sigue está en `DIA_SIGUIENTE.md`.**
 
@@ -276,9 +277,10 @@ Todo cuelga de `/api/` (`config/urls.py` → `app/urls.py`).
 | Permisos | `PermisoPorRol`: lectura para autenticados, escritura según el rol |
 | Errores de negocio | `app.exceptions.corralon_exception_handler` — `StockInsuficiente`/`ValueError` → `400` con `codigo` |
 | Perfil | `GET /api/perfil/` — usuario, empleado, roles y códigos activos |
+| Dashboard | `GET /api/dashboard/` — KPIs de ventas, compras, stock, caja y equipo + serie de 7 días |
 | Paginación | `PageNumberPagination`, `PAGE_SIZE = 20` |
 | Filtros | `DjangoFilterBackend` + `SearchFilter` + `OrderingFilter` |
-| Routers | `DefaultRouter` en `app/urls.py` — 34 viewsets + `perfil` |
+| Routers | `DefaultRouter` en `app/urls.py` — 34 viewsets + `perfil` y `dashboard` |
 
 El esquema sirve para web (React) y mobile (React Native): el cliente solo
 necesita los dos endpoints de token y el header `Authorization`.
@@ -387,41 +389,51 @@ Las tablas `Historical*` se crean en `0002_*`, `0003_*` (`HistoricalFactura`) y
 
 ## 6. Frontend
 
-React 19 + Vite, JavaScript y `.jsx`. Sin router ni librería de estado: la
-navegación es un `useState` en `App.jsx` y el perfil vive en un contexto.
+React 19 + Vite 8, JavaScript y `.jsx`. Tailwind 4 con los tokens de la
+referencia visual, React Router 7, Tabler Icons, SweetAlert2 y react-hook-form.
 
 ```text
 frontend/src/
-├── api/client.js          # fetch con JWT, refresh automático y errores de la API
-├── api/auth.js            # login (usuario o legajo), perfil y logout
-├── auth/AuthProvider.jsx  # carga el perfil y expone la sesión
-├── auth/contexto.js       # AuthContext + useAuth
-├── components/Login.jsx
-├── components/Layout.jsx  # barra lateral, menú y cabecera
-├── pages/Inicio.jsx
-├── pages/Productos.jsx    # búsqueda y paginación contra /api/productos/
-├── pages/Facturacion.jsx  # cartel de mantenimiento (ARCA bloqueada)
-├── secciones.js           # definición del menú
-├── App.jsx  App.css  index.css  main.jsx
+├── api/client.js             # fetch con JWT, refresh automático y errores
+├── api/auth.js               # login (usuario o legajo), perfil y logout
+├── context/AuthContext.jsx   # proveedor de sesión real (JWT)
+├── context/auth-context.js   # AuthContext + useAuth
+├── data/menuConfig.js        # categorías, módulos, roles e íconos
+├── components/MenuDesplegable.jsx
+├── components/Encabezado.jsx
+├── components/sidebar/       # Header, Category, Item, Footer
+├── components/common/        # InputField, InputPassword, ButtonSubmit
+├── pages/Login.jsx
+├── pages/Inicio.jsx          # dashboard contra /api/dashboard/
+├── pages/EnDesarrollo.jsx    # provisional para módulos sin conectar
+├── pages/Facturacion.jsx     # mantenimiento ARCA
+├── pages/CambiarContrasena.jsx
+├── styles/                   # Login, MenuDesplegable, Encabezado, Inicio, Placeholder
+├── utils/formato.js
+├── App.jsx  index.css  main.jsx
 ```
 
+- Rutas: `/login` es pública; el resto vive dentro del layout protegido
+  `MenuDesplegable`. `/` es el dashboard, cada módulo del menú tiene su ruta
+  (hoy provisional) y `/facturacion` muestra la pantalla de mantenimiento.
+- `useAuth()` expone `user` normalizado (`nombre`, `legajo`, `rol`, `codigos`),
+  `cargando`, `login`, `logout`, `puedeVer(modulo)` y `puedeEscribir(roles)`.
+- El menú se filtra con los códigos de rol de `menuConfig.js` (`AD`, `GE`, `CA`,
+  `VE`, `ED`); `is_superuser` y `AD` ven todo. Un usuario sin rol solo ve Inicio
+  y Perfil.
 - Tokens en `localStorage` (`corralon.acceso` / `corralon.refresco`). Ante un
   `401`, `pedir()` renueva el access y reintenta una vez; si el refresh falla,
   limpia la sesión.
 - Vite hace proxy de `/api` a `http://localhost:8000` (`vite.config.js`). Para
   apuntar a otro backend se usa `VITE_API_URL`.
-- `useAuth()` expone `perfil`, `codigos`, `login`, `logout` y `puedeEscribir(roles)`.
-  `puedeEscribir` replica la matriz de permisos para ocultar acciones; la API
-  sigue siendo la que valida.
+- El dashboard consume `GET /api/dashboard/` y muestra KPIs, serie de 7 días,
+  últimas ventas, stock crítico y accesos rápidos, con estados de carga y error.
 - Facturación se muestra con un cartel de **mantenimiento** hasta habilitar ARCA.
 - Verificación: `npm run lint` (0 warnings) y `npm run build`.
 
-> **Rediseño pendiente:** se va a migrar la UI al formato de
-> `Fer-Cons-feature-api-rest-auth` (Tailwind 4, Tabler, react-router,
-> SweetAlert2 y react-hook-form). Conserva la lógica real de `api/` y del
-> contexto de auth; el análisis completo, la paleta y las fases están en
-> `DIA_SIGUIENTE.md` (sección 1). Hoy esta sección describe la estructura
-> **actual**, todavía sin router ni Tailwind.
+> **Pendiente:** conectar los módulos de negocio (ventas, compras, caja,
+> productos, empleados, proveedores, perfil y actividad) y reemplazar
+> `EnDesarrollo` por las pantallas reales, manteniendo esta paleta y estructura.
 
 ## 7. Datos de prueba
 
@@ -470,7 +482,7 @@ cd backend
 python manage.py check                            # 0 issues
 python manage.py makemigrations --check --dry-run # "No changes detected" si no se tocaron modelos
 python manage.py migrate                          # aplicar migraciones pendientes
-python manage.py test app                         # 51 tests
+python manage.py test app                         # 53 tests
 
 cd ../frontend
 npm run lint                                      # 0 warnings

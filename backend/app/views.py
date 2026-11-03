@@ -15,6 +15,12 @@ Los permisos de escritura se declaran por viewset en `roles_escritura`
 (ver `app/permissions.py`).
 """
 
+from datetime import timedelta
+from decimal import Decimal
+
+from django.db.models import Count, F, Sum
+from django.db.models.functions import TruncDate
+from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
@@ -116,6 +122,116 @@ def perfil(request):
             ),
             'roles': roles,
             'codigos': sorted(str(codigo) for codigo in codigos_activos(request.user)),
+        }
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard(request):
+    """Resumen agregado para el dashboard de Inicio.
+
+    Devuelve contadores y montos ya calculados en la base para no obligar al
+    cliente a recorrer listados paginados.
+    """
+    hoy = timezone.localdate()
+    inicio_mes = hoy.replace(day=1)
+    desde = hoy - timedelta(days=6)
+
+    ventas = Venta.objects.exclude(estado=Venta.EstadoVenta.ANULADA)
+    compras = Compra.objects.exclude(estado=Compra.EstadoCompra.ANULADA)
+
+    def resumen(queryset, campo='monto_venta'):
+        datos = queryset.aggregate(cantidad=Count('id'), monto=Sum(campo))
+        return {
+            'cantidad': datos['cantidad'] or 0,
+            'monto': str(datos['monto'] or Decimal('0.00')),
+        }
+
+    por_dia = (
+        ventas.filter(fecha_venta__date__gte=desde)
+        .annotate(dia=TruncDate('fecha_venta'))
+        .values('dia')
+        .annotate(cantidad=Count('id'), monto=Sum('monto_venta'))
+        .order_by('dia')
+    )
+    mapa_dias = {fila['dia']: fila for fila in por_dia}
+    serie = []
+    for indice in range(7):
+        dia = desde + timedelta(days=indice)
+        fila = mapa_dias.get(dia, {})
+        serie.append(
+            {
+                'fecha': dia.isoformat(),
+                'cantidad': fila.get('cantidad', 0),
+                'monto': str(fila.get('monto') or Decimal('0.00')),
+            }
+        )
+
+    recientes = [
+        {
+            'id': venta.id,
+            'fecha': venta.fecha_venta.isoformat(),
+            'cliente': str(venta.cliente) if venta.cliente else 'Consumidor final',
+            'monto': str(venta.monto_venta),
+            'estado': venta.estado,
+            'estado_detalle': venta.get_estado_display(),
+        }
+        for venta in ventas.select_related('cliente').order_by('-fecha_venta')[:5]
+    ]
+
+    criticos = [
+        {
+            'producto': str(stock.producto),
+            'sucursal': str(stock.sucursal),
+            'cantidad': str(stock.cantidad),
+            'cant_min': str(stock.cant_min),
+            'alerta': 'NEGATIVO' if stock.cantidad < 0 else 'MINIMO',
+        }
+        for stock in Stock.objects.filter(cantidad__lte=F('cant_min'))
+        .select_related('producto', 'sucursal')
+        .order_by('cantidad')[:5]
+    ]
+
+    return Response(
+        {
+            'ventas': {
+                'hoy': resumen(ventas.filter(fecha_venta__date=hoy)),
+                'mes': resumen(ventas.filter(fecha_venta__date__gte=inicio_mes)),
+                'pendientes': resumen(
+                    ventas.filter(estado=Venta.EstadoVenta.PENDIENTE)
+                ),
+            },
+            'compras': {
+                'pendientes_recepcion': compras.filter(
+                    fecha_recepcion__isnull=True
+                ).count(),
+                'mes': resumen(
+                    compras.filter(fecha_compra__date__gte=inicio_mes),
+                    campo='monto_compra',
+                ),
+            },
+            'catalogo': {'productos': Producto.objects.count()},
+            'stock': {
+                'bajo': Stock.objects.filter(cantidad__lte=F('cant_min')).count(),
+                'negativo': Stock.objects.filter(cantidad__lt=0).count(),
+            },
+            'caja': {
+                'abiertas': SeccionCaja.objects.filter(
+                    estado=SeccionCaja.EstadoSeccion.ABIERTA
+                ).count()
+            },
+            'equipo': {
+                'empleados_activos': Empleado.objects.filter(
+                    estado=Empleado.EstadoEmpleado.ACTIVO
+                ).count(),
+                'proveedores_activos': Proveedor.objects.filter(
+                    estado_prov=True
+                ).count(),
+            },
+            'ventas_por_dia': serie,
+            'ventas_recientes': recientes,
+            'stock_critico': criticos,
         }
     )
 

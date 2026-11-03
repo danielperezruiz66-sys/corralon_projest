@@ -1,62 +1,56 @@
-:root {
-  --fondo: #f4f2ee;
-  --superficie: #ffffff;
-  --superficie-suave: #faf8f4;
-  --borde: #e3ded4;
-  --texto: #2b2926;
-  --texto-suave: #6d675d;
-  --acento: #b4451f;
-  --acento-oscuro: #8f3416;
-  --acento-suave: #fbeae3;
-  --exito: #166534;
-  --error: #b91c1c;
-  --error-suave: #fef2f2;
-  --sombra:
-    0 1px 2px rgba(43, 41, 38, 0.06), 0 12px 32px rgba(43, 41, 38, 0.07);
-  --radio: 10px;
-  --sans: 'Segoe UI', system-ui, Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+@import "tailwindcss";
 
-  font: 15px/1.5 var(--sans);
-  color: var(--texto);
-  background: var(--fondo);
-  color-scheme: light;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@theme {
+  --font-sans: "Abel", system-ui, sans-serif;
+  --color-login: #326f7a;
+  --color-campo: #5ba8b0;
+  --color-oscuro: #0f2a30;
+  --color-sidebar: #4a9da8;
+  --color-fondo: #dff0f3;
+  --color-tarjeta: #cfeff3;
+  --color-circulo: #a9e0ea;
+  --color-navy: #1f3a8a;
+  --color-exito: #0d9488;
+  --color-peligro: #b91c1c;
+  --color-aviso: #b45309;
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  html {
+    font-family: var(--font-sans);
+  }
+
+  body {
+    @apply bg-fondo text-oscuro;
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  ::selection {
+    background-color: var(--color-circulo);
+    color: var(--color-oscuro);
+  }
 }
 
-body {
-  margin: 0;
-  min-height: 100svh;
-}
-
-button,
-input {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-}
-
-h1,
-h2,
-h3 {
-  margin: 0;
-  color: var(--texto);
-  line-height: 1.2;
-}
-
-p {
-  margin: 0;
+.pantalla-carga {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  color: rgba(15, 42, 48, 0.65);
+  font-size: 1.1rem;
 }

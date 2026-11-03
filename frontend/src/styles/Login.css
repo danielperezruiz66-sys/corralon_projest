@@ -1,0 +1,224 @@
+/* ============================================
+ESTILOS DE LOGIN - FER-CONS
+============================================ */
+
+.contenedor-login {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background-color: var(--color-login);
+  box-sizing: border-box;
+}
+
+.circulo {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.circulo-1 {
+  right: -5rem;
+  top: -6rem;
+  width: 24rem;
+  height: 24rem;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.circulo-2 {
+  right: 15rem;
+  top: 4rem;
+  width: 18rem;
+  height: 18rem;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.circulo-3 {
+  left: -6rem;
+  bottom: 6rem;
+  width: 24rem;
+  height: 24rem;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.circulo-4 {
+  bottom: 4rem;
+  left: 6rem;
+  width: 10rem;
+  height: 10rem;
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.formulario-tarjeta-login {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  width: 100%;
+  max-width: 28rem;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 0 1.5rem;
+  box-sizing: border-box;
+}
+
+.encabezado-logo {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 1.875rem;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.subtitulo-logo {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.caja-icono-logo {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 1rem;
+  background-color: #ffffff;
+  color: var(--color-sidebar);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Inputs */
+.grupo-input {
+  width: 100%;
+}
+
+.contenedor-input-interno {
+  position: relative;
+  width: 100%;
+}
+
+.icono-campo {
+  position: absolute;
+  left: 1.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #ffffff;
+  pointer-events: none;
+}
+
+.input-personalizado {
+  width: 100%;
+  border-radius: 9999px;
+  background-color: var(--color-campo);
+  padding: 1rem 1.5rem 1rem 3.5rem;
+  color: #ffffff;
+  border: none;
+  box-sizing: border-box;
+}
+
+.input-password-ojo {
+  padding-right: 3.5rem;
+}
+
+.boton-toggle-password {
+  position: absolute;
+  right: 1.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0.25rem;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.boton-toggle-password:hover {
+  opacity: 1;
+}
+
+.input-personalizado::placeholder {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.input-personalizado:focus-visible {
+  outline: 2px solid #ffffff;
+}
+
+.mensaje-error-input {
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+  padding-left: 1.5rem;
+  font-size: 0.875rem;
+  color: #fecaca;
+}
+
+/* Botón */
+.contenedor-boton {
+  display: flex;
+  justify-content: center;
+}
+
+.boton-enviar {
+  margin: 0 auto;
+  width: 18rem;
+  border-radius: 9999px;
+  background-color: var(--color-oscuro);
+  padding: 1rem 0;
+  font-size: 1.25rem;
+  letter-spacing: 0.1em;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.boton-enviar:hover {
+  opacity: 0.9;
+}
+
+.boton-enviar:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.boton-enviar:focus-visible {
+  outline: 2px solid #ffffff;
+}
+
+/* Enlaces y pie */
+.enlace-olvido {
+  text-align: center;
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.enlace-olvido:hover {
+  text-decoration: underline;
+}
+
+.boton-enlace {
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.texto-demo {
+  text-align: center;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+}

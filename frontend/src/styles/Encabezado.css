@@ -1,0 +1,77 @@
+/* ============================================
+ESTILOS DE ENCABEZADO - FER-CONS
+============================================ */
+
+.encabezado-principal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom-left-radius: 2.5rem;
+  border-bottom-right-radius: 2.5rem;
+  background-color: var(--color-sidebar);
+  padding: 1.5rem;
+  color: #ffffff;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .encabezado-principal {
+    border-radius: 0;
+    background-color: #ffffff;
+    padding-left: 3rem;
+    padding-right: 3rem;
+    color: var(--color-oscuro);
+  }
+}
+
+.contenedor-titulo-encabezado {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.titulo-principal-encabezado {
+  margin: 0;
+  font-size: 1.875rem;
+  font-weight: 700;
+}
+
+@media (min-width: 768px) {
+  .titulo-principal-encabezado {
+    font-size: 2.25rem;
+  }
+}
+
+.subtitulo-encabezado {
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+  font-size: 1.125rem;
+}
+
+@media (min-width: 768px) {
+  .subtitulo-encabezado {
+    color: rgba(15, 42, 48, 0.7);
+    font-size: 1.5rem;
+  }
+}
+
+.tarjeta-usuario-encabezado {
+  display: none;
+  border-radius: 0.75rem;
+  background-color: var(--color-fondo);
+  padding: 0.75rem 2rem;
+  color: var(--color-sidebar);
+  font-size: 1.05rem;
+  text-align: right;
+}
+
+.tarjeta-usuario-encabezado p {
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .tarjeta-usuario-encabezado {
+    display: block;
+  }
+}

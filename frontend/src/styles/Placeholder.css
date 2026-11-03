@@ -1,0 +1,56 @@
+/* ============================================
+PANTALLAS INFORMATIVAS - FER-CONS
+============================================ */
+
+.placeholder-contenido {
+  padding: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .placeholder-contenido {
+    padding: 3rem;
+  }
+}
+
+.placeholder-panel {
+  max-width: 46rem;
+  border-radius: 1.5rem;
+  background-color: #ffffff;
+  padding: 2rem;
+  box-shadow: 0 10px 24px rgba(15, 42, 48, 0.06);
+}
+
+.placeholder-icono {
+  display: grid;
+  width: 4rem;
+  height: 4rem;
+  place-items: center;
+  border-radius: 1rem;
+  background-color: var(--color-tarjeta);
+  color: var(--color-sidebar);
+}
+
+.placeholder-panel h2 {
+  margin: 1rem 0 0.5rem;
+  color: var(--color-oscuro);
+  font-size: 1.5rem;
+}
+
+.placeholder-panel p {
+  margin: 0 0 0.75rem;
+  color: rgba(15, 42, 48, 0.75);
+  line-height: 1.6;
+}
+
+.placeholder-nota {
+  border-radius: 0.75rem;
+  background-color: var(--color-fondo);
+  padding: 0.85rem 1rem;
+  color: rgba(15, 42, 48, 0.65) !important;
+  font-size: 0.9rem;
+}
+
+.placeholder-mantenimiento .placeholder-icono {
+  background-color: #fef3c7;
+  color: var(--color-aviso);
+}
