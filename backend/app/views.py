@@ -15,10 +15,11 @@ Los permisos de escritura se declaran por viewset en `roles_escritura`
 (ver `app/permissions.py`).
 """
 
-from datetime import timedelta
+import calendar
+from datetime import date, timedelta
 from decimal import Decimal
 
-from django.db.models import Count, F, Sum
+from django.db.models import Count, F, Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
@@ -129,27 +130,183 @@ def perfil(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard(request):
-    """Resumen agregado para el dashboard de Inicio.
+    """Resumen agregado para el dashboard de Inicio (vista Admin).
 
-    Devuelve contadores y montos ya calculados en la base para no obligar al
-    cliente a recorrer listados paginados.
+    Acepta `?periodo=hoy|7d|mes` y `?sucursal=<id>`. Los KPIs y la serie
+    respetan ambos filtros; las alertas y paneles operativos son siempre del
+    estado actual.
     """
     hoy = timezone.localdate()
+    ahora = timezone.now()
     inicio_mes = hoy.replace(day=1)
-    desde = hoy - timedelta(days=6)
+
+    periodo = request.query_params.get('periodo', 'hoy')
+    if periodo not in ('hoy', '7d', 'mes'):
+        periodo = 'hoy'
+
+    sucursal_id = request.query_params.get('sucursal')
+    if sucursal_id in ('', 'null', 'undefined', None):
+        sucursal_id = None
 
     ventas = Venta.objects.exclude(estado=Venta.EstadoVenta.ANULADA)
     compras = Compra.objects.exclude(estado=Compra.EstadoCompra.ANULADA)
+    stocks = Stock.objects.all()
+    secciones = SeccionCaja.objects.all()
+
+    sucursal = None
+    if sucursal_id is not None:
+        try:
+            sucursal = Sucursal.objects.get(pk=sucursal_id)
+        except (Sucursal.DoesNotExist, TypeError, ValueError):
+            return Response(
+                {'detail': 'La sucursal indicada no existe.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        ventas = ventas.filter(seccion_caja__caja__sucursal=sucursal)
+        compras = compras.filter(seccion_caja__caja__sucursal=sucursal)
+        stocks = stocks.filter(sucursal=sucursal)
+        secciones = secciones.filter(caja__sucursal=sucursal)
+
+    def rango_actual_y_anterior():
+        if periodo == 'hoy':
+            return hoy, hoy, hoy - timedelta(days=1), hoy - timedelta(days=1)
+        if periodo == '7d':
+            return (
+                hoy - timedelta(days=6),
+                hoy,
+                hoy - timedelta(days=13),
+                hoy - timedelta(days=7),
+            )
+        anterior_fin = inicio_mes - timedelta(days=1)
+        anterior_inicio = anterior_fin.replace(day=1)
+        anterior_fin = date(
+            anterior_inicio.year,
+            anterior_inicio.month,
+            min(
+                hoy.day,
+                calendar.monthrange(anterior_inicio.year, anterior_inicio.month)[1],
+            ),
+        )
+        return inicio_mes, hoy, anterior_inicio, anterior_fin
+
+    inicio, fin, anterior_inicio, anterior_fin = rango_actual_y_anterior()
 
     def resumen(queryset, campo='monto_venta'):
         datos = queryset.aggregate(cantidad=Count('id'), monto=Sum(campo))
+        cantidad = datos['cantidad'] or 0
+        monto = datos['monto'] or Decimal('0.00')
+        ticket = (monto / cantidad).quantize(Decimal('0.01')) if cantidad else Decimal('0.00')
         return {
-            'cantidad': datos['cantidad'] or 0,
-            'monto': str(datos['monto'] or Decimal('0.00')),
+            'cantidad': cantidad,
+            'monto': str(monto),
+            'ticket_promedio': str(ticket),
         }
 
+    def variacion(actual, anterior):
+        if anterior == 0:
+            return None if actual == 0 else 100.0
+        return round(float((actual - anterior) / anterior * 100), 1)
+
+    def ventas_del_rango(desde, hasta):
+        return ventas.filter(
+            fecha_venta__date__gte=desde,
+            fecha_venta__date__lte=hasta,
+        )
+
+    periodo_actual = resumen(ventas_del_rango(inicio, fin))
+    periodo_anterior = resumen(ventas_del_rango(anterior_inicio, anterior_fin))
+    comparacion = {
+        'monto_anterior': periodo_anterior['monto'],
+        'cantidad_anterior': periodo_anterior['cantidad'],
+        'variacion_porcentaje': variacion(
+            Decimal(periodo_actual['monto']),
+            Decimal(periodo_anterior['monto']),
+        ),
+    }
+
+    ventas_hoy = resumen(ventas_del_rango(hoy, hoy))
+    ventas_mes = resumen(ventas_del_rango(inicio_mes, hoy))
+    pendientes = resumen(ventas.filter(estado=Venta.EstadoVenta.PENDIENTE))
+    compras_mes = resumen(
+        compras.filter(
+            fecha_compra__date__gte=inicio_mes,
+            fecha_compra__date__lte=hoy,
+        ),
+        campo='monto_compra',
+    )
+
+    # Ventas pendientes que vencen en los próximos 10 minutos (o ya vencidas
+    # y todavía no barridas).
+    por_vencer = ventas.filter(
+        estado=Venta.EstadoVenta.PENDIENTE,
+        fecha_venta__lte=ahora - timedelta(minutes=20),
+    )
+    proxima_vencer = por_vencer.order_by('fecha_venta').first()
+    minutos_restantes = None
+    if proxima_vencer is not None:
+        transcurridos = (ahora - proxima_vencer.fecha_venta).total_seconds() / 60
+        minutos_restantes = max(0, round(30 - transcurridos))
+
+    stock_bajo_qs = stocks.filter(cantidad__lte=F('cant_min'))
+    stock_negativo_qs = stocks.filter(cantidad__lt=0)
+    compras_pendientes_qs = compras.filter(fecha_recepcion__isnull=True)
+    cajas_abiertas_qs = secciones.filter(
+        estado=SeccionCaja.EstadoSeccion.ABIERTA
+    )
+
+    estados_venta_valida = [
+        Venta.EstadoVenta.PENDIENTE,
+        Venta.EstadoVenta.CONFIRMADA,
+        Venta.EstadoVenta.PAGADA,
+        Venta.EstadoVenta.PARCIAL,
+    ]
+    filtro_ventas = Q(ventas__estado__in=estados_venta_valida)
+    cajas_abiertas = []
+    for seccion in (
+        cajas_abiertas_qs.select_related('caja__sucursal', 'empleado')
+        .annotate(
+            ventas_cantidad=Count('ventas', filter=filtro_ventas),
+            ventas_monto=Sum('ventas__monto_venta', filter=filtro_ventas),
+        )
+        .order_by('fecha_hora_apertura')
+    ):
+        cajas_abiertas.append(
+            {
+                'id': seccion.id,
+                'caja_id': seccion.caja_id,
+                'caja': f'Caja {seccion.caja_id}',
+                'sucursal': str(seccion.caja.sucursal),
+                'empleado': str(seccion.empleado),
+                'fecha_hora_apertura': seccion.fecha_hora_apertura.isoformat(),
+                'monto_inicial': str(seccion.monto_inicial),
+                'ventas_cantidad': seccion.ventas_cantidad or 0,
+                'ventas_monto': str(seccion.ventas_monto or Decimal('0.00')),
+                'estado': seccion.estado,
+                'estado_detalle': seccion.get_estado_display(),
+            }
+        )
+
+    compras_por_recibir = [
+        {
+            'id': compra.id,
+            'proveedor': str(compra.proveedor or 'Sin proveedor'),
+            'fecha_compra': compra.fecha_compra.isoformat(),
+            'monto': str(compra.monto_compra),
+            'dias_esperando': max(0, (ahora - compra.fecha_compra).days),
+            'estado': compra.estado,
+            'estado_detalle': compra.get_estado_display(),
+        }
+        for compra in compras_pendientes_qs.select_related('proveedor').order_by(
+            'fecha_compra'
+        )[:5]
+    ]
+
+    serie_inicio = inicio_mes if periodo == 'mes' else hoy - timedelta(days=6)
     por_dia = (
-        ventas.filter(fecha_venta__date__gte=desde)
+        ventas.filter(
+            fecha_venta__date__gte=serie_inicio,
+            fecha_venta__date__lte=hoy,
+        )
         .annotate(dia=TruncDate('fecha_venta'))
         .values('dia')
         .annotate(cantidad=Count('id'), monto=Sum('monto_venta'))
@@ -157,14 +314,21 @@ def dashboard(request):
     )
     mapa_dias = {fila['dia']: fila for fila in por_dia}
     serie = []
-    for indice in range(7):
-        dia = desde + timedelta(days=indice)
+    for indice in range((hoy - serie_inicio).days + 1):
+        dia = serie_inicio + timedelta(days=indice)
         fila = mapa_dias.get(dia, {})
+        monto_dia = fila.get('monto') or Decimal('0.00')
+        cantidad_dia = fila.get('cantidad', 0)
         serie.append(
             {
                 'fecha': dia.isoformat(),
-                'cantidad': fila.get('cantidad', 0),
-                'monto': str(fila.get('monto') or Decimal('0.00')),
+                'cantidad': cantidad_dia,
+                'monto': str(monto_dia),
+                'ticket_promedio': str(
+                    (monto_dia / cantidad_dia).quantize(Decimal('0.01'))
+                    if cantidad_dia
+                    else Decimal('0.00')
+                ),
             }
         )
 
@@ -182,56 +346,89 @@ def dashboard(request):
 
     criticos = [
         {
+            'id': stock.id,
+            'producto_id': stock.producto_id,
             'producto': str(stock.producto),
+            'sucursal_id': stock.sucursal_id,
             'sucursal': str(stock.sucursal),
             'cantidad': str(stock.cantidad),
             'cant_min': str(stock.cant_min),
             'alerta': 'NEGATIVO' if stock.cantidad < 0 else 'MINIMO',
         }
-        for stock in Stock.objects.filter(cantidad__lte=F('cant_min'))
-        .select_related('producto', 'sucursal')
-        .order_by('cantidad')[:5]
+        for stock in stock_bajo_qs.select_related('producto', 'sucursal').order_by(
+            'cantidad'
+        )[:5]
+    ]
+
+    empleados_qs = Empleado.objects.filter(
+        estado=Empleado.EstadoEmpleado.ACTIVO
+    )
+    proveedores_qs = Proveedor.objects.filter(estado_prov=True)
+    if sucursal is not None:
+        empleados_qs = empleados_qs.filter(
+            sucursales_asignadas__sucursal=sucursal,
+            sucursales_asignadas__estado=True,
+        ).distinct()
+        proveedores_qs = proveedores_qs.filter(
+            sucursales_asociadas__sucursal=sucursal,
+            sucursales_asociadas__estado=True,
+        ).distinct()
+
+    sucursales = [
+        {'id': item.id, 'nombre': item.nombre}
+        for item in Sucursal.objects.order_by('nombre')
     ]
 
     return Response(
         {
+            'filtros': {
+                'periodo': periodo,
+                'sucursal': sucursal.id if sucursal else None,
+                'sucursales': sucursales,
+            },
             'ventas': {
-                'hoy': resumen(ventas.filter(fecha_venta__date=hoy)),
-                'mes': resumen(ventas.filter(fecha_venta__date__gte=inicio_mes)),
-                'pendientes': resumen(
-                    ventas.filter(estado=Venta.EstadoVenta.PENDIENTE)
-                ),
+                'hoy': ventas_hoy,
+                'mes': ventas_mes,
+                'periodo': {
+                    **periodo_actual,
+                    'comparacion': comparacion,
+                },
+                'pendientes': {
+                    **pendientes,
+                    'por_vencer': por_vencer.count(),
+                    'minutos_restantes': minutos_restantes,
+                },
             },
             'compras': {
-                'pendientes_recepcion': compras.filter(
-                    fecha_recepcion__isnull=True
-                ).count(),
-                'mes': resumen(
-                    compras.filter(fecha_compra__date__gte=inicio_mes),
-                    campo='monto_compra',
-                ),
+                'pendientes_recepcion': compras_pendientes_qs.count(),
+                'mes': compras_mes,
             },
             'catalogo': {'productos': Producto.objects.count()},
             'stock': {
-                'bajo': Stock.objects.filter(cantidad__lte=F('cant_min')).count(),
-                'negativo': Stock.objects.filter(cantidad__lt=0).count(),
+                'bajo': stock_bajo_qs.count(),
+                'negativo': stock_negativo_qs.count(),
             },
-            'caja': {
-                'abiertas': SeccionCaja.objects.filter(
-                    estado=SeccionCaja.EstadoSeccion.ABIERTA
-                ).count()
-            },
+            'caja': {'abiertas': cajas_abiertas_qs.count()},
             'equipo': {
-                'empleados_activos': Empleado.objects.filter(
-                    estado=Empleado.EstadoEmpleado.ACTIVO
-                ).count(),
-                'proveedores_activos': Proveedor.objects.filter(
-                    estado_prov=True
-                ).count(),
+                'empleados_activos': empleados_qs.count(),
+                'proveedores_activos': proveedores_qs.count(),
             },
+            'alertas': {
+                'ventas_por_vencer': por_vencer.count(),
+                'minutos_restantes': minutos_restantes,
+                'stock_negativo': stock_negativo_qs.count(),
+                'stock_bajo': stock_bajo_qs.count(),
+                'compras_por_recibir': compras_pendientes_qs.count(),
+                'cajas_abiertas': cajas_abiertas_qs.count(),
+            },
+            'serie_etiqueta': (
+                'Mes actual' if periodo == 'mes' else 'Últimos 7 días'
+            ),
             'ventas_por_dia': serie,
             'ventas_recientes': recientes,
             'stock_critico': criticos,
+            'compras_por_recibir': compras_por_recibir,
+            'cajas_abiertas': cajas_abiertas,
         }
     )
 

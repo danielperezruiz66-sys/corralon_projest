@@ -16,6 +16,17 @@ export function formatearNumero(valor) {
   return numero.format(Number(valor) || 0)
 }
 
+export function formatearFecha(valor) {
+  if (!valor) {
+    return '—'
+  }
+  return new Date(valor).toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
 export function formatearFechaHora(valor) {
   if (!valor) {
     return '—'
@@ -23,6 +34,16 @@ export function formatearFechaHora(valor) {
   return new Date(valor).toLocaleString('es-AR', {
     day: '2-digit',
     month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+export function formatearHora(valor) {
+  if (!valor) {
+    return '—'
+  }
+  return new Date(valor).toLocaleTimeString('es-AR', {
     hour: '2-digit',
     minute: '2-digit',
   })

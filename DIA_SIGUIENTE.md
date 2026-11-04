@@ -4,9 +4,9 @@
 > anterior; lo terminado o descartado se borra. No es un historial.
 > Contexto del proyecto: ver `AGENTS.md`.
 
-**Cerrado el:** 2026-11-03
+**Cerrado el:** 2026-11-04
 
-## 1. Frontend — rediseño (en curso)
+## 1. Frontend — dashboard Admin (V1 cerrado)
 
 **Hecho en esta sesión**
 
@@ -17,33 +17,45 @@
 - Fase 2: layout con sidebar colapsable, drawer móvil, menú por categorías y
   roles reales (`AD`, `GE`, `CA`, `VE`, `ED`), `Encabezado` y footer de usuario.
 - Login rediseñado con el formato de `Fer-Cons-feature-api-rest-auth`.
-- Inicio convertido en **dashboard estadístico** contra `GET /api/dashboard/`:
-  KPIs de ventas/compras/stock/caja, serie de 7 días, últimas ventas, stock
-  crítico y accesos rápidos.
-- Backend: endpoint `GET /api/dashboard/` + 2 tests (total **53/53** pasando).
-- Commit de resguardo del estado anterior: `205e89e`.
+- **Dashboard Admin V1**:
+  - Filtro por sucursal (Todas por defecto) y período Hoy / 7 días / Mes.
+  - Franja de alertas: ventas por vencer, stock negativo/bajo, compras sin
+    recibir y cajas abiertas.
+  - Seis KPIs: ventas del período (con comparación), ticket promedio, ventas del
+    mes, pendientes, cajas abiertas y compras por recibir.
+  - Evolución de ventas (7 días o mes), cajas abiertas con sección en curso,
+    últimas ventas, stock crítico, compras por recibir y accesos rápidos.
+  - Solo enlaces a módulos; sin acciones rápidas de negocio.
+- Backend: `GET /api/dashboard/` ampliado con `periodo`, `sucursal`, comparación
+  contra el período anterior, alertas, cajas abiertas y compras por recibir.
+  Total **57/57 tests** pasando.
+- Commits: `205e89e` (resguardo) y `b67e98b` (rediseño inicial).
 
 **Pendiente inmediato**
 
-- [ ] Validar el diseño del login y del dashboard con el usuario.
-- [ ] Definir los campos de cada módulo mirando la paleta y los componentes ya
-      creados.
-- [ ] Fase 3: componentes comunes que faltan (tabla genérica, búsqueda, filtros,
+- [ ] Revisar el dashboard con el usuario y ajustar textos/orden si hace falta.
+- [ ] Definir las métricas V2 del dashboard: top productos, formas de pago,
+      ventas por sucursal, diferencias de caja y actividad reciente.
+- [ ] Elegir el próximo módulo del menú para desarrollar (Ventas, Compras, Caja,
+      Stock/Productos, Proveedores, Empleados, Perfil o Actividad).
+- [ ] Fase 3: componentes comunes que falten (tabla genérica, búsqueda, filtros,
       modal, FAB, paginación "ver más") a medida que se conecten las pantallas.
-- [ ] Fase 4: Perfil, Empleados y Proveedores contra la API real.
 - [ ] Cambiar contraseña: **requiere endpoint nuevo en backend**.
 - [ ] Actividad: definir fuente (recomendado: movimientos + ventas + compras).
-- [ ] Fase 5: Ventas, Compras, Caja, Productos/Stock y Facturación.
 - [ ] Aplicar `puedeEscribir` a todas las acciones de escritura.
 - [ ] Probar en navegador el refresh automático del token y el cierre de sesión.
 
 ## 2. Decisiones tomadas
 
+- El Inicio Admin usa **Hoy** como período por defecto.
+- El Admin ve **todas las sucursales** y puede elegir una con el selector.
+- El dashboard solo tiene **enlaces** a los módulos, sin acciones de escritura.
+- Se incluyen **Cajas abiertas** (secciones en curso) y **Compras por recibir**.
+- Las métricas V2 se definen más adelante.
+- Por ahora se trabaja solo la vista de **Administrador**; los demás roles se
+  replantean después de consolidar Admin.
 - Pedidos y Presupuestos: **se omiten** del menú (no existen en el backend).
 - `prop-types`: **no se instala** (se usan parámetros por defecto).
-- El alcance inicial es login + layout + dashboard; el resto se analiza por tandas.
-- El menú muestra todos los módulos disponibles; los que aún no tienen pantalla
-  real abren `EnDesarrollo` y Facturación abre la pantalla de mantenimiento.
 
 ## 3. Facturación (ARCA)
 
@@ -59,4 +71,5 @@
 ## 5. Commit
 
 - [x] Commit del estado previo al rediseño (`205e89e`).
-- [ ] Commit de la implementación del rediseño, después de la revisión visual.
+- [x] Commit del rediseño inicial (`b67e98b`).
+- [ ] Commit del dashboard Admin V1.

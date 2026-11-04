@@ -17,11 +17,196 @@ DASHBOARD DE INICIO - FER-CONS
   }
 }
 
+/* Controles del dashboard */
+.dashboard-controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+}
+
+.control-grupo {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.control-etiqueta {
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.control-select {
+  min-width: 12rem;
+  border: 1px solid rgba(15, 42, 48, 0.15);
+  border-radius: 9999px;
+  background-color: #ffffff;
+  padding: 0.55rem 1rem;
+  color: var(--color-oscuro);
+  cursor: pointer;
+}
+
+.control-select:focus-visible {
+  outline: 2px solid var(--color-sidebar);
+}
+
+.segmento {
+  display: inline-flex;
+  gap: 0.15rem;
+  border-radius: 9999px;
+  background-color: #ffffff;
+  padding: 0.25rem;
+  box-shadow: 0 4px 12px rgba(15, 42, 48, 0.06);
+}
+
+.segmento button {
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  padding: 0.45rem 0.9rem;
+  color: rgba(15, 42, 48, 0.65);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.segmento button:hover {
+  background-color: var(--color-fondo);
+}
+
+.segmento button.activo {
+  background-color: var(--color-oscuro);
+  color: #ffffff;
+}
+
+.boton-refrescar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(15, 42, 48, 0.15);
+  border-radius: 9999px;
+  background-color: #ffffff;
+  padding: 0.55rem 1rem;
+  color: var(--color-oscuro);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.boton-refrescar:hover {
+  background-color: var(--color-fondo);
+}
+
+.boton-refrescar:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.dashboard-error-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 0.9rem;
+  background-color: #fef2f2;
+  padding: 0.75rem 1rem;
+  color: var(--color-peligro);
+  font-size: 0.9rem;
+}
+
+.dashboard-error-inline button {
+  border: none;
+  border-radius: 9999px;
+  background-color: var(--color-peligro);
+  padding: 0.35rem 0.9rem;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* Franja de alertas */
+.alertas-barra {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
+}
+
+.alerta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  border-radius: 1rem;
+  padding: 0.75rem 0.9rem;
+  text-decoration: none;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.alerta-item:hover {
+  filter: brightness(0.97);
+  transform: translateY(-1px);
+}
+
+.alerta-texto {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.alerta-texto strong {
+  overflow: hidden;
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alerta-texto small {
+  overflow: hidden;
+  font-size: 0.72rem;
+  opacity: 0.75;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alerta-peligro {
+  background-color: #fee2e2;
+  color: var(--color-peligro);
+}
+
+.alerta-aviso {
+  background-color: #fef3c7;
+  color: var(--color-aviso);
+}
+
+.alerta-info {
+  background-color: var(--color-tarjeta);
+  color: var(--color-sidebar);
+}
+
 /* KPIs */
 .dashboard-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .kpi-tarjeta {
@@ -61,15 +246,50 @@ DASHBOARD DE INICIO - FER-CONS
 .kpi-valor {
   margin: 0.15rem 0 0;
   color: var(--color-oscuro);
-  font-size: 1.65rem;
+  font-size: clamp(1.35rem, 2vw, 1.65rem);
   font-weight: 700;
   line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .kpi-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
   margin: 0.25rem 0 0;
   color: rgba(15, 42, 48, 0.6);
   font-size: 0.85rem;
+}
+
+.kpi-comparacion {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.kpi-comparacion small {
+  color: rgba(15, 42, 48, 0.5);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.kpi-comparacion-positiva {
+  color: #047857;
+}
+
+.kpi-comparacion-negativa {
+  color: var(--color-peligro);
+}
+
+.kpi-comparacion-neutra {
+  color: rgba(15, 42, 48, 0.55);
+}
+
+.kpi-alerta-texto {
+  color: var(--color-aviso);
+  font-weight: 600;
 }
 
 .kpi-aviso {
@@ -94,6 +314,7 @@ DASHBOARD DE INICIO - FER-CONS
 .dashboard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  align-items: start;
   gap: 1.5rem;
 }
 
@@ -190,6 +411,16 @@ DASHBOARD DE INICIO - FER-CONS
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0 0.25rem;
+}
+
+.grafico-barras-mes {
+  justify-content: flex-start;
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+}
+
+.grafico-barras-mes .grafico-columna {
+  flex: 0 0 2.2rem;
 }
 
 .grafico-columna {
@@ -304,6 +535,113 @@ DASHBOARD DE INICIO - FER-CONS
   display: block;
   color: var(--color-oscuro);
   font-weight: 700;
+}
+
+/* Cajas abiertas */
+.caja-lista,
+.compra-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.caja-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 0.9rem;
+  background-color: var(--color-fondo);
+  padding: 0.75rem 0.9rem;
+}
+
+.caja-item-info,
+.caja-item-horario,
+.caja-item-ventas {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.caja-item-info strong {
+  overflow: hidden;
+  color: var(--color-oscuro);
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caja-item small {
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.72rem;
+}
+
+.caja-item-horario {
+  text-align: right;
+}
+
+.caja-item-horario span {
+  color: var(--color-oscuro);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.caja-item-ventas {
+  min-width: 5.5rem;
+  text-align: right;
+}
+
+.caja-item-ventas strong {
+  color: var(--color-oscuro);
+  font-size: 0.9rem;
+}
+
+/* Compras por recibir */
+.compra-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 0.9rem;
+  background-color: var(--color-fondo);
+  padding: 0.75rem 0.9rem;
+}
+
+.compra-info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.compra-info strong {
+  overflow: hidden;
+  color: var(--color-oscuro);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compra-info small {
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.75rem;
+}
+
+.compra-monto {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+.compra-monto strong {
+  color: var(--color-oscuro);
+  font-size: 0.9rem;
 }
 
 /* Tabla compacta */
@@ -519,4 +857,39 @@ DASHBOARD DE INICIO - FER-CONS
 
 .boton-reintentar:hover {
   opacity: 0.9;
+}
+
+@media (max-width: 640px) {
+  .dashboard-controles {
+    align-items: stretch;
+  }
+
+  .control-grupo {
+    flex: 1 1 100%;
+  }
+
+  .control-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .boton-refrescar {
+    justify-content: center;
+  }
+
+  .caja-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .caja-item-ventas {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    text-align: left;
+  }
+
+  .compra-item {
+    flex-wrap: wrap;
+  }
 }

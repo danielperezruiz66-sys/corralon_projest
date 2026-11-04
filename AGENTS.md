@@ -45,7 +45,7 @@ Arquitectura **desacoplada**:
 | Permisos por rol (Admin, Gerente, Cajero, Vendedor, Enc. depósito) | ✅ Aplicados por viewset y acción |
 | Auto-cancelación de ventas | ✅ Umbral 30 min · barrido cada 10 min (tarea de Windows registrada) |
 | Seed con libro de movimientos | ✅ Ventas y compras generan `MovimientoStock` e histórico coherente |
-| Tests | ✅ 53 tests (`manage.py test app`) |
+| Tests | ✅ 57 tests (`manage.py test app`) |
 | Facturación (ARCA) | ⛔ Bloqueada: sin CUIT, certificado ni punto de venta |
 | Frontend — base | ✅ Login JWT (usuario o legajo), perfil y dashboard real |
 | Frontend — rediseño visual (referencia `Fer-Cons-feature-api-rest-auth`) | ✅ **Fase 0–2 + login y dashboard** — Tailwind 4, router, sidebar, menú por roles y `/api/dashboard/`; el resto de los módulos muestra pantalla provisional |
@@ -277,7 +277,7 @@ Todo cuelga de `/api/` (`config/urls.py` → `app/urls.py`).
 | Permisos | `PermisoPorRol`: lectura para autenticados, escritura según el rol |
 | Errores de negocio | `app.exceptions.corralon_exception_handler` — `StockInsuficiente`/`ValueError` → `400` con `codigo` |
 | Perfil | `GET /api/perfil/` — usuario, empleado, roles y códigos activos |
-| Dashboard | `GET /api/dashboard/` — KPIs de ventas, compras, stock, caja y equipo + serie de 7 días |
+| Dashboard | `GET /api/dashboard/?periodo=hoy\|7d\|mes&sucursal=<id>` — KPIs, comparaciones, alertas, serie de ventas, cajas abiertas, compras por recibir y stock crítico |
 | Paginación | `PageNumberPagination`, `PAGE_SIZE = 20` |
 | Filtros | `DjangoFilterBackend` + `SearchFilter` + `OrderingFilter` |
 | Routers | `DefaultRouter` en `app/urls.py` — 34 viewsets + `perfil` y `dashboard` |
@@ -426,8 +426,10 @@ frontend/src/
   limpia la sesión.
 - Vite hace proxy de `/api` a `http://localhost:8000` (`vite.config.js`). Para
   apuntar a otro backend se usa `VITE_API_URL`.
-- El dashboard consume `GET /api/dashboard/` y muestra KPIs, serie de 7 días,
-  últimas ventas, stock crítico y accesos rápidos, con estados de carga y error.
+- El dashboard Admin consume `GET /api/dashboard/` con filtros de sucursal y
+  período (Hoy por defecto). Muestra franja de alertas, seis KPIs, evolución de
+  ventas, cajas abiertas, últimas ventas, stock crítico, compras por recibir y
+  accesos rápidos, con estados de carga, error y actualización manual.
 - Facturación se muestra con un cartel de **mantenimiento** hasta habilitar ARCA.
 - Verificación: `npm run lint` (0 warnings) y `npm run build`.
 
@@ -482,7 +484,7 @@ cd backend
 python manage.py check                            # 0 issues
 python manage.py makemigrations --check --dry-run # "No changes detected" si no se tocaron modelos
 python manage.py migrate                          # aplicar migraciones pendientes
-python manage.py test app                         # 53 tests
+python manage.py test app                         # 57 tests
 
 cd ../frontend
 npm run lint                                      # 0 warnings
