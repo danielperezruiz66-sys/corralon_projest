@@ -445,23 +445,114 @@ COMERCIAL - VENTAS Y COMPRAS
   outline: 2px solid var(--color-sidebar);
 }
 
-.comercial-linea-alta {
+.filtros-ayuda {
+  margin: -0.5rem 0 0;
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+/* Selector de productos */
+.selector-productos {
+  margin-bottom: 0.75rem;
+}
+
+.selector-filtros {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) 0.7fr 0.9fr auto;
-  align-items: end;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 0.6rem;
   border-radius: 1rem;
   background-color: var(--color-fondo);
   padding: 0.75rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.6rem;
 }
 
-.boton-agregar-linea {
-  height: 2.45rem;
+.selector-lista {
+  max-height: 14rem;
+  overflow: auto;
+  border: 1px solid rgba(15, 42, 48, 0.12);
+  border-radius: 0.9rem;
+}
+
+.tabla-productos {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.tabla-productos th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: #ffffff;
+  padding: 0.5rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.15);
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tabla-productos td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.08);
+  color: var(--color-oscuro);
+  vertical-align: middle;
+}
+
+.tabla-productos tr:last-child td {
+  border-bottom: none;
+}
+
+.tabla-productos td small {
+  display: block;
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.7rem;
+}
+
+.tabla-productos .numero {
+  text-align: right;
+}
+
+.boton-agregar-producto {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
+  border: none;
+  border-radius: 0.55rem;
+  background-color: var(--color-sidebar);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.boton-agregar-producto:hover {
+  background-color: var(--color-login);
+}
+
+.stock-negativo {
+  color: var(--color-peligro) !important;
+  font-weight: 700;
 }
 
 .tabla-lineas {
   min-width: 0;
+}
+
+.input-tabla {
+  width: 5.5rem;
+  border: 1px solid rgba(15, 42, 48, 0.15);
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.4rem;
+  color: var(--color-oscuro);
+  text-align: right;
+  box-sizing: border-box;
+}
+
+.input-tabla:focus-visible {
+  outline: 2px solid var(--color-sidebar);
 }
 
 .boton-quitar-linea {
@@ -540,18 +631,6 @@ COMERCIAL - VENTAS Y COMPRAS
 }
 
 @media (max-width: 900px) {
-  .comercial-linea-alta {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .campo-producto {
-    grid-column: 1 / -1;
-  }
-
-  .boton-agregar-linea {
-    grid-column: 1 / -1;
-  }
-
   .detalle-cabecera {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -586,8 +665,12 @@ COMERCIAL - VENTAS Y COMPRAS
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .comercial-linea-alta {
+  .selector-filtros {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .input-tabla {
+    width: 4.5rem;
   }
 
   .comercial-paginacion {

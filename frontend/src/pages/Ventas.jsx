@@ -25,12 +25,32 @@ const PAGINA_VACIA = {
 }
 
 const ESTADOS = [
-  { id: '', etiqueta: 'Todas' },
-  { id: 'PE', etiqueta: 'Pendientes' },
-  { id: 'CO', etiqueta: 'Confirmadas' },
-  { id: 'PA', etiqueta: 'Pagadas' },
-  { id: 'PC', etiqueta: 'Parciales' },
-  { id: 'AN', etiqueta: 'Anuladas' },
+  { id: '', etiqueta: 'Todas', ayuda: 'Todas las ventas.' },
+  {
+    id: 'PE',
+    etiqueta: 'Pendientes',
+    ayuda: 'Venta creada, con stock descontado, sin confirmar. Vence a los 30 minutos.',
+  },
+  {
+    id: 'CO',
+    etiqueta: 'Confirmadas',
+    ayuda: 'Venta confirmada, con stock comprometido, pero sin pago total registrado.',
+  },
+  {
+    id: 'PA',
+    etiqueta: 'Pagadas',
+    ayuda: 'Venta con pagos que cubren el total.',
+  },
+  {
+    id: 'PC',
+    etiqueta: 'Parciales',
+    ayuda: 'Venta con pagos parciales; queda saldo pendiente.',
+  },
+  {
+    id: 'AN',
+    etiqueta: 'Anuladas',
+    ayuda: 'Venta cancelada; el stock fue restaurado.',
+  },
 ]
 
 function nombreCliente(venta) {
@@ -227,7 +247,7 @@ export default function Ventas() {
               type="search"
               value={texto}
               onChange={(evento) => setTexto(evento.target.value)}
-              placeholder="Buscar por cliente"
+              placeholder="Buscar por N.º de venta, cliente o DNI"
               aria-label="Buscar ventas"
             />
             <button type="submit" className="boton-comercial-secundario">
@@ -271,11 +291,18 @@ export default function Ventas() {
               type="button"
               className={estado === opcion.id ? 'activo' : ''}
               onClick={() => cambiarEstado(opcion.id)}
+              title={opcion.ayuda}
             >
               {opcion.etiqueta}
             </button>
           ))}
         </section>
+
+        <p className="filtros-ayuda">
+          Pendiente: sin confirmar · Confirmada: confirmada sin pago total ·
+          Parcial: pago parcial · Pagada: pago total · Anulada: stock
+          restaurado.
+        </p>
 
         {error && <p className="comercial-error">{error}</p>}
 

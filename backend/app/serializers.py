@@ -301,6 +301,11 @@ class DetalleCierreCajaSerializer(serializers.ModelSerializer):
 
 class SeccionCajaSerializer(serializers.ModelSerializer):
     caja_detalle = serializers.StringRelatedField(source='caja', read_only=True)
+    sucursal = serializers.IntegerField(source='caja.sucursal_id', read_only=True)
+    sucursal_detalle = serializers.StringRelatedField(
+        source='caja.sucursal',
+        read_only=True,
+    )
     empleado_detalle = serializers.StringRelatedField(source='empleado', read_only=True)
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
     detalles_cierre = DetalleCierreCajaSerializer(many=True, read_only=True)
@@ -311,6 +316,8 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
             'id',
             'caja',
             'caja_detalle',
+            'sucursal',
+            'sucursal_detalle',
             'empleado',
             'empleado_detalle',
             'fecha_hora_apertura',

@@ -6,6 +6,19 @@ from .base import BaseCorralonTestCase
 
 
 class VentaApiTests(BaseCorralonTestCase):
+    def test_busca_venta_por_id_y_cliente(self):
+        creada = self.crear_venta()
+        venta_id = creada.data['id']
+
+        respuesta = self.client.get('/api/ventas/', {'search': str(venta_id)})
+        self.assertEqual(respuesta.data['count'], 1)
+
+        respuesta = self.client.get('/api/ventas/', {'search': f'#{venta_id}'})
+        self.assertEqual(respuesta.data['count'], 1)
+
+        respuesta = self.client.get('/api/ventas/', {'search': 'Cliente Test'})
+        self.assertEqual(respuesta.data['count'], 1)
+
     def test_crear_venta_descuenta_stock(self):
         respuesta = self.crear_venta()
 

@@ -853,8 +853,23 @@ class VentaViewSet(
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, CAJERO, VENDEDOR)
     filterset_fields = ['seccion_caja', 'cliente', 'estado']
-    search_fields = ['cliente__razon_social', 'cliente__apellido', 'cliente__nombre']
     ordering_fields = ['fecha_venta', 'monto_venta']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        search = self.request.query_params.get('search', '').strip().lstrip('#')
+        if search:
+            filtro = (
+                Q(cliente__razon_social__icontains=search)
+                | Q(cliente__nombre__icontains=search)
+                | Q(cliente__apellido__icontains=search)
+                | Q(cliente__dni__icontains=search)
+            )
+            if search.isdigit():
+                numero = int(search)
+                filtro |= Q(id=numero) | Q(seccion_caja_id=numero)
+            queryset = queryset.filter(filtro)
+        return queryset
 
     def get_permissions(self):
         if self.action == 'cancelar':
@@ -966,11 +981,22 @@ class CompraViewSet(
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, DEPOSITO)
     filterset_fields = ['seccion_caja', 'proveedor', 'estado']
-    search_fields = ['proveedor__razon_social', 'proveedor__nombre', 'proveedor__cuit']
     ordering_fields = ['fecha_compra', 'monto_compra']
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        search = self.request.query_params.get('search', '').strip().lstrip('#')
+        if search:
+            filtro = (
+                Q(proveedor__razon_social__icontains=search)
+                | Q(proveedor__nombre__icontains=search)
+                | Q(proveedor__cuit__icontains=search)
+            )
+            if search.isdigit():
+                numero = int(search)
+                filtro |= Q(id=numero) | Q(seccion_caja_id=numero)
+            queryset = queryset.filter(filtro)
+
         por_recibir = self.request.query_params.get('por_recibir')
         if por_recibir in ('1', 'true', 'True'):
             queryset = queryset.filter(fecha_recepcion__isnull=True)

@@ -3,7 +3,6 @@ import Swal from 'sweetalert2'
 import {
   IconFileText,
   IconLoader2,
-  IconPlus,
   IconShoppingCart,
   IconTrash,
   IconX,
@@ -11,6 +10,7 @@ import {
 import { pedirTodas } from '../../api/catalogos'
 import { pedir } from '../../api/client'
 import { formatearMoneda } from '../../utils/formato'
+import SelectorProductos from './SelectorProductos'
 
 function escaparHtml(valor) {
   return String(valor ?? '').replace(/[&<>"']/g, (caracter) => {
@@ -35,10 +35,8 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
   const [productos, setProductos] = useState([])
   const [seccion, setSeccion] = useState('')
   const [cliente, setCliente] = useState('')
-  const [productoSel, setProductoSel] = useState('')
-  const [cantidad, setCantidad] = useState('1')
-  const [precio, setPrecio] = useState('')
   const [items, setItems] = useState([])
+  const [stocks, setStocks] = useState({})
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -78,82 +76,105 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
     }
   }, [])
 
-  const productoActual = productos.find(
-    (producto) => String(producto.id) === productoSel,
+  const seccionActual = secciones.find(
+    (item) => String(item.id) === seccion,
   )
+  const sucursalActual = seccionActual?.sucursal
   const total = items.reduce(
     (acumulado, item) => acumulado + item.cantidad * item.precio,
     0,
   )
 
-  function elegirProducto(evento) {
-    const id = evento.target.value
-    setProductoSel(id)
-    const producto = productos.find((item) => String(item.id) === id)
-    setPrecio(producto?.precio_unidad ?? '')
-  }
-
-  function agregarItem() {
-    const producto = productos.find(
-      (item) => String(item.id) === productoSel,
-    )
-    const cantidadNumero = Number(cantidad)
-    const precioNumero = Number(precio)
-
-    if (!producto) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Falta el producto',
-        text: 'Seleccioná un producto para agregarlo al detalle.',
-        confirmButtonColor: '#4a9da8',
-      })
-      return
-    }
-    if (!Number.isFinite(cantidadNumero) || cantidadNumero <= 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Cantidad inválida',
-        text: 'La cantidad debe ser mayor que cero.',
-        confirmButtonColor: '#4a9da8',
-      })
-      return
-    }
-    if (!Number.isFinite(precioNumero) || precioNumero < 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Precio inválido',
-        text: 'El precio no puede ser negativo.',
-        confirmButtonColor: '#4a9da8',
-      })
-      return
+  useEffect(() => {
+    if (!sucursalActual) {
+      return undefined
     }
 
+    let vigente = true
+    pedirTodas(`/stocks/?sucursal=${sucursalActual}`)
+      .then((datos) => {
+        if (!vigente) {
+          return
+        }
+        const mapa = {}
+        datos.forEach((stock) => {
+          mapa[stock.producto] = stock
+        })
+        setStocks(mapa)
+      })
+      .catch(() => {
+        if (vigente) {
+          setStocks({})
+        }
+      })
+
+    return () => {
+      vigente = false
+    }
+  }, [sucursalActual])
+
+  function agregarProducto(producto) {
     setItems((previos) => {
       const indice = previos.findIndex(
-        (item) =>
-          item.producto.id === producto.id && item.precio === precioNumero,
+        (item) => item.producto.id === producto.id,
       )
       if (indice >= 0) {
         const copia = [...previos]
         copia[indice] = {
           ...copia[indice],
-          cantidad: copia[indice].cantidad + cantidadNumero,
+          cantidad: copia[indice].cantidad + 1,
         }
         return copia
       }
       return [
         ...previos,
-        { producto, cantidad: cantidadNumero, precio: precioNumero },
+        {
+          producto,
+          cantidad: 1,
+          precio: Number(producto.precio_unidad),
+        },
       ]
     })
+  }
 
-    setProductoSel('')
-    setCantidad('1')
-    setPrecio('')
+  function actualizarItem(indice, campo, valor) {
+    const numero = valor === '' ? 0 : Number(valor)
+    setItems((previos) =>
+      previos.map((item, posicion) =>
+        posicion === indice
+          ? { ...item, [campo]: Number.isFinite(numero) ? numero : 0 }
+          : item,
+      ),
+    )
   }
 
   function quitarItem(indice) {
     setItems((previos) => previos.filter((_, posicion) => posicion !== indice))
+  }
+
+  function validarItems() {
+    if (items.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Detalle vacío',
+        text: 'Agregá al menos un producto.',
+        confirmButtonColor: '#4a9da8',
+      })
+      return false
+    }
+    const invalido = items.some(
+      (item) => !(item.cantidad > 0) || !(item.precio >= 0),
+    )
+    if (invalido) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Valores inválidos',
+        text: 'Revisá las cantidades y los precios del detalle.',
+        confirmButtonColor: '#4a9da8',
+      })
+      return false
+    }
+    return true
   }
 
   async function registrarVenta() {
@@ -166,13 +187,7 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
       })
       return
     }
-    if (items.length === 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Venta vacía',
-        text: 'Agregá al menos un producto.',
-        confirmButtonColor: '#4a9da8',
-      })
+    if (!validarItems()) {
       return
     }
 
@@ -212,13 +227,7 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
   }
 
   function generarPresupuesto() {
-    if (items.length === 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Presupuesto vacío',
-        text: 'Agregá al menos un producto.',
-        confirmButtonColor: '#4a9da8',
-      })
+    if (!validarItems()) {
       return
     }
 
@@ -388,53 +397,12 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
               </label>
             </div>
 
-            <div className="comercial-linea-alta">
-              <label className="campo-comercial campo-producto">
-                <span>Producto</span>
-                <select value={productoSel} onChange={elegirProducto}>
-                  <option value="">Seleccioná un producto</option>
-                  {productos.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.codigo} · {item.nombre} ({item.unidad_detalle})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="campo-comercial campo-cantidad">
-                <span>Cantidad</span>
-                <input
-                  type="number"
-                  min="0.001"
-                  step="0.001"
-                  value={cantidad}
-                  onChange={(evento) => setCantidad(evento.target.value)}
-                />
-              </label>
-
-              <label className="campo-comercial campo-precio">
-                <span>Precio unitario</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={precio}
-                  onChange={(evento) => setPrecio(evento.target.value)}
-                  placeholder={
-                    productoActual ? productoActual.precio_unidad : '0.00'
-                  }
-                />
-              </label>
-
-              <button
-                type="button"
-                className="boton-comercial-secundario boton-agregar-linea"
-                onClick={agregarItem}
-              >
-                <IconPlus size={18} />
-                Agregar
-              </button>
-            </div>
+            <SelectorProductos
+              productos={productos}
+              stocks={stocks}
+              mostrarStock={Boolean(sucursalActual)}
+              onAgregar={agregarProducto}
+            />
 
             <div className="comercial-tabla-scroll">
               <table className="tabla-comercial tabla-lineas">
@@ -459,10 +427,38 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
                     <tr key={`${item.producto.id}-${indice}`}>
                       <td>
                         <strong>{item.producto.nombre}</strong>
-                        <small>{item.producto.codigo}</small>
+                        <small>
+                          {item.producto.codigo} · {item.producto.unidad_detalle}
+                        </small>
                       </td>
-                      <td className="numero">{item.cantidad}</td>
-                      <td className="numero">{formatearMoneda(item.precio)}</td>
+                      <td className="numero">
+                        <input
+                          type="number"
+                          className="input-tabla"
+                          min="0.001"
+                          step="0.001"
+                          value={item.cantidad}
+                          onChange={(evento) =>
+                            actualizarItem(
+                              indice,
+                              'cantidad',
+                              evento.target.value,
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="numero">
+                        <input
+                          type="number"
+                          className="input-tabla"
+                          min="0"
+                          step="0.01"
+                          value={item.precio}
+                          onChange={(evento) =>
+                            actualizarItem(indice, 'precio', evento.target.value)
+                          }
+                        />
+                      </td>
                       <td className="numero">
                         {formatearMoneda(item.cantidad * item.precio)}
                       </td>

@@ -23,11 +23,27 @@ const PAGINA_VACIA = {
 }
 
 const ESTADOS = [
-  { id: '', etiqueta: 'Todas' },
-  { id: 'PE', etiqueta: 'Pendientes' },
-  { id: 'PA', etiqueta: 'Pagadas' },
-  { id: 'PC', etiqueta: 'Parciales' },
-  { id: 'AN', etiqueta: 'Anuladas' },
+  { id: '', etiqueta: 'Todas', ayuda: 'Todas las compras.' },
+  {
+    id: 'PE',
+    etiqueta: 'Pendientes',
+    ayuda: 'Compra registrada sin pago total.',
+  },
+  {
+    id: 'PA',
+    etiqueta: 'Pagadas',
+    ayuda: 'Compra con pagos que cubren el total.',
+  },
+  {
+    id: 'PC',
+    etiqueta: 'Parciales',
+    ayuda: 'Compra con pagos parciales; queda saldo pendiente.',
+  },
+  {
+    id: 'AN',
+    etiqueta: 'Anuladas',
+    ayuda: 'Compra anulada.',
+  },
 ]
 
 function claseEstado(estado) {
@@ -183,7 +199,7 @@ export default function Compras() {
               type="search"
               value={texto}
               onChange={(evento) => setTexto(evento.target.value)}
-              placeholder="Buscar por proveedor o CUIT"
+              placeholder="Buscar por N.º de compra, proveedor o CUIT"
               aria-label="Buscar compras"
             />
             <button type="submit" className="boton-comercial-secundario">
@@ -219,6 +235,7 @@ export default function Compras() {
               type="button"
               className={estado === opcion.id ? 'activo' : ''}
               onClick={() => cambiarEstado(opcion.id)}
+              title={opcion.ayuda}
             >
               {opcion.etiqueta}
             </button>
@@ -227,10 +244,17 @@ export default function Compras() {
             type="button"
             className={`filtro-destacado ${porRecibir ? 'activo' : ''}`}
             onClick={alternarPorRecibir}
+            title="Compras registradas que todavía no repusieron stock."
           >
             Por recibir
           </button>
         </section>
+
+        <p className="filtros-ayuda">
+          Pendiente: registrada sin pago total · Parcial: pago parcial · Pagada:
+          pago total · Anulada: compra anulada · Recepción: indica si el stock
+          ya ingresó.
+        </p>
 
         {error && <p className="comercial-error">{error}</p>}
 

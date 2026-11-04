@@ -11,17 +11,25 @@
 **Hecho en esta sesión**
 
 - **Ventas**:
-  - listado con búsqueda por cliente, filtros por estado y paginación;
+  - listado con búsqueda por **N.º de venta, cliente, DNI o sección de caja**,
+    filtros por estado y paginación;
+  - leyenda visible con el significado de Pendiente, Confirmada, Parcial,
+    Pagada y Anulada;
   - detalle de la venta con productos y totales;
   - confirmar y anular ventas pendientes;
   - alta de venta con sección de caja, cliente y detalle de productos;
   - **Generar presupuesto**: arma un PDF imprimible con el borrador actual,
     sin guardar la venta ni descontar stock.
 - **Compras**:
-  - listado con búsqueda por proveedor, filtros por estado y “Por recibir”;
+  - listado con búsqueda por **N.º de compra, proveedor, CUIT o sección de
+    caja**, filtros por estado y “Por recibir”;
   - detalle de la compra;
   - alta de compra sin reponer stock;
   - recepción de compra con reposición en el depósito predeterminado.
+- **Selector de productos** (venta y compra):
+  - lista filtrable por código, nombre, categoría, marca o unidad;
+  - muestra precio y stock de la sucursal de la caja;
+  - cantidades y precios editables en el detalle.
 - **Clientes**:
   - búsqueda, listado paginado y alta en modal contra `/api/clientes/`;
   - el acceso rápido del dashboard abre el formulario.
@@ -35,8 +43,10 @@
   - las rutas de módulo ahora validan `puedeVer`, igual que el menú.
 - **Backend**:
   - `ventas.semana` (lunes a hoy) en `/api/dashboard/`;
+  - búsqueda de ventas/compras por ID, cliente/proveedor, DNI/CUIT y sección;
+  - `SeccionCajaSerializer` expone `sucursal` y `sucursal_detalle`;
   - filtro `?por_recibir=1` en `/api/compras/`;
-  - total **58/58 tests** pasando.
+  - total **60/60 tests** pasando.
 - Commits previos: `205e89e`, `b67e98b`, `983bed4`, `908add1`.
 
 **Pendiente inmediato**
@@ -66,6 +76,10 @@
 - Pedidos y Presupuestos como módulos del menú siguen omitidos; Presupuesto es
   un atajo dentro de Ventas.
 - `prop-types`: **no se instala**.
+- El buscador de ventas/compras incluye ID, cliente/proveedor, DNI/CUIT y
+  sección de caja. Se puede escribir `#473` para buscar por número.
+- La grilla de productos reemplaza al `<select>`: se filtra por código, nombre,
+  categoría, marca o unidad y muestra precio y stock de la sucursal.
 
 ## 3. Facturación (ARCA)
 
