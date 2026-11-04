@@ -650,7 +650,9 @@ class Command(BaseCommand):
         for _ in range(cantidad):
             seccion = random.choice(secciones)
             cliente = random.choice(clientes)
-            estado_pago = random.choice(['PAGADA', 'PAGADA', 'PARCIAL', 'PENDIENTE'])
+            estado_pago = random.choice(
+                ['CONFIRMADA', 'CONFIRMADA', 'PARCIAL', 'PENDIENTE']
+            )
             fecha = ahora - timedelta(days=random.randint(0, DIAS_HISTORIAL))
             if estado_pago == 'PENDIENTE':
                 # Las pendientes quedan dentro de la ventana de auto-cancelacion
@@ -706,8 +708,8 @@ class Command(BaseCommand):
                 continue
 
             venta.monto_venta = total
-            if estado_pago == 'PAGADA':
-                venta.estado = Venta.EstadoVenta.PAGADA
+            if estado_pago == 'CONFIRMADA':
+                venta.estado = Venta.EstadoVenta.CONFIRMADA
                 self._pagar(venta, total, metodos, 'venta')
             elif estado_pago == 'PARCIAL':
                 venta.estado = Venta.EstadoVenta.PARCIAL
@@ -716,7 +718,10 @@ class Command(BaseCommand):
                 venta.estado = Venta.EstadoVenta.PENDIENTE
             venta.save()
 
-            if venta.estado in (Venta.EstadoVenta.PAGADA, Venta.EstadoVenta.PARCIAL):
+            if venta.estado in (
+                Venta.EstadoVenta.CONFIRMADA,
+                Venta.EstadoVenta.PARCIAL,
+            ):
                 tipo = 'A' if 'Inscripto' in (cliente.condicion_iva or '') else 'B'
                 Factura.objects.get_or_create(
                     venta=venta,

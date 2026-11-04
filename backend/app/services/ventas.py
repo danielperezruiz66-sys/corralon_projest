@@ -108,9 +108,11 @@ def confirmar_venta(venta):
     pagado = venta.pagos.aggregate(total=Sum('monto_pagado'))['total']
     pagado = pagado if pagado is not None else Decimal('0.00')
     if pagado <= 0:
+        raise ValueError(
+            'Registrá al menos un pago antes de confirmar la venta.'
+        )
+    if pagado >= venta.monto_venta:
         venta.estado = Venta.EstadoVenta.CONFIRMADA
-    elif pagado >= venta.monto_venta:
-        venta.estado = Venta.EstadoVenta.PAGADA
     else:
         venta.estado = Venta.EstadoVenta.PARCIAL
     venta.save(update_fields=['estado'])
@@ -143,6 +145,7 @@ def cancelar_ventas_vencidas(minutos=None):
     ventas = Venta.objects.filter(
         estado=Venta.EstadoVenta.PENDIENTE,
         fecha_venta__lt=limite,
+        pagos__isnull=True,
     )
     canceladas = 0
     for venta in ventas:

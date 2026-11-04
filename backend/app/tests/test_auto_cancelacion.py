@@ -69,7 +69,7 @@ class AutoCancelacionTests(BaseCorralonTestCase):
 
         self.assertEqual(cantidad, 0)
         venta.refresh_from_db()
-        self.assertEqual(venta.estado, Venta.EstadoVenta.PARCIAL)
+        self.assertEqual(venta.estado, Venta.EstadoVenta.PENDIENTE)
 
     @override_settings(VENTAS_MINUTOS_PARA_CONFIRMAR=15)
     def test_respeta_el_umbral_configurado(self):

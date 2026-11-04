@@ -24,11 +24,29 @@ class PagoVentaTests(BaseCorralonTestCase):
 
         parcial = self._pagar(venta_id, '40.00')
         self.assertEqual(parcial.status_code, 201)
-        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'PC')
+        # La venta sigue pendiente hasta que el cajero la confirma.
+        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'PE')
+
+        confirmada = self.client.post(f'/api/ventas/{venta_id}/confirmar/')
+        self.assertEqual(confirmada.status_code, 200)
+        self.assertEqual(confirmada.data['estado'], 'PC')
 
         total = self._pagar(venta_id, '60.00')
         self.assertEqual(total.status_code, 201)
-        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'PA')
+        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'CO')
+
+    def test_pago_total_y_confirmacion(self):
+        venta = self.crear_venta(cantidad='1.000')
+        venta_id = venta.data['id']
+        self.assertEqual(Decimal(venta.data['monto_venta']), Decimal('100.00'))
+
+        total = self._pagar(venta_id, '100.00')
+        self.assertEqual(total.status_code, 201)
+        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'PE')
+
+        confirmada = self.client.post(f'/api/ventas/{venta_id}/confirmar/')
+        self.assertEqual(confirmada.status_code, 200)
+        self.assertEqual(confirmada.data['estado'], 'CO')
 
     def test_no_permite_pagar_de_mas(self):
         venta = self.crear_venta(cantidad='1.000')

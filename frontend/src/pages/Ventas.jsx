@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
+  IconCash,
   IconCheck,
   IconCircleX,
   IconEye,
   IconFileText,
+  IconLoader2,
   IconPlus,
   IconSearch,
   IconShoppingCart,
   IconX,
 } from '@tabler/icons-react'
+import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import FormularioVenta from '../components/comercial/FormularioVenta.jsx'
@@ -29,22 +32,17 @@ const ESTADOS = [
   {
     id: 'PE',
     etiqueta: 'Pendientes',
-    ayuda: 'Venta creada, con stock descontado, sin confirmar. Vence a los 30 minutos.',
+    ayuda: 'Venta creada, con stock descontado, sin pago ni confirmación. Vence a los 30 minutos.',
   },
   {
     id: 'CO',
     etiqueta: 'Confirmadas',
-    ayuda: 'Venta confirmada, con stock comprometido, pero sin pago total registrado.',
-  },
-  {
-    id: 'PA',
-    etiqueta: 'Pagadas',
-    ayuda: 'Venta con pagos que cubren el total.',
+    ayuda: 'Venta confirmada con el pago total registrado.',
   },
   {
     id: 'PC',
     etiqueta: 'Parciales',
-    ayuda: 'Venta con pagos parciales; queda saldo pendiente.',
+    ayuda: 'Venta confirmada con pago parcial; queda saldo pendiente.',
   },
   {
     id: 'AN',
@@ -61,6 +59,17 @@ function claseEstado(estado) {
   return `estado-badge estado-${estado.toLowerCase()}`
 }
 
+function totalPagado(venta) {
+  return (venta.pagos ?? []).reduce(
+    (total, pago) => total + Number(pago.monto_pagado),
+    0,
+  )
+}
+
+function saldoVenta(venta) {
+  return Math.max(0, Number(venta.monto_venta) - totalPagado(venta))
+}
+
 export default function Ventas() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [datos, setDatos] = useState(PAGINA_VACIA)
@@ -72,6 +81,11 @@ export default function Ventas() {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [detalle, setDetalle] = useState(null)
+  const [cobro, setCobro] = useState(null)
+  const [metodos, setMetodos] = useState([])
+  const [metodo, setMetodo] = useState('')
+  const [monto, setMonto] = useState('')
+  const [cobrando, setCobrando] = useState(false)
   const [modalAbierto, setModalAbierto] = useState(
     () =>
       searchParams.has('nueva') || searchParams.has('presupuesto'),
@@ -79,6 +93,28 @@ export default function Ventas() {
   const [modo, setModo] = useState(
     () => (searchParams.get('presupuesto') === '1' ? 'presupuesto' : 'venta'),
   )
+
+  useEffect(() => {
+    let vigente = true
+    pedirTodas('/metodos-pago/?estado=true')
+      .then((datos) => {
+        if (vigente) {
+          setMetodos(datos)
+          if (datos.length > 0) {
+            setMetodo(String(datos[0].id))
+          }
+        }
+      })
+      .catch(() => {
+        if (vigente) {
+          setMetodos([])
+        }
+      })
+
+    return () => {
+      vigente = false
+    }
+  }, [])
 
   useEffect(() => {
     if (searchParams.has('nueva') || searchParams.has('presupuesto')) {
@@ -156,6 +192,89 @@ export default function Ventas() {
     setCargando(true)
     setError('')
     setPagina(nueva)
+  }
+
+  function abrirCobro(venta) {
+    const saldo = saldoVenta(venta)
+    setCobro(venta)
+    setMonto(saldo > 0 ? saldo.toFixed(2) : '0.00')
+    setMetodo(metodos[0] ? String(metodos[0].id) : '')
+    setDetalle(null)
+  }
+
+  async function registrarCobro() {
+    if (!cobro) {
+      return
+    }
+    if (!metodo) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Falta el método de pago',
+        text: 'Seleccioná un método de pago activo.',
+        confirmButtonColor: '#4a9da8',
+      })
+      return
+    }
+
+    const montoNumero = Number(monto)
+    const saldo = saldoVenta(cobro)
+    if (!Number.isFinite(montoNumero) || montoNumero <= 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Monto inválido',
+        text: 'El monto debe ser mayor que cero.',
+        confirmButtonColor: '#4a9da8',
+      })
+      return
+    }
+    if (montoNumero > saldo + 0.001) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Monto excedido',
+        text: `El saldo pendiente es ${formatearMoneda(saldo)}.`,
+        confirmButtonColor: '#4a9da8',
+      })
+      return
+    }
+
+    setCobrando(true)
+    try {
+      await pedir('/metodos-pago-ventas/', {
+        method: 'POST',
+        body: JSON.stringify({
+          venta: cobro.id,
+          metodo_pago: Number(metodo),
+          monto_pagado: montoNumero,
+        }),
+      })
+
+      if (cobro.estado === 'PE') {
+        await pedir(`/ventas/${cobro.id}/confirmar/`, { method: 'POST' })
+      }
+
+      const quedaSaldo = montoNumero < saldo - 0.001
+      Swal.fire({
+        icon: 'success',
+        title: quedaSaldo ? 'Pago parcial registrado' : 'Venta confirmada',
+        text: quedaSaldo
+          ? `Saldo pendiente: ${formatearMoneda(saldo - montoNumero)}`
+          : 'El pago total quedó registrado.',
+        timer: 1800,
+        showConfirmButton: false,
+      })
+      setCobro(null)
+      setRefresco((valor) => valor + 1)
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo registrar el cobro',
+        text: e.message,
+        confirmButtonColor: '#4a9da8',
+      })
+      setRefresco((valor) => valor + 1)
+    } finally {
+      setCobrando(false)
+    }
   }
 
   async function confirmarVenta(venta) {
@@ -299,9 +418,9 @@ export default function Ventas() {
         </section>
 
         <p className="filtros-ayuda">
-          Pendiente: sin confirmar · Confirmada: confirmada sin pago total ·
-          Parcial: pago parcial · Pagada: pago total · Anulada: stock
-          restaurado.
+          Pendiente: sin pago ni confirmación · Parcial: pago parcial y venta
+          confirmada · Confirmada: pago total y venta confirmada · Anulada:
+          stock restaurado.
         </p>
 
         {error && <p className="comercial-error">{error}</p>}
@@ -366,16 +485,33 @@ export default function Ventas() {
                           >
                             <IconEye size={17} />
                           </button>
-                          {venta.estado === 'PE' && (
-                            <>
+                          {(venta.estado === 'PE' || venta.estado === 'PC') &&
+                            saldoVenta(venta) > 0 && (
                               <button
                                 type="button"
                                 className="boton-icono boton-icono-exito"
-                                onClick={() => confirmarVenta(venta)}
-                                title="Confirmar venta"
+                                onClick={() => abrirCobro(venta)}
+                                title={
+                                  venta.estado === 'PE'
+                                    ? 'Cobrar venta'
+                                    : 'Completar pago'
+                                }
                               >
-                                <IconCheck size={17} />
+                                <IconCash size={17} />
                               </button>
+                            )}
+                          {venta.estado === 'PE' && saldoVenta(venta) <= 0 && (
+                            <button
+                              type="button"
+                              className="boton-icono boton-icono-exito"
+                              onClick={() => confirmarVenta(venta)}
+                              title="Confirmar venta"
+                            >
+                              <IconCheck size={17} />
+                            </button>
+                          )}
+                          {venta.estado === 'PE' &&
+                            totalPagado(venta) === 0 && (
                               <button
                                 type="button"
                                 className="boton-icono boton-icono-peligro"
@@ -384,8 +520,7 @@ export default function Ventas() {
                               >
                                 <IconCircleX size={17} />
                               </button>
-                            </>
-                          )}
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -500,6 +635,18 @@ export default function Ventas() {
               <strong>{formatearMoneda(detalle.monto_venta)}</strong>
             </div>
 
+            {detalle.pagos?.length > 0 && (
+              <div className="cobro-pagos">
+                <span>Pagos registrados</span>
+                {detalle.pagos.map((pago) => (
+                  <div key={pago.id}>
+                    <span>{pago.metodo_pago_detalle}</span>
+                    <strong>{formatearMoneda(pago.monto_pagado)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="comercial-modal-acciones">
               <button
                 type="button"
@@ -508,7 +655,7 @@ export default function Ventas() {
               >
                 Cerrar
               </button>
-              {detalle.estado === 'PE' && (
+              {detalle.estado === 'PE' && saldoVenta(detalle) <= 0 && (
                 <button
                   type="button"
                   className="boton-comercial-primario"
@@ -521,6 +668,118 @@ export default function Ventas() {
                   Confirmar venta
                 </button>
               )}
+              {(detalle.estado === 'PE' || detalle.estado === 'PC') &&
+                saldoVenta(detalle) > 0 && (
+                  <button
+                    type="button"
+                    className="boton-comercial-primario"
+                    onClick={() => abrirCobro(detalle)}
+                  >
+                    {detalle.estado === 'PE'
+                      ? 'Cobrar venta'
+                      : 'Completar pago'}
+                  </button>
+                )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cobro && (
+        <div className="comercial-modal-fondo" role="dialog" aria-modal="true">
+          <div className="comercial-modal comercial-modal-angosto">
+            <div className="comercial-modal-cabecera">
+              <h2>
+                <IconCash size={24} />
+                {cobro.estado === 'PE' ? 'Cobrar venta' : 'Completar pago'} #
+                {cobro.id}
+              </h2>
+              <button
+                type="button"
+                className="comercial-modal-cerrar"
+                onClick={() => setCobro(null)}
+                aria-label="Cerrar"
+              >
+                <IconX size={20} />
+              </button>
+            </div>
+
+            <div className="cobro-resumen">
+              <div>
+                <span>Total</span>
+                <strong>{formatearMoneda(cobro.monto_venta)}</strong>
+              </div>
+              <div>
+                <span>Pagado</span>
+                <strong>{formatearMoneda(totalPagado(cobro))}</strong>
+              </div>
+              <div>
+                <span>Saldo</span>
+                <strong>{formatearMoneda(saldoVenta(cobro))}</strong>
+              </div>
+            </div>
+
+            <div className="comercial-grid">
+              <label className="campo-comercial">
+                <span>Método de pago</span>
+                <select
+                  value={metodo}
+                  onChange={(evento) => setMetodo(evento.target.value)}
+                >
+                  {metodos.length === 0 && (
+                    <option value="">No hay métodos activos</option>
+                  )}
+                  {metodos.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.metodo_pago}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="campo-comercial">
+                <span>Monto a cobrar</span>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={monto}
+                  onChange={(evento) => setMonto(evento.target.value)}
+                />
+              </label>
+            </div>
+
+            {metodos.length === 0 && (
+              <p className="comercial-error">
+                No hay métodos de pago activos. Configuralos antes de cobrar.
+              </p>
+            )}
+
+            <div className="comercial-modal-acciones">
+              <button
+                type="button"
+                className="boton-comercial-secundario"
+                onClick={() => setCobro(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="boton-comercial-primario"
+                onClick={registrarCobro}
+                disabled={cobrando || metodos.length === 0}
+              >
+                {cobrando ? (
+                  <>
+                    <IconLoader2 className="icono-girando" size={18} />
+                    Registrando…
+                  </>
+                ) : cobro.estado === 'PE' ? (
+                  'Registrar pago y confirmar'
+                ) : (
+                  'Registrar pago'
+                )}
+              </button>
             </div>
           </div>
         </div>

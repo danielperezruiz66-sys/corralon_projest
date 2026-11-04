@@ -388,6 +388,10 @@ COMERCIAL - VENTAS Y COMPRAS
   background-color: var(--color-tarjeta);
 }
 
+.comercial-modal-angosto {
+  max-width: 34rem;
+}
+
 .comercial-cargando {
   display: flex;
   min-height: 12rem;
@@ -396,6 +400,64 @@ COMERCIAL - VENTAS Y COMPRAS
   justify-content: center;
   gap: 0.5rem;
   color: rgba(15, 42, 48, 0.6);
+}
+
+.cobro-resumen {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  border-radius: 1rem;
+  background-color: var(--color-fondo);
+  padding: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.cobro-resumen div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.cobro-resumen span {
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cobro-resumen strong {
+  color: var(--color-oscuro);
+  font-size: 1.05rem;
+}
+
+.cobro-pagos {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-radius: 1rem;
+  background-color: var(--color-fondo);
+  padding: 0.9rem;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.cobro-pagos > span {
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cobro-pagos div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid rgba(15, 42, 48, 0.08);
+  padding-top: 0.35rem;
+}
+
+.cobro-pagos strong {
+  color: var(--color-oscuro);
 }
 
 .comercial-nota {
@@ -679,6 +741,10 @@ COMERCIAL - VENTAS Y COMPRAS
   }
 
   .detalle-cabecera {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cobro-resumen {
     grid-template-columns: minmax(0, 1fr);
   }
 

@@ -13,11 +13,17 @@
 - **Ventas**:
   - listado con búsqueda por **N.º de venta, cliente, DNI o sección de caja**,
     filtros por estado y paginación;
-  - leyenda visible con el significado de Pendiente, Confirmada, Parcial,
-    Pagada y Anulada;
-  - detalle de la venta con productos y totales;
-  - confirmar y anular ventas pendientes;
-  - alta de venta con sección de caja, cliente y detalle de productos;
+  - **cuatro estados**: Pendiente, Parcial, Confirmada y Anulada; se eliminó
+    Pagada de ventas;
+  - el pago deja la venta pendiente hasta que el cajero la confirma. Al
+    confirmar queda Parcial o Confirmada según el total cobrado;
+  - acción **Cobrar** en la lista y en el detalle: elige método de pago y monto,
+    registra el pago y confirma la venta;
+  - la venta pendiente sin pagos se auto-anula a los 30 minutos; el cajero
+    también puede anularla manualmente;
+  - detalle de la venta con productos, totales y pagos registrados;
+  - alta de venta con sección de caja, cliente y detalle de productos; el botón
+    dice **Crear venta**;
   - **Generar presupuesto**: arma un PDF imprimible con el borrador actual,
     sin guardar la venta ni descontar stock.
 - **Compras**:
@@ -42,16 +48,22 @@
   - se eliminó el “Perfil” duplicado del pie del sidebar (ya está en Sistema);
   - las rutas de módulo ahora validan `puedeVer`, igual que el menú.
 - **Backend**:
+  - se eliminó `PAGADA` de `Venta.EstadoVenta`; migración `0008` convierte las
+    ventas históricas `PA` a `CO`;
+  - el pago de una venta no cambia su estado: queda `PENDIENTE` hasta que se
+    llama a `confirmar`; la confirmación exige al menos un pago;
+  - la auto-cancelación ignora ventas pendientes que ya tienen pagos;
   - `ventas.semana` (lunes a hoy) en `/api/dashboard/`;
   - búsqueda de ventas/compras por ID, cliente/proveedor, DNI/CUIT y sección;
   - `SeccionCajaSerializer` expone `sucursal` y `sucursal_detalle`;
   - filtro `?por_recibir=1` en `/api/compras/`;
-  - total **60/60 tests** pasando.
+  - total **61/61 tests** pasando.
 - Commits previos: `205e89e`, `b67e98b`, `983bed4`, `908add1`.
 
 **Pendiente inmediato**
 
-- [ ] Probar en navegador el flujo completo de venta: crear, confirmar y anular.
+- [ ] Probar en navegador el flujo completo de venta: crear, cobrar parcial,
+      completar pago, confirmar y anular.
 - [ ] Probar el PDF de presupuesto con una venta de varios productos.
 - [ ] Probar el flujo completo de compra: crear, recibir y verificar stock.
 - [ ] Desarrollar **Caja** (apertura, cierre, auditoría y pagos).
@@ -80,6 +92,15 @@
   sección de caja. Se puede escribir `#473` para buscar por número.
 - La grilla de productos reemplaza al `<select>`: se filtra por código, nombre,
   categoría, marca o unidad y muestra precio y stock de la sucursal.
+- **Ventas queda con 4 estados**:
+  - Pendiente: creada, stock descontado, sin pago ni confirmación.
+  - Parcial: pago parcial y venta confirmada, con saldo.
+  - Confirmada: pago total y venta confirmada.
+  - Anulada: cancelada y stock restaurado.
+- El pago no cambia el estado por sí solo: la venta sigue Pendiente hasta que
+  el cajero confirma. La confirmación exige al menos un pago.
+- Compras conserva sus estados actuales (incluido Pagada) hasta que se trabaje
+  ese módulo.
 
 ## 3. Facturación (ARCA)
 

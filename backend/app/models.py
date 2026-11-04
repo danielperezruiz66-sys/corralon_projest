@@ -746,7 +746,6 @@ class Venta(models.Model):
     class EstadoVenta(models.TextChoices):
         PENDIENTE = 'PE', 'Pendiente'
         CONFIRMADA = 'CO', 'Confirmada'
-        PAGADA = 'PA', 'Pagada'
         PARCIAL = 'PC', 'Parcial'
         ANULADA = 'AN', 'Anulada'
 

@@ -45,7 +45,7 @@ Arquitectura **desacoplada**:
 | Permisos por rol (Admin, Gerente, Cajero, Vendedor, Enc. depósito) | ✅ Aplicados por viewset y acción |
 | Auto-cancelación de ventas | ✅ Umbral 30 min · barrido cada 10 min (tarea de Windows registrada) |
 | Seed con libro de movimientos | ✅ Ventas y compras generan `MovimientoStock` e histórico coherente |
-| Tests | ✅ 60 tests (`manage.py test app`) |
+| Tests | ✅ 61 tests (`manage.py test app`) |
 | Facturación (ARCA) | ⛔ Bloqueada: sin CUIT, certificado ni punto de venta |
 | Frontend — base | ✅ Login JWT (usuario o legajo), perfil y dashboard real |
 | Frontend — rediseño visual (referencia `Fer-Cons-feature-api-rest-auth`) | ✅ **Fase 0–2 + login, dashboard Admin, Ventas, Compras y Clientes** — Tailwind 4, router, sidebar, menú por roles, dashboard con auto-refresh, ventas con presupuesto imprimible, compras con recepción y alta de clientes; el resto de los módulos muestra pantalla provisional |
@@ -180,9 +180,12 @@ Decisiones ya aplicadas en `migrations/0003_*`:
 - **`MovimientoStock`** es el libro de movimientos (`VE` venta, `CA` cancelación,
   `CO` compra, `AJ` ajuste). Permite revertir una venta cancelada sobre los
   mismos lotes. Se registra dentro de la transacción del servicio.
-- **`Venta.EstadoVenta`** incluye `CONFIRMADA` (`CO`). Una venta nace
-  `PENDIENTE` y descuenta stock; si no se confirma en **30 minutos**
-  (`VENTAS_MINUTOS_PARA_CONFIRMAR`) se cancela y restaura el stock.
+- **`Venta.EstadoVenta`** tiene cuatro estados: `PENDIENTE` (`PE`),
+  `CONFIRMADA` (`CO`), `PARCIAL` (`PC`) y `ANULADA` (`AN`). Una venta nace
+  `PENDIENTE` y descuenta stock; el cajero registra el pago y la confirma. Si
+  no hay pago ni confirmación en **30 minutos**
+  (`VENTAS_MINUTOS_PARA_CONFIRMAR`) se anula y restaura el stock. Una venta
+  `PENDIENTE` con pagos registrados no se auto-cancela.
 - **`Compra.fecha_recepcion`** marca cuándo se repuso el stock. La compra se
   registra sin tocar stock y solo repone al recibirse.
 - **Cierre de caja con teórico y real**: `SeccionCaja.monto_teorico` lo calcula
@@ -230,7 +233,9 @@ Reglas que respetan:
 - `services/caja.py` calcula el teórico como pagos de ventas − pagos de compras
   + `monto_inicial` del método `es_efectivo`, y guarda el detalle por método.
 - `services/pagos.py` no permite pagar de más, ni sobre un documento anulado,
-  ni con un método inactivo. Recalcula el estado a `PARCIAL` o `PAGADA`.
+  ni con un método inactivo. En ventas, el pago deja la venta `PENDIENTE`
+  hasta que se confirma; al confirmar queda `PARCIAL` o `CONFIRMADA` según el
+  total cubierto. En compras, el estado pasa a `PARCIAL` o `PAGADA`.
 - La auto-cancelación de ventas corre con
   `manage.py cancelar_ventas_vencidas [--minutos 30]`. La tarea
   `Corralon\CancelarVentasVencidas` la ejecuta cada 10 minutos
@@ -304,7 +309,7 @@ necesita los dos endpoints de token y el header `Authorization`.
 | Endpoint | Acción | Servicio |
 |---|---|---|
 | `POST /api/ventas/` | Crear venta pendiente y descontar stock | `ventas.crear_venta` |
-| `POST /api/ventas/{id}/confirmar/` | Confirmar venta | `ventas.confirmar_venta` |
+| `POST /api/ventas/{id}/confirmar/` | Confirmar venta con pagos registrados | `ventas.confirmar_venta` |
 | `POST /api/ventas/{id}/cancelar/` | Anular y restaurar stock (`motivo` opcional) | `ventas.cancelar_venta` |
 | `POST /api/compras/` | Registrar compra (no toca stock) | `compras.registrar_compra` |
 | `POST /api/compras/{id}/recibir/` | Reponer stock en el depósito predeterminado | `compras.recibir_compra` |
@@ -449,8 +454,10 @@ frontend/src/
 - El alta de venta/compra usa `SelectorProductos`: lista filtrable por código,
   nombre, categoría, marca o unidad, con precio y stock de la sucursal de la
   caja. Las cantidades y precios del detalle son editables.
-- Los filtros de estado muestran una leyenda con el significado de Pendiente,
-  Confirmada, Parcial, Pagada y Anulada.
+- Ventas usa cuatro estados: Pendiente (sin pago ni confirmación), Parcial
+  (pago parcial, venta confirmada), Confirmada (pago total, venta confirmada) y
+  Anulada. La acción **Cobrar** registra el pago y confirma la venta.
+- Los filtros de estado muestran una leyenda con el significado de cada estado.
 - El menú filtra por rol y las rutas de módulo también validan `puedeVer`: un
   usuario no puede entrar por URL a un módulo que no ve en el menú.
 - Facturación se muestra con un cartel de **mantenimiento** hasta habilitar ARCA.
@@ -507,7 +514,7 @@ cd backend
 python manage.py check                            # 0 issues
 python manage.py makemigrations --check --dry-run # "No changes detected" si no se tocaron modelos
 python manage.py migrate                          # aplicar migraciones pendientes
-python manage.py test app                         # 60 tests
+python manage.py test app                         # 61 tests
 
 cd ../frontend
 npm run lint                                      # 0 warnings

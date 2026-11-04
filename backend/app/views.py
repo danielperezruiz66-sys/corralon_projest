@@ -273,7 +273,6 @@ def dashboard(request):
     estados_venta_valida = [
         Venta.EstadoVenta.PENDIENTE,
         Venta.EstadoVenta.CONFIRMADA,
-        Venta.EstadoVenta.PAGADA,
         Venta.EstadoVenta.PARCIAL,
     ]
     filtro_ventas = Q(ventas__estado__in=estados_venta_valida)

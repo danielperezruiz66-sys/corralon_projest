@@ -1,10 +1,14 @@
 """Registro de pagos de ventas y compras.
 
-Un pago se registra sobre una venta/compra existente y actualiza su estado:
+Reglas de ventas:
 
-- sin pagos: `PENDIENTE` (o `CONFIRMADA` si la venta ya fue confirmada)
-- con pagos parciales: `PARCIAL`
-- con el total cubierto: `PAGADA`
+- una venta `PENDIENTE` sigue pendiente hasta que el cajero la confirma;
+- al confirmar con pagos parciales queda `PARCIAL`;
+- al confirmar con el total cubierto queda `CONFIRMADA`;
+- una venta ya confirmada puede pasar a `PARCIAL` solo si se revierte un pago
+  (flujo no implementado todavia).
+
+Las compras conservan `PENDIENTE`, `PARCIAL`, `PAGADA` y `ANULADA`.
 
 No se permite pagar de mas, pagar sobre un documento anulado ni usar un
 metodo de pago inactivo.
@@ -49,8 +53,10 @@ def _pagado(objeto):
 
 
 def _estado_venta(venta, pagado):
+    if venta.estado == Venta.EstadoVenta.PENDIENTE:
+        return Venta.EstadoVenta.PENDIENTE
     if pagado >= venta.monto_venta:
-        return Venta.EstadoVenta.PAGADA
+        return Venta.EstadoVenta.CONFIRMADA
     return Venta.EstadoVenta.PARCIAL
 
 

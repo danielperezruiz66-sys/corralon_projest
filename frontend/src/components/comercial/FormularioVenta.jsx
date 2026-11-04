@@ -207,8 +207,8 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
       })
       Swal.fire({
         icon: 'success',
-        title: 'Venta registrada',
-        text: 'Quedó pendiente y descontó stock.',
+        title: 'Venta creada',
+        text: 'Quedó pendiente hasta registrar el pago y confirmarla.',
         timer: 1800,
         showConfirmButton: false,
       })
@@ -355,7 +355,7 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
             <p className="comercial-nota">
               {modo === 'presupuesto'
                 ? 'El presupuesto no se guarda. Se genera un PDF para imprimir o guardar.'
-                : 'La venta queda pendiente, descuenta stock y vence a los 30 minutos si no se confirma.'}
+                : 'La venta nace pendiente, descuenta stock y vence a los 30 minutos si no se registra el pago y se confirma.'}
             </p>
 
             <div className="comercial-grid">
@@ -516,7 +516,7 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
                       Registrando…
                     </>
                   ) : (
-                    'Registrar venta pendiente'
+                    'Crear venta'
                   )}
                 </button>
               )}

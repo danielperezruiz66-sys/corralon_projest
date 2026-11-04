@@ -52,14 +52,14 @@ class VentaApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('no esta abierta', respuesta.data['detail'])
 
-    def test_confirmar_venta_pendiente(self):
+    def test_confirmar_venta_sin_pagos_devuelve_400(self):
         creada = self.crear_venta()
         venta_id = creada.data['id']
 
         respuesta = self.client.post(f'/api/ventas/{venta_id}/confirmar/')
 
-        self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(respuesta.data['estado'], 'CO')
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('pago', respuesta.data['detail'])
 
     def test_cancelar_venta_restaura_stock(self):
         creada = self.crear_venta()
