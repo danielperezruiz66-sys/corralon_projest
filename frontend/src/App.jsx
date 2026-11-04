@@ -4,14 +4,37 @@ import { useAuth } from './context/auth-context'
 import { modulosDelMenu } from './data/menuConfig.js'
 import CambiarContrasena from './pages/CambiarContrasena.jsx'
 import Clientes from './pages/Clientes.jsx'
+import Compras from './pages/Compras.jsx'
 import EnDesarrollo from './pages/EnDesarrollo.jsx'
 import Facturacion from './pages/Facturacion.jsx'
 import Inicio from './pages/Inicio.jsx'
 import Login from './pages/Login.jsx'
+import Ventas from './pages/Ventas.jsx'
 
 function RutaProtegida() {
   const { user } = useAuth()
   return user ? <MenuDesplegable /> : <Navigate to="/login" replace />
+}
+
+function ModuloProtegido({ modulo, children }) {
+  const { puedeVer } = useAuth()
+  return puedeVer(modulo) ? children : <Navigate to="/" replace />
+}
+
+function contenidoModulo(modulo) {
+  if (modulo.mantenimiento) {
+    return <Facturacion />
+  }
+  if (modulo.path === '/clientes') {
+    return <Clientes />
+  }
+  if (modulo.path === '/ventas') {
+    return <Ventas />
+  }
+  if (modulo.path === '/compras') {
+    return <Compras />
+  }
+  return <EnDesarrollo titulo={modulo.name} detalle={modulo.detalle} />
 }
 
 export default function App() {
@@ -28,13 +51,9 @@ export default function App() {
         key={modulo.path}
         path={modulo.path.replace(/^\//, '')}
         element={
-          modulo.mantenimiento ? (
-            <Facturacion />
-          ) : modulo.path === '/clientes' ? (
-            <Clientes />
-          ) : (
-            <EnDesarrollo titulo={modulo.name} detalle={modulo.detalle} />
-          )
+          <ModuloProtegido modulo={modulo}>
+            {contenidoModulo(modulo)}
+          </ModuloProtegido>
         }
       />
     ))

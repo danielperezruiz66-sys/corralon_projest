@@ -969,6 +969,13 @@ class CompraViewSet(
     search_fields = ['proveedor__razon_social', 'proveedor__nombre', 'proveedor__cuit']
     ordering_fields = ['fecha_compra', 'monto_compra']
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        por_recibir = self.request.query_params.get('por_recibir')
+        if por_recibir in ('1', 'true', 'True'):
+            queryset = queryset.filter(fecha_recepcion__isnull=True)
+        return queryset
+
     def get_serializer_class(self):
         if self.action == 'create':
             return serializers.CompraCreateSerializer

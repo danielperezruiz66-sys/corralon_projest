@@ -45,10 +45,10 @@ Arquitectura **desacoplada**:
 | Permisos por rol (Admin, Gerente, Cajero, Vendedor, Enc. depósito) | ✅ Aplicados por viewset y acción |
 | Auto-cancelación de ventas | ✅ Umbral 30 min · barrido cada 10 min (tarea de Windows registrada) |
 | Seed con libro de movimientos | ✅ Ventas y compras generan `MovimientoStock` e histórico coherente |
-| Tests | ✅ 57 tests (`manage.py test app`) |
+| Tests | ✅ 58 tests (`manage.py test app`) |
 | Facturación (ARCA) | ⛔ Bloqueada: sin CUIT, certificado ni punto de venta |
 | Frontend — base | ✅ Login JWT (usuario o legajo), perfil y dashboard real |
-| Frontend — rediseño visual (referencia `Fer-Cons-feature-api-rest-auth`) | ✅ **Fase 0–2 + login, dashboard Admin y Clientes** — Tailwind 4, router, sidebar, menú por roles, dashboard con auto-refresh y alta de clientes; el resto de los módulos muestra pantalla provisional |
+| Frontend — rediseño visual (referencia `Fer-Cons-feature-api-rest-auth`) | ✅ **Fase 0–2 + login, dashboard Admin, Ventas, Compras y Clientes** — Tailwind 4, router, sidebar, menú por roles, dashboard con auto-refresh, ventas con presupuesto imprimible, compras con recepción y alta de clientes; el resto de los módulos muestra pantalla provisional |
 | Frontend — módulos de negocio | ⏳ Pendientes de conectar (ventas, compras, caja, productos, empleados, proveedores, perfil, actividad) |
 
 **Lo que sigue está en `DIA_SIGUIENTE.md`.**
@@ -405,11 +405,14 @@ frontend/src/
 ├── components/common/        # InputField, InputPassword, ButtonSubmit
 ├── pages/Login.jsx
 ├── pages/Inicio.jsx          # dashboard contra /api/dashboard/
+├── pages/Ventas.jsx          # listado, confirmación, anulación y presupuesto
+├── pages/Compras.jsx         # listado, registro y recepción
 ├── pages/Clientes.jsx        # alta, búsqueda y listado de clientes
+├── components/comercial/     # FormularioVenta, FormularioCompra
 ├── pages/EnDesarrollo.jsx    # provisional para módulos sin conectar
 ├── pages/Facturacion.jsx     # mantenimiento ARCA
 ├── pages/CambiarContrasena.jsx
-├── styles/                   # Login, MenuDesplegable, Encabezado, Inicio, Clientes, Placeholder
+├── styles/                   # Login, MenuDesplegable, Encabezado, Inicio, Clientes, Comercial, Placeholder
 ├── utils/formato.js
 ├── App.jsx  index.css  main.jsx
 ```
@@ -436,6 +439,13 @@ frontend/src/
 - La sección Clientes permite buscar, listar y dar de alta clientes contra
   `/api/clientes/`; el acceso rápido del dashboard abre el formulario con
   `?nuevo=1`.
+- Ventas: listado con filtros por estado y búsqueda por cliente, confirmación,
+  anulación y alta con detalle de productos. El botón **Generar presupuesto**
+  arma un PDF imprimible desde el borrador, sin guardar la venta.
+- Compras: listado con filtro “Por recibir”, alta de compra sin mover stock y
+  recepción que repone en el depósito predeterminado.
+- El menú filtra por rol y las rutas de módulo también validan `puedeVer`: un
+  usuario no puede entrar por URL a un módulo que no ve en el menú.
 - Facturación se muestra con un cartel de **mantenimiento** hasta habilitar ARCA.
 - Verificación: `npm run lint` (0 warnings) y `npm run build`.
 
@@ -490,7 +500,7 @@ cd backend
 python manage.py check                            # 0 issues
 python manage.py makemigrations --check --dry-run # "No changes detected" si no se tocaron modelos
 python manage.py migrate                          # aplicar migraciones pendientes
-python manage.py test app                         # 57 tests
+python manage.py test app                         # 58 tests
 
 cd ../frontend
 npm run lint                                      # 0 warnings

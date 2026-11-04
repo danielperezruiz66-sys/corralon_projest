@@ -1,9 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import {
-  IconKey,
-  IconLogout,
-  IconUserCircle,
-} from '@tabler/icons-react'
+import { IconKey, IconLogout } from '@tabler/icons-react'
 import { useAuth } from '../../context/auth-context'
 import { iniciales } from '../../utils/formato'
 
@@ -21,15 +17,6 @@ export default function SidebarFooter({ abierto, onLogoutClick }) {
           </span>
         )}
       </div>
-
-      <NavLink
-        to="/perfil"
-        className="item-base-sidebar item-pie-sidebar"
-        title="Perfil"
-      >
-        <IconUserCircle size={abierto ? 22 : 24} />
-        {abierto && <span>Perfil</span>}
-      </NavLink>
 
       <NavLink
         to="/cambiar-contrasena"

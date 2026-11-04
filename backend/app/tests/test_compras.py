@@ -42,6 +42,16 @@ class CompraApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('ya fue recibida', respuesta.data['detail'])
 
+    def test_filtra_compras_por_recibir(self):
+        creada = self.crear_compra()
+
+        respuesta = self.client.get('/api/compras/', {'por_recibir': '1'})
+        self.assertEqual(respuesta.data['count'], 1)
+
+        self.client.post(f"/api/compras/{creada.data['id']}/recibir/")
+        respuesta = self.client.get('/api/compras/', {'por_recibir': '1'})
+        self.assertEqual(respuesta.data['count'], 0)
+
     def test_proveedor_inactivo_devuelve_400(self):
         self.proveedor.estado_prov = False
         self.proveedor.save(update_fields=['estado_prov'])
