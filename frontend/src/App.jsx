@@ -3,6 +3,7 @@ import MenuDesplegable from './components/MenuDesplegable.jsx'
 import { useAuth } from './context/auth-context'
 import { modulosDelMenu } from './data/menuConfig.js'
 import CambiarContrasena from './pages/CambiarContrasena.jsx'
+import Clientes from './pages/Clientes.jsx'
 import EnDesarrollo from './pages/EnDesarrollo.jsx'
 import Facturacion from './pages/Facturacion.jsx'
 import Inicio from './pages/Inicio.jsx'
@@ -29,6 +30,8 @@ export default function App() {
         element={
           modulo.mantenimiento ? (
             <Facturacion />
+          ) : modulo.path === '/clientes' ? (
+            <Clientes />
           ) : (
             <EnDesarrollo titulo={modulo.name} detalle={modulo.detalle} />
           )

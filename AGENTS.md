@@ -48,7 +48,7 @@ Arquitectura **desacoplada**:
 | Tests | ✅ 57 tests (`manage.py test app`) |
 | Facturación (ARCA) | ⛔ Bloqueada: sin CUIT, certificado ni punto de venta |
 | Frontend — base | ✅ Login JWT (usuario o legajo), perfil y dashboard real |
-| Frontend — rediseño visual (referencia `Fer-Cons-feature-api-rest-auth`) | ✅ **Fase 0–2 + login y dashboard** — Tailwind 4, router, sidebar, menú por roles y `/api/dashboard/`; el resto de los módulos muestra pantalla provisional |
+| Frontend — rediseño visual (referencia `Fer-Cons-feature-api-rest-auth`) | ✅ **Fase 0–2 + login, dashboard Admin y Clientes** — Tailwind 4, router, sidebar, menú por roles, dashboard con auto-refresh y alta de clientes; el resto de los módulos muestra pantalla provisional |
 | Frontend — módulos de negocio | ⏳ Pendientes de conectar (ventas, compras, caja, productos, empleados, proveedores, perfil, actividad) |
 
 **Lo que sigue está en `DIA_SIGUIENTE.md`.**
@@ -277,7 +277,7 @@ Todo cuelga de `/api/` (`config/urls.py` → `app/urls.py`).
 | Permisos | `PermisoPorRol`: lectura para autenticados, escritura según el rol |
 | Errores de negocio | `app.exceptions.corralon_exception_handler` — `StockInsuficiente`/`ValueError` → `400` con `codigo` |
 | Perfil | `GET /api/perfil/` — usuario, empleado, roles y códigos activos |
-| Dashboard | `GET /api/dashboard/?periodo=hoy\|7d\|mes&sucursal=<id>` — KPIs, comparaciones, alertas, serie de ventas, cajas abiertas, compras por recibir y stock crítico |
+| Dashboard | `GET /api/dashboard/?periodo=hoy\|7d\|mes&sucursal=<id>` — KPIs de hoy y semana, comparaciones, alertas, serie de 7 días, cajas abiertas con ID de sección, compras por recibir y stock crítico |
 | Paginación | `PageNumberPagination`, `PAGE_SIZE = 20` |
 | Filtros | `DjangoFilterBackend` + `SearchFilter` + `OrderingFilter` |
 | Routers | `DefaultRouter` en `app/urls.py` — 34 viewsets + `perfil` y `dashboard` |
@@ -405,10 +405,11 @@ frontend/src/
 ├── components/common/        # InputField, InputPassword, ButtonSubmit
 ├── pages/Login.jsx
 ├── pages/Inicio.jsx          # dashboard contra /api/dashboard/
+├── pages/Clientes.jsx        # alta, búsqueda y listado de clientes
 ├── pages/EnDesarrollo.jsx    # provisional para módulos sin conectar
 ├── pages/Facturacion.jsx     # mantenimiento ARCA
 ├── pages/CambiarContrasena.jsx
-├── styles/                   # Login, MenuDesplegable, Encabezado, Inicio, Placeholder
+├── styles/                   # Login, MenuDesplegable, Encabezado, Inicio, Clientes, Placeholder
 ├── utils/formato.js
 ├── App.jsx  index.css  main.jsx
 ```
@@ -426,10 +427,15 @@ frontend/src/
   limpia la sesión.
 - Vite hace proxy de `/api` a `http://localhost:8000` (`vite.config.js`). Para
   apuntar a otro backend se usa `VITE_API_URL`.
-- El dashboard Admin consume `GET /api/dashboard/` con filtros de sucursal y
-  período (Hoy por defecto). Muestra franja de alertas, seis KPIs, evolución de
-  ventas, cajas abiertas, últimas ventas, stock crítico, compras por recibir y
-  accesos rápidos, con estados de carga, error y actualización manual.
+- El dashboard Admin consume `GET /api/dashboard/` con filtro de sucursal y
+  refresco automático cada 30 s (también al volver a la pestaña). Muestra
+  franja de alertas, cinco KPIs (hoy, semana, pendientes, cajas y compras),
+  evolución de ventas de 7 días, cajas abiertas con ID de sección, últimas
+  ventas, stock crítico y compras por recibir. Arriba tiene accesos a Nueva
+  venta, Registrar cliente y Nuevo presupuesto.
+- La sección Clientes permite buscar, listar y dar de alta clientes contra
+  `/api/clientes/`; el acceso rápido del dashboard abre el formulario con
+  `?nuevo=1`.
 - Facturación se muestra con un cartel de **mantenimiento** hasta habilitar ARCA.
 - Verificación: `npm run lint` (0 warnings) y `npm run build`.
 

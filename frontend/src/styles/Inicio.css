@@ -54,57 +54,51 @@ DASHBOARD DE INICIO - FER-CONS
   outline: 2px solid var(--color-sidebar);
 }
 
-.segmento {
-  display: inline-flex;
-  gap: 0.15rem;
-  border-radius: 9999px;
-  background-color: #ffffff;
-  padding: 0.25rem;
-  box-shadow: 0 4px 12px rgba(15, 42, 48, 0.06);
+.dashboard-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.segmento button {
-  border: none;
-  border-radius: 9999px;
-  background: transparent;
-  padding: 0.45rem 0.9rem;
-  color: rgba(15, 42, 48, 0.65);
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 600;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.segmento button:hover {
-  background-color: var(--color-fondo);
-}
-
-.segmento button.activo {
-  background-color: var(--color-oscuro);
-  color: #ffffff;
-}
-
-.boton-refrescar {
+.boton-accion {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
   border: 1px solid rgba(15, 42, 48, 0.15);
   border-radius: 9999px;
   background-color: #ffffff;
   padding: 0.55rem 1rem;
   color: var(--color-oscuro);
+  text-decoration: none;
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 600;
+  transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
-.boton-refrescar:hover {
+.boton-accion:hover {
   background-color: var(--color-fondo);
+  transform: translateY(-1px);
 }
 
-.boton-refrescar:disabled {
-  cursor: wait;
-  opacity: 0.65;
+.boton-accion-primario {
+  border-color: var(--color-sidebar);
+  background-color: var(--color-sidebar);
+  color: #ffffff;
+}
+
+.boton-accion-primario:hover {
+  background-color: var(--color-login);
+}
+
+.dashboard-actualizado {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.75rem;
 }
 
 .dashboard-error-inline {
@@ -193,17 +187,23 @@ DASHBOARD DE INICIO - FER-CONS
 /* KPIs */
 .dashboard-kpis {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 1rem;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1279px) {
+  .dashboard-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 899px) {
   .dashboard-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 560px) {
   .dashboard-kpis {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -538,10 +538,18 @@ DASHBOARD DE INICIO - FER-CONS
 }
 
 /* Cajas abiertas */
-.caja-lista,
-.compra-lista {
+.caja-lista {
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.compra-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 0.5rem;
   list-style: none;
   margin: 0;
@@ -726,87 +734,6 @@ DASHBOARD DE INICIO - FER-CONS
   color: var(--color-peligro);
 }
 
-/* Accesos rápidos */
-.accesos-rapidos {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.acceso-rapido {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  border-radius: 1rem;
-  background-color: var(--color-fondo);
-  padding: 0.7rem 0.85rem;
-  text-decoration: none;
-  transition: background-color 0.15s ease, transform 0.15s ease;
-}
-
-.acceso-rapido:hover {
-  background-color: var(--color-tarjeta);
-  transform: translateX(2px);
-}
-
-.acceso-icono {
-  display: grid;
-  width: 2.5rem;
-  height: 2.5rem;
-  flex-shrink: 0;
-  place-items: center;
-  border-radius: 0.75rem;
-  background-color: #ffffff;
-  color: var(--color-sidebar);
-}
-
-.acceso-texto {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  line-height: 1.2;
-}
-
-.acceso-texto strong {
-  overflow: hidden;
-  color: var(--color-oscuro);
-  font-size: 0.92rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.acceso-texto small {
-  overflow: hidden;
-  color: rgba(15, 42, 48, 0.6);
-  font-size: 0.75rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.acceso-flecha {
-  margin-left: auto;
-  color: var(--color-sidebar);
-}
-
-.dashboard-resumen {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  border-top: 1px solid rgba(15, 42, 48, 0.12);
-  margin-top: 1rem;
-  padding-top: 1rem;
-  color: rgba(15, 42, 48, 0.65);
-  font-size: 0.85rem;
-}
-
-.dashboard-resumen p {
-  margin: 0;
-}
-
-.dashboard-resumen strong {
-  color: var(--color-oscuro);
-}
-
 /* Estados de carga y error */
 .dashboard-estado {
   display: flex;
@@ -873,8 +800,17 @@ DASHBOARD DE INICIO - FER-CONS
     min-width: 0;
   }
 
-  .boton-refrescar {
+  .dashboard-acciones {
+    flex: 1 1 100%;
+  }
+
+  .boton-accion {
+    flex: 1 1 auto;
     justify-content: center;
+  }
+
+  .dashboard-actualizado {
+    margin-left: 0;
   }
 
   .caja-item {

@@ -6,40 +6,44 @@
 
 **Cerrado el:** 2026-11-04
 
-## 1. Frontend — dashboard Admin (V1 cerrado)
+## 1. Frontend — dashboard Admin V2 y Clientes
 
 **Hecho en esta sesión**
 
-- Fase 0: Tailwind 4 + `@tailwindcss/vite`, react-router-dom 7, Tabler Icons,
-  SweetAlert2 y react-hook-form. Tokens de color y fuente Abel en `index.css`.
-- Fase 1: `context/AuthContext.jsx` con la lógica JWT real, `user` normalizado,
-  `puedeVer` y `puedeEscribir`; rutas protegidas con `BrowserRouter`.
-- Fase 2: layout con sidebar colapsable, drawer móvil, menú por categorías y
-  roles reales (`AD`, `GE`, `CA`, `VE`, `ED`), `Encabezado` y footer de usuario.
-- Login rediseñado con el formato de `Fer-Cons-feature-api-rest-auth`.
-- **Dashboard Admin V1**:
-  - Filtro por sucursal (Todas por defecto) y período Hoy / 7 días / Mes.
-  - Franja de alertas: ventas por vencer, stock negativo/bajo, compras sin
-    recibir y cajas abiertas.
-  - Seis KPIs: ventas del período (con comparación), ticket promedio, ventas del
-    mes, pendientes, cajas abiertas y compras por recibir.
-  - Evolución de ventas (7 días o mes), cajas abiertas con sección en curso,
-    últimas ventas, stock crítico, compras por recibir y accesos rápidos.
-  - Solo enlaces a módulos; sin acciones rápidas de negocio.
-- Backend: `GET /api/dashboard/` ampliado con `periodo`, `sucursal`, comparación
-  contra el período anterior, alertas, cajas abiertas y compras por recibir.
-  Total **57/57 tests** pasando.
-- Commits: `205e89e` (resguardo) y `b67e98b` (rediseño inicial).
+- Dashboard Admin:
+  - Filtro por sucursal (Todas por defecto).
+  - Sin selector de período ni botón Actualizar.
+  - Refresco automático cada 30 s y al volver a la pestaña/ventana.
+  - Cinco KPIs fijos: Ventas de hoy, Ventas de la semana (lunes a hoy, con
+    comparación), Pendientes, Cajas abiertas y Compras por recibir.
+  - Se quitó el KPI de Ventas del mes y el panel de Accesos rápidos.
+  - Franja de alertas y paneles de evolución, últimas ventas, stock crítico,
+    cajas abiertas y compras por recibir.
+  - El detalle de cajas muestra `Caja X` + `Sección #ID` + sucursal/empleado.
+  - Acciones arriba: **Nueva venta**, **Registrar cliente** y
+    **Nuevo presupuesto**.
+- Sección **Clientes**:
+  - Búsqueda, listado paginado y alta contra `/api/clientes/`.
+  - Formulario en modal; el acceso rápido del dashboard abre el modal con
+    `?nuevo=1`.
+  - Nuevo ítem “Clientes” en el menú Comercial.
+- Backend: se agregó `ventas.semana` (lunes a hoy) y su comparación con la
+  semana anterior. Total **57/57 tests** pasando.
+- Commits previos: `205e89e`, `b67e98b`, `983bed4`.
 
 **Pendiente inmediato**
 
-- [ ] Revisar el dashboard con el usuario y ajustar textos/orden si hace falta.
-- [ ] Definir las métricas V2 del dashboard: top productos, formas de pago,
-      ventas por sucursal, diferencias de caja y actividad reciente.
-- [ ] Elegir el próximo módulo del menú para desarrollar (Ventas, Compras, Caja,
-      Stock/Productos, Proveedores, Empleados, Perfil o Actividad).
-- [ ] Fase 3: componentes comunes que falten (tabla genérica, búsqueda, filtros,
-      modal, FAB, paginación "ver más") a medida que se conecten las pantallas.
+- [ ] Desarrollar el módulo **Ventas**: listado, filtros, creación, confirmación
+      y cancelación.
+- [ ] Implementar **Nuevo presupuesto** dentro del flujo de venta:
+      - armar el detalle como un borrador,
+      - no guardar nada en la base,
+      - generar un PDF imprimible con el detalle,
+      - disponible antes de confirmar la venta como pendiente.
+- [ ] Conectar los botones **Nueva venta** y **Nuevo presupuesto** al formulario
+      real de Ventas (hoy abren la pantalla provisional).
+- [ ] Definir métricas V2 del dashboard: top productos, formas de pago, ventas
+      por sucursal, diferencias de caja y actividad reciente.
 - [ ] Cambiar contraseña: **requiere endpoint nuevo en backend**.
 - [ ] Actividad: definir fuente (recomendado: movimientos + ventas + compras).
 - [ ] Aplicar `puedeEscribir` a todas las acciones de escritura.
@@ -47,15 +51,18 @@
 
 ## 2. Decisiones tomadas
 
-- El Inicio Admin usa **Hoy** como período por defecto.
-- El Admin ve **todas las sucursales** y puede elegir una con el selector.
-- El dashboard solo tiene **enlaces** a los módulos, sin acciones de escritura.
-- Se incluyen **Cajas abiertas** (secciones en curso) y **Compras por recibir**.
-- Las métricas V2 se definen más adelante.
-- Por ahora se trabaja solo la vista de **Administrador**; los demás roles se
-  replantean después de consolidar Admin.
-- Pedidos y Presupuestos: **se omiten** del menú (no existen en el backend).
-- `prop-types`: **no se instala** (se usan parámetros por defecto).
+- La semana se calcula de **lunes a hoy**.
+- “Ventas del mes” se saca del dashboard; se retoma cuando trabajemos Ventas y
+  sus filtros.
+- El dashboard se refresca **cada 30 segundos** y al recuperar el foco.
+- “Registrar cliente” navega a **Clientes** y abre el formulario.
+- “Presupuesto” es un **borrador de venta no persistido**: se arma como una
+  venta, se genera un PDF imprimible y no se guarda ni queda pendiente.
+- Se elimina el panel de accesos rápidos; quedan solo las tres acciones arriba.
+- Por ahora se trabaja solo la vista de **Administrador**.
+- Pedidos y Presupuestos como módulos del menú siguen omitidos; Presupuesto es
+  un atajo dentro de Ventas.
+- `prop-types`: **no se instala**.
 
 ## 3. Facturación (ARCA)
 
@@ -70,6 +77,5 @@
 
 ## 5. Commit
 
-- [x] Commit del estado previo al rediseño (`205e89e`).
-- [x] Commit del rediseño inicial (`b67e98b`).
-- [ ] Commit del dashboard Admin V1.
+- [x] Commits previos: `205e89e`, `b67e98b`, `983bed4`.
+- [ ] Commit del dashboard V3 + Clientes.

@@ -1,4 +1,5 @@
 import {
+  IconAddressBook,
   IconBuildingWarehouse,
   IconCash,
   IconFileText,
@@ -55,6 +56,13 @@ export const menuCategories = [
         detalle: 'Registro y recepción',
         icono: IconTruckDelivery,
         roles: ['AD', 'GE', 'ED'],
+      },
+      {
+        name: 'Clientes',
+        path: '/clientes',
+        detalle: 'Alta y consulta de clientes',
+        icono: IconAddressBook,
+        roles: ['AD', 'GE', 'CA', 'VE'],
       },
     ],
   },

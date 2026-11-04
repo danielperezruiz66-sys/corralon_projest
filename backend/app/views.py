@@ -224,7 +224,23 @@ def dashboard(request):
         ),
     }
 
+    inicio_semana = hoy - timedelta(days=hoy.weekday())
+    inicio_semana_anterior = inicio_semana - timedelta(days=7)
+    fin_semana_anterior = inicio_semana - timedelta(days=1)
+
     ventas_hoy = resumen(ventas_del_rango(hoy, hoy))
+    ventas_semana = resumen(ventas_del_rango(inicio_semana, hoy))
+    ventas_semana_anterior = resumen(
+        ventas_del_rango(inicio_semana_anterior, fin_semana_anterior)
+    )
+    comparacion_semana = {
+        'monto_anterior': ventas_semana_anterior['monto'],
+        'cantidad_anterior': ventas_semana_anterior['cantidad'],
+        'variacion_porcentaje': variacion(
+            Decimal(ventas_semana['monto']),
+            Decimal(ventas_semana_anterior['monto']),
+        ),
+    }
     ventas_mes = resumen(ventas_del_rango(inicio_mes, hoy))
     pendientes = resumen(ventas.filter(estado=Venta.EstadoVenta.PENDIENTE))
     compras_mes = resumen(
@@ -388,6 +404,10 @@ def dashboard(request):
             },
             'ventas': {
                 'hoy': ventas_hoy,
+                'semana': {
+                    **ventas_semana,
+                    'comparacion': comparacion_semana,
+                },
                 'mes': ventas_mes,
                 'periodo': {
                     **periodo_actual,

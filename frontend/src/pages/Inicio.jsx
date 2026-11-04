@@ -1,24 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   IconAlertTriangle,
-  IconArrowUpRight,
   IconCash,
   IconChartBar,
   IconClock,
   IconCurrencyDollar,
+  IconFileText,
   IconLoader2,
   IconPackage,
-  IconReceipt,
+  IconPlus,
   IconRefresh,
   IconShoppingCart,
   IconTruckDelivery,
+  IconUserPlus,
   IconUsers,
 } from '@tabler/icons-react'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import { useAuth } from '../context/auth-context'
-import { modulosDelMenu } from '../data/menuConfig.js'
 import {
   etiquetaDia,
   formatearFecha,
@@ -29,30 +29,11 @@ import {
 } from '../utils/formato'
 import '../styles/Inicio.css'
 
-const PERIODOS = [
-  { id: 'hoy', etiqueta: 'Hoy' },
-  { id: '7d', etiqueta: '7 días' },
-  { id: 'mes', etiqueta: 'Mes' },
-]
-
-const ETIQUETAS_PERIODO = {
-  hoy: 'Ventas de hoy',
-  '7d': 'Ventas de 7 días',
-  mes: 'Ventas del mes',
-}
-
-const ETIQUETAS_COMPARACION = {
-  hoy: 'vs. ayer',
-  '7d': 'vs. 7 días anteriores',
-  mes: 'vs. mismo período anterior',
-}
-
 const DATOS_VACIOS = {
   filtros: { periodo: 'hoy', sucursal: null, sucursales: [] },
   ventas: {
     hoy: { cantidad: 0, monto: '0', ticket_promedio: '0' },
-    mes: { cantidad: 0, monto: '0', ticket_promedio: '0' },
-    periodo: {
+    semana: {
       cantidad: 0,
       monto: '0',
       ticket_promedio: '0',
@@ -115,8 +96,7 @@ function Comparacion({ valor, etiqueta }) {
   }
 
   const numero = Number(valor)
-  const clase =
-    numero > 0 ? 'positiva' : numero < 0 ? 'negativa' : 'neutra'
+  const clase = numero > 0 ? 'positiva' : numero < 0 ? 'negativa' : 'neutra'
   const simbolo = numero > 0 ? '▲' : numero < 0 ? '▼' : '='
 
   return (
@@ -131,29 +111,56 @@ function EstadoVenta({ estado, etiqueta }) {
 }
 
 export default function Inicio() {
-  const { user, puedeVer } = useAuth()
+  const { user } = useAuth()
   const [datos, setDatos] = useState(DATOS_VACIOS)
-  const [periodo, setPeriodo] = useState('hoy')
   const [sucursal, setSucursal] = useState('')
-  const [refresco, setRefresco] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [actualizando, setActualizando] = useState(false)
   const [tieneDatos, setTieneDatos] = useState(false)
+  const [ultimaActualizacion, setUltimaActualizacion] = useState(null)
   const [error, setError] = useState('')
+  const solicitudRef = useRef(false)
 
-  useEffect(() => {
-    let vigente = true
-    const parametros = new URLSearchParams({ periodo })
+  const consultar = useCallback(() => {
+    const parametros = new URLSearchParams()
     if (sucursal) {
       parametros.set('sucursal', sucursal)
     }
+    const consulta = parametros.toString()
+    return pedir(`/dashboard/${consulta ? `?${consulta}` : ''}`)
+  }, [sucursal])
 
-    pedir(`/dashboard/?${parametros.toString()}`)
+  const cargar = useCallback(async () => {
+    if (solicitudRef.current) {
+      return
+    }
+
+    solicitudRef.current = true
+    try {
+      const respuesta = await consultar()
+      setDatos(respuesta)
+      setError('')
+      setTieneDatos(true)
+      setUltimaActualizacion(new Date())
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      solicitudRef.current = false
+      setCargando(false)
+      setActualizando(false)
+    }
+  }, [consultar])
+
+  useEffect(() => {
+    let vigente = true
+
+    consultar()
       .then((respuesta) => {
         if (vigente) {
           setDatos(respuesta)
           setError('')
           setTieneDatos(true)
+          setUltimaActualizacion(new Date())
         }
       })
       .catch((e) => {
@@ -171,16 +178,37 @@ export default function Inicio() {
     return () => {
       vigente = false
     }
-  }, [periodo, sucursal, refresco])
+  }, [consultar])
 
-  const cambiarPeriodo = (nuevo) => {
-    if (nuevo === periodo) {
-      return
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setActualizando(true)
+        cargar()
+      }
+    }, 30000)
+
+    const alEnfocar = () => {
+      setActualizando(true)
+      cargar()
     }
-    setPeriodo(nuevo)
-    setActualizando(true)
-    setError('')
-  }
+
+    const alCambiarVisibilidad = () => {
+      if (document.visibilityState === 'visible') {
+        setActualizando(true)
+        cargar()
+      }
+    }
+
+    window.addEventListener('focus', alEnfocar)
+    document.addEventListener('visibilitychange', alCambiarVisibilidad)
+
+    return () => {
+      clearInterval(intervalo)
+      window.removeEventListener('focus', alEnfocar)
+      document.removeEventListener('visibilitychange', alCambiarVisibilidad)
+    }
+  }, [cargar])
 
   const cambiarSucursal = (evento) => {
     setSucursal(evento.target.value)
@@ -188,10 +216,10 @@ export default function Inicio() {
     setError('')
   }
 
-  const refrescar = () => {
+  const reintentar = () => {
     setActualizando(true)
     setError('')
-    setRefresco((valor) => valor + 1)
+    cargar()
   }
 
   const nombreBase = user?.nombre?.split(' ')[0] ?? ''
@@ -222,7 +250,7 @@ export default function Inicio() {
           <IconAlertTriangle size={36} />
           <p>No pudimos cargar el dashboard.</p>
           <small>{error}</small>
-          <button type="button" className="boton-reintentar" onClick={refrescar}>
+          <button type="button" className="boton-reintentar" onClick={reintentar}>
             <IconRefresh size={18} />
             Reintentar
           </button>
@@ -302,12 +330,6 @@ export default function Inicio() {
     },
   ].filter(Boolean)
 
-  const accesos = modulosDelMenu.filter(
-    (modulo) =>
-      !['/', '/perfil', '/actividad', '/facturacion'].includes(modulo.path) &&
-      puedeVer(modulo),
-  )
-
   return (
     <>
       <Encabezado
@@ -333,40 +355,45 @@ export default function Inicio() {
             </select>
           </label>
 
-          <div className="control-grupo">
-            <span className="control-etiqueta">Período</span>
-            <div className="segmento">
-              {PERIODOS.map((opcion) => (
-                <button
-                  key={opcion.id}
-                  type="button"
-                  className={periodo === opcion.id ? 'activo' : ''}
-                  onClick={() => cambiarPeriodo(opcion.id)}
-                >
-                  {opcion.etiqueta}
-                </button>
-              ))}
-            </div>
+          <div className="dashboard-acciones">
+            <Link
+              to="/ventas?nueva=1"
+              className="boton-accion boton-accion-primario"
+            >
+              <IconPlus size={18} />
+              Nueva venta
+            </Link>
+            <Link to="/clientes?nuevo=1" className="boton-accion">
+              <IconUserPlus size={18} />
+              Registrar cliente
+            </Link>
+            <Link to="/ventas?presupuesto=1" className="boton-accion">
+              <IconFileText size={18} />
+              Nuevo presupuesto
+            </Link>
           </div>
 
-          <button
-            type="button"
-            className="boton-refrescar"
-            onClick={refrescar}
-            disabled={actualizando}
-          >
-            <IconRefresh
-              size={18}
-              className={actualizando ? 'icono-girando' : ''}
-            />
-            {actualizando ? 'Actualizando…' : 'Actualizar'}
-          </button>
+          <span className="dashboard-actualizado">
+            {actualizando ? (
+              <>
+                <IconLoader2 className="icono-girando" size={16} />
+                Actualizando…
+              </>
+            ) : (
+              <>
+                Actualizado{' '}
+                {ultimaActualizacion
+                  ? formatearHora(ultimaActualizacion.toISOString())
+                  : '—'}
+              </>
+            )}
+          </span>
         </section>
 
         {error && tieneDatos && (
           <div className="dashboard-error-inline">
             <span>{error}</span>
-            <button type="button" onClick={refrescar}>
+            <button type="button" onClick={reintentar}>
               Reintentar
             </button>
           </div>
@@ -396,38 +423,32 @@ export default function Inicio() {
         <section className="dashboard-kpis">
           <TarjetaKpi
             icono={IconCurrencyDollar}
-            etiqueta={ETIQUETAS_PERIODO[periodo]}
-            valor={formatearMoneda(ventas.periodo.monto)}
+            etiqueta="Ventas de hoy"
+            valor={formatearMoneda(ventas.hoy.monto)}
             detalle={
-              <>
-                <span>
-                  {ventas.periodo.cantidad} venta
-                  {ventas.periodo.cantidad === 1 ? '' : 's'} ·{' '}
-                  {formatearMoneda(ventas.periodo.ticket_promedio)} ticket
-                </span>
-                <Comparacion
-                  valor={ventas.periodo.comparacion.variacion_porcentaje}
-                  etiqueta={ETIQUETAS_COMPARACION[periodo]}
-                />
-              </>
+              <span>
+                {ventas.hoy.cantidad} venta
+                {ventas.hoy.cantidad === 1 ? '' : 's'} ·{' '}
+                {formatearMoneda(ventas.hoy.ticket_promedio)} ticket
+              </span>
             }
           />
           <TarjetaKpi
-            icono={IconReceipt}
-            etiqueta="Ticket promedio"
-            valor={formatearMoneda(ventas.periodo.ticket_promedio)}
-            detalle={<span>Promedio por venta en el período</span>}
-          />
-          <TarjetaKpi
             icono={IconChartBar}
-            etiqueta="Ventas del mes"
-            valor={formatearMoneda(ventas.mes.monto)}
+            etiqueta="Ventas de la semana"
+            valor={formatearMoneda(ventas.semana.monto)}
             detalle={
-              <span>
-                {ventas.mes.cantidad} venta
-                {ventas.mes.cantidad === 1 ? '' : 's'} ·{' '}
-                {formatearMoneda(ventas.mes.ticket_promedio)} ticket
-              </span>
+              <>
+                <span>
+                  {ventas.semana.cantidad} venta
+                  {ventas.semana.cantidad === 1 ? '' : 's'} ·{' '}
+                  {formatearMoneda(ventas.semana.ticket_promedio)} ticket
+                </span>
+                <Comparacion
+                  valor={ventas.semana.comparacion.variacion_porcentaje}
+                  etiqueta="vs. semana anterior"
+                />
+              </>
             }
           />
           <TarjetaKpi
@@ -487,7 +508,7 @@ export default function Inicio() {
 
             {totalSerie === 0 ? (
               <p className="panel-vacio">
-                No hay ventas registradas en el período seleccionado.
+                No hay ventas registradas en los últimos 7 días.
               </p>
             ) : (
               <div
@@ -569,7 +590,7 @@ export default function Inicio() {
                     <div className="caja-item-info">
                       <strong>{item.caja}</strong>
                       <small>
-                        {item.sucursal} · {item.empleado}
+                        Sección #{item.id} · {item.sucursal} · {item.empleado}
                       </small>
                     </div>
                     <div className="caja-item-horario">
@@ -691,79 +712,42 @@ export default function Inicio() {
           </article>
         </section>
 
-        <section className="dashboard-grid dashboard-grid-inferior">
-          <article className="panel">
-            <div className="panel-cabecera">
-              <h2 className="panel-titulo">
-                <IconTruckDelivery size={24} />
-                Compras por recibir
-              </h2>
-              <Link to="/compras" className="panel-enlace">
-                Ver compras
-              </Link>
-            </div>
+        <article className="panel">
+          <div className="panel-cabecera">
+            <h2 className="panel-titulo">
+              <IconTruckDelivery size={24} />
+              Compras por recibir
+            </h2>
+            <Link to="/compras" className="panel-enlace">
+              Ver compras
+            </Link>
+          </div>
 
-            {datos.compras_por_recibir.length === 0 ? (
-              <p className="panel-vacio">
-                No hay compras pendientes de recepción.
-              </p>
-            ) : (
-              <ul className="compra-lista">
-                {datos.compras_por_recibir.map((item) => (
-                  <li className="compra-item" key={item.id}>
-                    <div className="compra-info">
-                      <strong>{item.proveedor}</strong>
-                      <small>
-                        {formatearFecha(item.fecha_compra)} ·{' '}
-                        {item.dias_esperando} día
-                        {item.dias_esperando === 1 ? '' : 's'} esperando
-                      </small>
-                    </div>
-                    <div className="compra-monto">
-                      <strong>{formatearMoneda(item.monto)}</strong>
-                      <span className="badge badge-pe">Pendiente</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </article>
-
-          <article className="panel">
-            <div className="panel-cabecera">
-              <h2 className="panel-titulo">Accesos rápidos</h2>
-            </div>
-
-            <div className="accesos-rapidos">
-              {accesos.map((modulo) => {
-                const Icono = modulo.icono
-                return (
-                  <Link to={modulo.path} className="acceso-rapido" key={modulo.path}>
-                    <span className="acceso-icono">
-                      <Icono size={24} />
-                    </span>
-                    <span className="acceso-texto">
-                      <strong>{modulo.name}</strong>
-                      <small>{modulo.detalle}</small>
-                    </span>
-                    <IconArrowUpRight size={18} className="acceso-flecha" />
-                  </Link>
-                )
-              })}
-            </div>
-
-            <div className="dashboard-resumen">
-              <p>
-                Compras del mes:{' '}
-                <strong>{formatearMoneda(compras.mes.monto)}</strong>
-              </p>
-              <p>
-                Proveedores activos:{' '}
-                <strong>{formatearNumero(equipo.proveedores_activos)}</strong>
-              </p>
-            </div>
-          </article>
-        </section>
+          {datos.compras_por_recibir.length === 0 ? (
+            <p className="panel-vacio">
+              No hay compras pendientes de recepción.
+            </p>
+          ) : (
+            <ul className="compra-lista">
+              {datos.compras_por_recibir.map((item) => (
+                <li className="compra-item" key={item.id}>
+                  <div className="compra-info">
+                    <strong>{item.proveedor}</strong>
+                    <small>
+                      {formatearFecha(item.fecha_compra)} ·{' '}
+                      {item.dias_esperando} día
+                      {item.dias_esperando === 1 ? '' : 's'} esperando
+                    </small>
+                  </div>
+                  <div className="compra-monto">
+                    <strong>{formatearMoneda(item.monto)}</strong>
+                    <span className="badge badge-pe">Pendiente</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
       </div>
     </>
   )

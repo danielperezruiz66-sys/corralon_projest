@@ -21,6 +21,11 @@ class DashboardApiTests(BaseCorralonTestCase):
             Decimal(respuesta.data['ventas']['hoy']['monto']),
             Decimal('200.00'),
         )
+        self.assertEqual(respuesta.data['ventas']['semana']['cantidad'], 1)
+        self.assertEqual(
+            Decimal(respuesta.data['ventas']['semana']['monto']),
+            Decimal('200.00'),
+        )
         self.assertEqual(respuesta.data['ventas']['pendientes']['cantidad'], 1)
         self.assertEqual(respuesta.data['caja']['abiertas'], 1)
         self.assertEqual(respuesta.data['catalogo']['productos'], 2)
