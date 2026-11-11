@@ -36,6 +36,11 @@ COMERCIAL - VENTAS Y COMPRAS
   padding: 0.35rem 0.5rem 0.35rem 1rem;
   box-shadow: 0 6px 18px rgba(15, 42, 48, 0.06);
   color: rgba(15, 42, 48, 0.55);
+  /* Oculta el botón de borrado nativo en inputs de tipo search para Chrome, Safari y Edge */
+  input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
 }
 
 .comercial-busqueda input {
@@ -131,8 +136,14 @@ COMERCIAL - VENTAS Y COMPRAS
   color: #ffffff;
 }
 
-.filtros-tabs .filtro-destacado {
+.filtros-tabs-grupo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   margin-left: auto;
+}
+
+.filtros-tabs .filtro-destacado {
   border-color: var(--color-sidebar);
   color: var(--color-sidebar);
 }
@@ -149,6 +160,38 @@ COMERCIAL - VENTAS Y COMPRAS
   padding: 0.75rem 1rem;
   color: var(--color-peligro);
   font-size: 0.9rem;
+}
+
+/* Aviso de filtro aplicado desde el dashboard */
+.filtro-origen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  border: 1px solid rgba(196, 146, 55, 0.35);
+  border-radius: 0.9rem;
+  background-color: #fff8e6;
+  padding: 0.7rem 1rem;
+  color: #6b4e16;
+  font-size: 0.88rem;
+}
+
+.filtro-origen button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #8a5a00;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.filtro-origen button:hover {
+  text-decoration: underline;
 }
 
 /* Panel y tabla */
@@ -201,6 +244,20 @@ COMERCIAL - VENTAS Y COMPRAS
 
 .tabla-comercial td strong {
   font-weight: 700;
+}
+
+.tabla-comercial tr.fila-destacada td {
+  background-color: #fff3c4;
+  animation: destacar-fila 1.2s ease-out;
+}
+
+@keyframes destacar-fila {
+  from {
+    background-color: #ffe08a;
+  }
+  to {
+    background-color: #fff3c4;
+  }
 }
 
 .tabla-comercial td small {
@@ -274,6 +331,11 @@ COMERCIAL - VENTAS Y COMPRAS
 .estado-pc {
   background-color: #e0e7ff;
   color: var(--color-navy);
+}
+
+.estado-ec {
+  background-color: #dbeafe;
+  color: #1d4ed8;
 }
 
 .estado-an {
@@ -392,6 +454,10 @@ COMERCIAL - VENTAS Y COMPRAS
   max-width: 34rem;
 }
 
+.comercial-modal-medio {
+  max-width: 48rem;
+}
+
 .comercial-cargando {
   display: flex;
   min-height: 12rem;
@@ -469,6 +535,24 @@ COMERCIAL - VENTAS Y COMPRAS
   font-size: 0.82rem;
 }
 
+.comercial-nota-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.comercial-nota-acciones p {
+  margin: 0;
+}
+
+.productos-proveedor-acciones {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
 .comercial-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -507,11 +591,481 @@ COMERCIAL - VENTAS Y COMPRAS
   outline: 2px solid var(--color-sidebar);
 }
 
+.campo-comercial input.input-error,
+.campo-comercial select.input-error,
+.campo-comercial textarea.input-error {
+  border-color: var(--color-peligro);
+  outline-color: var(--color-peligro);
+}
+
+.mensaje-error-campo {
+  color: var(--color-peligro);
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.input-error {
+  border-color: var(--color-peligro) !important;
+  outline-color: var(--color-peligro) !important;
+}
+
+.campo-con-atajo {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.campo-con-atajo select {
+  min-width: 0;
+  flex: 1;
+}
+
+.boton-atajo {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-sidebar);
+  border-radius: 0.7rem;
+  background-color: #ffffff;
+  color: var(--color-sidebar);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.boton-atajo:hover {
+  background-color: var(--color-sidebar);
+  color: #ffffff;
+}
+
+.boton-atajo:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.boton-atajo-con-texto {
+  width: auto;
+  gap: 0.3rem;
+  padding: 0 0.7rem;
+}
+
+.boton-atajo .boton-atajo-texto {
+  color: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.selector-buscable {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+}
+
+.selector-buscable input {
+  padding-right: 2rem;
+}
+
+.selector-buscable-limpiar {
+  position: absolute;
+  top: 50%;
+  right: 0.45rem;
+  display: inline-flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9999px;
+  background-color: var(--color-fondo);
+  color: rgba(15, 42, 48, 0.6);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.selector-buscable-lista {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  left: 0;
+  z-index: 20;
+  max-height: 14rem;
+  margin: 0;
+  padding: 0.25rem;
+  overflow-y: auto;
+  border: 1px solid rgba(15, 42, 48, 0.12);
+  border-radius: 0.8rem;
+  background-color: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 42, 48, 0.16);
+  list-style: none;
+}
+
+.selector-buscable-lista li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.6rem;
+  color: var(--color-oscuro);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.selector-buscable-lista li.activo,
+.selector-buscable-lista li:hover {
+  background-color: var(--color-fondo);
+}
+
+.selector-buscable-lista li span {
+  color: var(--color-oscuro);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.selector-buscable-lista li small {
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.72rem;
+}
+
+.selector-buscable-lista .selector-buscable-estado {
+  color: rgba(15, 42, 48, 0.55);
+  cursor: default;
+}
+
+.productos-proveedor-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.productos-proveedor-fila {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.6fr)
+    minmax(8rem, 0.8fr)
+    minmax(8rem, 0.8fr)
+    auto;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.productos-proveedor-accion {
+  display: flex;
+  align-items: center;
+  padding-top: 1.3rem;
+}
+
+.productos-proveedor-agregar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 720px) {
+  .productos-proveedor-fila {
+    grid-template-columns: 1fr;
+  }
+
+  .productos-proveedor-accion {
+    padding-top: 0;
+  }
+}
+
 .filtros-ayuda {
   margin: -0.5rem 0 0;
   color: rgba(15, 42, 48, 0.55);
   font-size: 0.78rem;
   line-height: 1.4;
+}
+
+/* Filtros de fecha */
+.filtros-fechas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  border-radius: 1.1rem;
+  background-color: #ffffff;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 6px 18px rgba(15, 42, 48, 0.05);
+}
+
+.filtros-fechas-presets {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.filtros-fechas-presets button {
+  border: 1px solid rgba(15, 42, 48, 0.12);
+  border-radius: 9999px;
+  background-color: #ffffff;
+  padding: 0.4rem 0.8rem;
+  color: rgba(15, 42, 48, 0.65);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.filtros-fechas-presets button:hover {
+  background-color: var(--color-fondo);
+}
+
+.filtros-fechas-presets button.activo {
+  border-color: var(--color-sidebar);
+  background-color: var(--color-sidebar);
+  color: #ffffff;
+}
+
+.filtros-fechas-campos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+  margin-left: auto;
+  border-left: 1px solid rgba(15, 42, 48, 0.12);
+  padding-left: 1rem;
+  color: rgba(15, 42, 48, 0.55);
+}
+
+.filtros-fechas-campos label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.filtros-fechas-campos input {
+  border: 1px solid rgba(15, 42, 48, 0.15);
+  border-radius: 0.7rem;
+  background-color: #ffffff;
+  padding: 0.42rem 0.55rem;
+  color: var(--color-oscuro);
+  font-size: 0.8rem;
+}
+
+.filtros-fechas-campos input:focus-visible {
+  outline: 2px solid var(--color-sidebar);
+}
+
+.filtros-fechas-separador {
+  padding-bottom: 0.45rem;
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+.boton-limpiar-fechas {
+  padding: 0.45rem 0.75rem !important;
+  font-size: 0.78rem !important;
+}
+
+.filtros-fecha-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-peligro);
+  font-size: 0.78rem;
+}
+
+/* Encabezados ordenables */
+.encabezado-orden {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.encabezado-orden:hover {
+  color: var(--color-oscuro);
+}
+
+.panel-actualizando {
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.boton-limpiar-busqueda {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  flex-shrink: 0;
+  place-items: center;
+  border: none;
+  border-radius: 9999px;
+  background-color: var(--color-fondo);
+  color: rgba(15, 42, 48, 0.6);
+  cursor: pointer;
+}
+
+.boton-limpiar-busqueda:hover {
+  background-color: var(--color-tarjeta);
+  color: var(--color-oscuro);
+}
+
+.cobro-cliente {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.85rem;
+  color: var(--color-oscuro);
+  font-weight: 700;
+}
+
+.cobro-cliente svg {
+  color: var(--color-sidebar);
+}
+
+.cobro-nota {
+  margin: 0 0 1rem;
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.cobro-pagos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.65rem;
+}
+
+.cobro-pago-fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.55rem;
+  border: 1px solid rgba(15, 42, 48, 0.1);
+  border-radius: 0.9rem;
+  background-color: var(--color-fondo);
+  padding: 0.65rem;
+}
+
+.cobro-pago-fila .campo-comercial span {
+  font-size: 0.68rem;
+}
+
+.boton-quitar-pago {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  flex-shrink: 0;
+  place-items: center;
+  border: none;
+  border-radius: 0.7rem;
+  background-color: #ffffff;
+  color: var(--color-peligro);
+  cursor: pointer;
+}
+
+.boton-quitar-pago:hover:not(:disabled) {
+  background-color: #fee2e2;
+}
+
+.boton-quitar-pago:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.boton-agregar-pago {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px dashed rgba(15, 42, 48, 0.25);
+  border-radius: 0.8rem;
+  background-color: #ffffff;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-sidebar);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.boton-agregar-pago:hover:not(:disabled) {
+  background-color: var(--color-fondo);
+}
+
+.boton-agregar-pago:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.cobro-totales {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 1rem;
+  background-color: var(--color-fondo);
+  padding: 0.75rem 0.9rem;
+  margin: 0.75rem 0;
+}
+
+.cobro-totales div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cobro-totales span {
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cobro-totales strong {
+  color: var(--color-oscuro);
+  font-size: 1rem;
+}
+
+.cobro-saldo-cubierto {
+  color: #047857 !important;
+}
+
+.cobro-saldo-excedido {
+  color: var(--color-peligro) !important;
+}
+
+.cobro-confirmar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid rgba(15, 42, 48, 0.12);
+  border-radius: 0.9rem;
+  background-color: #ffffff;
+  padding: 0.65rem 0.8rem;
+  margin-bottom: 0.75rem;
+  color: var(--color-oscuro);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.cobro-confirmar input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-sidebar);
 }
 
 /* Selector de productos */
@@ -696,6 +1250,13 @@ COMERCIAL - VENTAS Y COMPRAS
   .detalle-cabecera {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .filtros-fechas-campos {
+    width: 100%;
+    margin-left: 0;
+    border-left: none;
+    padding-left: 0;
+  }
 }
 
 @media (max-width: 640px) {
@@ -750,5 +1311,13 @@ COMERCIAL - VENTAS Y COMPRAS
 
   .comercial-modal-acciones button {
     flex: 1;
+  }
+
+  .cobro-pago-fila {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .cobro-pago-fila .campo-comercial:nth-child(2) {
+    grid-column: 1 / -1;
   }
 }

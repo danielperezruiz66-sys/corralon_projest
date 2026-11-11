@@ -11,7 +11,15 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 
-from ..models import Compra, DetalleCompra, Producto, Proveedor, SeccionCaja
+from ..models import (
+    Compra,
+    DetalleCompra,
+    Producto,
+    ProductoXProveedor,
+    Proveedor,
+    SeccionCaja,
+    Sucursal,
+)
 from . import stock as stock_service
 
 
@@ -20,10 +28,19 @@ def _decimal(valor):
 
 
 @transaction.atomic
-def registrar_compra(seccion_caja, proveedor, items):
+def registrar_compra(
+    seccion_caja,
+    proveedor,
+    items,
+    estado_entrega=Compra.EstadoEntrega.PENDIENTE,
+    fecha_estimada_llegada=None,
+):
     """Crea la compra y sus detalles. No repone stock."""
     if not items:
         raise ValueError('La compra debe tener al menos un producto.')
+
+    if estado_entrega == Compra.EstadoEntrega.RECIBIDA:
+        raise ValueError('La compra no puede nacer recibida.')
 
     seccion_caja = (
         SeccionCaja.objects.select_for_update()
@@ -38,12 +55,23 @@ def registrar_compra(seccion_caja, proveedor, items):
     if not proveedor.estado_prov:
         raise ValueError('El proveedor esta inactivo.')
 
-    compra = Compra.objects.create(
+    productos_habilitados = set(
+        ProductoXProveedor.objects.filter(
+            proveedor=proveedor,
+            estado=True,
+        ).values_list('producto_id', flat=True)
+    )
+
+    compra = Compra(
         seccion_caja=seccion_caja,
         proveedor=proveedor,
         estado=Compra.EstadoCompra.PENDIENTE,
+        estado_entrega=estado_entrega,
+        fecha_estimada_llegada=fecha_estimada_llegada,
         monto_compra=Decimal('0.00'),
     )
+    compra.full_clean()
+    compra.save()
 
     total = Decimal('0.00')
     for item in items:
@@ -51,14 +79,24 @@ def registrar_compra(seccion_caja, proveedor, items):
         if not isinstance(producto, Producto):
             producto = Producto.objects.get(pk=producto)
 
+        if producto.pk not in productos_habilitados:
+            raise ValueError(
+                f'El producto "{producto}" no está asociado al proveedor '
+                f'"{proveedor}".'
+            )
+
         cantidad = _decimal(item['cantidad'])
         if cantidad <= 0:
             raise ValueError('La cantidad comprada debe ser mayor que cero.')
 
         precio = item.get('precio')
-        precio = producto.precio_unidad if precio is None else _decimal(precio)
-        if precio < 0:
-            raise ValueError('El precio no puede ser negativo.')
+        if precio is None:
+            raise ValueError(
+                'La compra debe tener un precio de costo para cada producto.'
+            )
+        precio = _decimal(precio)
+        if precio <= 0:
+            raise ValueError('El precio de costo debe ser mayor que cero.')
         subtotal = (cantidad * precio).quantize(Decimal('0.01'))
 
         DetalleCompra.objects.create(
@@ -76,8 +114,58 @@ def registrar_compra(seccion_caja, proveedor, items):
 
 
 @transaction.atomic
-def recibir_compra(compra):
-    """Repone el stock de todos los detalles de la compra."""
+def anular_compra(compra, motivo=''):
+    """Anula una compra que todavia no fue recibida ni tiene pagos."""
+    motivo = (motivo or '').strip()
+    if not motivo:
+        raise ValueError('Indicá el motivo de la anulación.')
+
+    compra = Compra.objects.select_for_update().get(pk=compra.pk)
+    if compra.estado == Compra.EstadoCompra.ANULADA:
+        raise ValueError('La compra ya está anulada.')
+    if compra.estado_entrega == Compra.EstadoEntrega.RECIBIDA:
+        raise ValueError('No se puede anular una compra recibida.')
+    if compra.pagos.exists():
+        raise ValueError('No se puede anular una compra con pagos registrados.')
+
+    compra.estado = Compra.EstadoCompra.ANULADA
+    compra.motivo_cancelacion = motivo
+    compra.save(update_fields=['estado', 'motivo_cancelacion'])
+    return compra
+
+
+@transaction.atomic
+def marcar_en_camino(compra, fecha_estimada_llegada=None):
+    """Marca una compra como en camino, sin mover stock."""
+    compra = Compra.objects.select_for_update().get(pk=compra.pk)
+    if compra.estado == Compra.EstadoCompra.ANULADA:
+        raise ValueError('No se puede marcar en camino una compra anulada.')
+    if compra.estado_entrega == Compra.EstadoEntrega.RECIBIDA:
+        raise ValueError('La compra ya fue recibida.')
+    if (
+        fecha_estimada_llegada is None
+        and compra.fecha_estimada_llegada is None
+    ):
+        raise ValueError('Indicá la fecha estimada de llegada.')
+
+    compra.estado_entrega = Compra.EstadoEntrega.EN_CAMINO
+    if fecha_estimada_llegada is not None:
+        compra.fecha_estimada_llegada = fecha_estimada_llegada
+    compra.full_clean()
+    compra.save(
+        update_fields=['estado_entrega', 'fecha_estimada_llegada'],
+    )
+    return compra
+
+
+@transaction.atomic
+def recibir_compra(compra, deposito=None):
+    """Repone el stock de todos los detalles de la compra.
+
+    Si no se indica deposito, usa el deposito predeterminado de la sucursal
+    central. Si no hay sucursal central marcada, usa el de la sucursal de la
+    caja de la compra.
+    """
     compra = (
         Compra.objects.select_for_update(of=('self',))
         .select_related('seccion_caja__caja__sucursal', 'proveedor')
@@ -85,14 +173,28 @@ def recibir_compra(compra):
     )
     if compra.fecha_recepcion is not None:
         raise ValueError('La compra ya fue recibida.')
+    if compra.estado == Compra.EstadoCompra.ANULADA:
+        raise ValueError('No se puede recibir una compra anulada.')
     if compra.proveedor_id is None:
         raise ValueError('La compra no tiene proveedor.')
 
-    sucursal = compra.seccion_caja.caja.sucursal
-    deposito = stock_service.deposito_predeterminado(sucursal)
+    if deposito is None:
+        sucursal_caja = compra.seccion_caja.caja.sucursal
+        central = Sucursal.objects.filter(
+            es_central=True,
+            empresa=sucursal_caja.empresa,
+        ).first()
+        sucursal = central if central is not None else sucursal_caja
+        deposito = stock_service.deposito_predeterminado(sucursal)
+
+    if deposito.sucursal_id is None:
+        raise ValueError('El deposito de recepcion no tiene sucursal.')
 
     for detalle in compra.detalles.select_related('producto'):
-        stock = stock_service.obtener_stock(detalle.producto, sucursal)
+        stock = stock_service.obtener_stock(
+            detalle.producto,
+            deposito.sucursal,
+        )
         stock_service.reponer_stock(
             stock,
             detalle.cantidad_compra,
@@ -103,5 +205,6 @@ def recibir_compra(compra):
         )
 
     compra.fecha_recepcion = timezone.now()
-    compra.save(update_fields=['fecha_recepcion'])
+    compra.estado_entrega = Compra.EstadoEntrega.RECIBIDA
+    compra.save(update_fields=['fecha_recepcion', 'estado_entrega'])
     return compra

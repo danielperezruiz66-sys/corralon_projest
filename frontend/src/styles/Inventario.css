@@ -1,0 +1,302 @@
+/* Inventario y proveedores */
+
+.inventario-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.inventario-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgba(15, 42, 48, 0.12);
+  border-radius: 9999px;
+  background-color: #ffffff;
+  padding: 0.5rem 0.95rem;
+  color: rgba(15, 42, 48, 0.65);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.inventario-tabs button:hover {
+  background-color: var(--color-fondo);
+}
+
+.inventario-tabs button.activo {
+  border-color: var(--color-oscuro);
+  background-color: var(--color-oscuro);
+  color: #ffffff;
+}
+
+.inventario-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  border-radius: 1.1rem;
+  background-color: #ffffff;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 6px 18px rgba(15, 42, 48, 0.05);
+}
+
+.inventario-filtros .campo-comercial {
+  min-width: 10rem;
+}
+
+.inventario-filtros button {
+  border: 1px solid rgba(15, 42, 48, 0.12);
+  border-radius: 9999px;
+  background-color: #ffffff;
+  padding: 0.45rem 0.9rem;
+  color: rgba(15, 42, 48, 0.65);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.inventario-filtros button.activo {
+  border-color: var(--color-oscuro);
+  background-color: var(--color-oscuro);
+  color: #ffffff;
+}
+
+.inventario-sucursales {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.2rem;
+  border: 1px solid rgba(15, 42, 48, 0.12);
+  border-radius: 0.9rem;
+  padding: 0.75rem;
+}
+
+.ancho-completo {
+  grid-column: 1 / -1;
+}
+
+.campo-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(15, 42, 48, 0.7);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.campo-checkbox input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-sidebar);
+}
+
+.campo-ayuda {
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.comercial-modal-chico {
+  max-width: 28rem;
+}
+
+.inventario-modal-ancho {
+  max-width: 64rem;
+}
+
+.carga-stock-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 1rem 0 0.75rem;
+}
+
+.carga-stock-fila {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.5fr)
+    minmax(7rem, 0.8fr)
+    minmax(8rem, 0.9fr)
+    minmax(6.5rem, 0.7fr)
+    auto;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.carga-stock-producto {
+  min-width: 0;
+}
+
+.carga-stock-accion {
+  display: flex;
+  align-items: center;
+  padding-top: 1.3rem;
+}
+
+.carga-stock-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 900px) {
+  .carga-stock-fila {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .carga-stock-producto {
+    grid-column: 1 / -1;
+  }
+
+  .carga-stock-accion {
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .carga-stock-fila {
+    grid-template-columns: 1fr;
+  }
+}
+
+.inventario-subtitulo {
+  margin: 1.25rem 0 0.5rem;
+  color: var(--color-oscuro);
+  font-size: 1rem;
+}
+
+.inventario-alerta {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0.18rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.inventario-alerta.ok {
+  background-color: #d1fae5;
+  color: #047857;
+}
+
+.inventario-alerta.minimo {
+  background-color: #fef3c7;
+  color: var(--color-aviso);
+}
+
+.inventario-alerta.negativo {
+  background-color: #fee2e2;
+  color: var(--color-peligro);
+}
+
+.inventario-estado {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  border-radius: 9999px;
+  padding: 0.18rem 0.6rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.inventario-estado.activo {
+  background-color: #d1fae5;
+  color: #047857;
+}
+
+.inventario-estado.inactivo {
+  background-color: #fee2e2;
+  color: var(--color-peligro);
+}
+
+.inventario-negativo {
+  color: var(--color-peligro);
+  font-weight: 700;
+}
+
+.inventario-positivo {
+  color: #047857;
+  font-weight: 700;
+}
+
+.inventario-catalogos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.inventario-catalogo-panel {
+  border-radius: 1.4rem;
+  background-color: #ffffff;
+  padding: 1rem;
+  box-shadow: 0 10px 24px rgba(15, 42, 48, 0.06);
+}
+
+.inventario-catalogo-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.1);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.inventario-catalogo-cabecera h3 {
+  margin: 0;
+  color: var(--color-oscuro);
+  font-size: 1rem;
+}
+
+.inventario-catalogo-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 28rem;
+  overflow-y: auto;
+}
+
+.inventario-catalogo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.07);
+  padding: 0.45rem 0;
+  color: var(--color-oscuro);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 900px) {
+  .inventario-catalogos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .inventario-filtros {
+    align-items: stretch;
+  }
+
+  .inventario-filtros .campo-comercial {
+    width: 100%;
+  }
+
+  .inventario-tabs button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .inventario-modal-ancho {
+    max-width: 100%;
+  }
+}

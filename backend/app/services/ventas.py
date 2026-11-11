@@ -15,10 +15,10 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Max, Sum
 from django.utils import timezone
 
-from ..models import DetalleVenta, Producto, SeccionCaja, Venta
+from ..models import Cliente, DetalleVenta, Producto, SeccionCaja, Venta
 from . import stock as stock_service
 
 MINUTOS_PARA_CONFIRMAR = 30
@@ -34,14 +34,25 @@ def _decimal(valor):
 
 
 @transaction.atomic
-def crear_venta(seccion_caja, items, cliente=None):
+def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
     """Crea una venta pendiente y descuenta el stock.
 
     `items` es una lista de diccionarios:
     `{'producto': Producto|id, 'cantidad': Decimal|str, 'precio': opcional}`.
+
+    `cliente_venta` es el nombre libre del consumidor final. Solo se usa
+    cuando no hay un cliente registrado.
     """
     if not items:
         raise ValueError('La venta debe tener al menos un producto.')
+
+    cliente_venta = (cliente_venta or '').strip() or None
+    if cliente is not None:
+        if not isinstance(cliente, Cliente):
+            cliente = Cliente.objects.get(pk=cliente)
+        if not cliente.estado:
+            raise ValueError('El cliente esta inactivo.')
+        cliente_venta = None
 
     seccion_caja = (
         SeccionCaja.objects.select_for_update()
@@ -54,6 +65,7 @@ def crear_venta(seccion_caja, items, cliente=None):
     venta = Venta.objects.create(
         seccion_caja=seccion_caja,
         cliente=cliente,
+        cliente_venta=cliente_venta,
         estado=Venta.EstadoVenta.PENDIENTE,
         monto_venta=Decimal('0.00'),
     )
@@ -70,8 +82,17 @@ def crear_venta(seccion_caja, items, cliente=None):
 
         precio = item.get('precio')
         precio = producto.precio_unidad if precio is None else _decimal(precio)
-        if precio < 0:
-            raise ValueError('El precio no puede ser negativo.')
+        if precio <= 0:
+            raise ValueError('El precio de venta debe ser mayor que cero.')
+
+        costo = producto.proveedores_asociados.filter(
+            estado=True,
+        ).aggregate(maximo=Max('precio_lista'))['maximo']
+        if costo is not None and precio < costo:
+            raise ValueError(
+                f'El precio de venta de {producto} no puede ser menor al '
+                f'costo del proveedor ({costo}).'
+            )
         subtotal = (cantidad * precio).quantize(Decimal('0.01'))
 
         DetalleVenta.objects.create(
@@ -111,10 +132,12 @@ def confirmar_venta(venta):
         raise ValueError(
             'Registrá al menos un pago antes de confirmar la venta.'
         )
-    if pagado >= venta.monto_venta:
-        venta.estado = Venta.EstadoVenta.CONFIRMADA
-    else:
-        venta.estado = Venta.EstadoVenta.PARCIAL
+    if pagado < venta.monto_venta:
+        raise ValueError(
+            f'La venta debe estar totalmente paga para confirmarse. '
+            f'Saldo pendiente: {venta.monto_venta - pagado}.'
+        )
+    venta.estado = Venta.EstadoVenta.CONFIRMADA
     venta.save(update_fields=['estado'])
     return venta
 
@@ -139,7 +162,11 @@ def cancelar_venta(venta, motivo=''):
 
 
 def cancelar_ventas_vencidas(minutos=None):
-    """Cancela las ventas pendientes mas antiguas que `minutos`."""
+    """Cancela las ventas pendientes sin pagos mas antiguas que `minutos`.
+
+    Una venta pendiente que ya tiene un pago parcial no se cancela: sigue
+    pendiente hasta que el cajero complete el saldo y la confirme.
+    """
     minutos = _minutos_para_confirmar() if minutos is None else minutos
     limite = timezone.now() - timedelta(minutes=minutos)
     ventas = Venta.objects.filter(

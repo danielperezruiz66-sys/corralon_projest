@@ -1,35 +1,70 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { IconPlus } from '@tabler/icons-react'
+import useDebounce from '../../hooks/useDebounce'
 import { formatearMoneda, formatearNumero } from '../../utils/formato'
+import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 
 export default function SelectorProductos({
-  productos,
+  productos = [],
+  onBuscar = null,
   stocks = {},
   mostrarStock = false,
+  precios = null,
+  tituloPrecio = 'Precio',
   onAgregar,
 }) {
   const [texto, setTexto] = useState('')
   const [categoria, setCategoria] = useState('')
+  const [resultados, setResultados] = useState([])
+  const [cargando, setCargando] = useState(Boolean(onBuscar))
+  const busqueda = useDebounce(texto.trim(), 300)
+  const productosBase = onBuscar ? resultados : productos
+
+  useEffect(() => {
+    if (!onBuscar) {
+      return undefined
+    }
+    let vigente = true
+    onBuscar(busqueda)
+      .then((datos) => {
+        if (vigente) {
+          setResultados(datos)
+        }
+      })
+      .catch(() => {
+        if (vigente) {
+          setResultados([])
+        }
+      })
+      .finally(() => {
+        if (vigente) {
+          setCargando(false)
+        }
+      })
+    return () => {
+      vigente = false
+    }
+  }, [busqueda, onBuscar])
 
   const categorias = useMemo(() => {
     const mapa = new Map()
-    productos.forEach((producto) => {
+    productosBase.forEach((producto) => {
       mapa.set(producto.categoria, producto.categoria_detalle)
     })
     return [...mapa.entries()]
       .map(([id, nombre]) => ({ id: String(id), nombre }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre))
-  }, [productos])
+  }, [productosBase])
 
   const filtrados = useMemo(() => {
     const termino = texto.trim().toLowerCase()
-    return productos.filter((producto) => {
+    return productosBase.filter((producto) => {
       const coincideCategoria =
         !categoria || String(producto.categoria) === categoria
       if (!coincideCategoria) {
         return false
       }
-      if (!termino) {
+      if (onBuscar || !termino) {
         return true
       }
       return [
@@ -40,7 +75,7 @@ export default function SelectorProductos({
         producto.unidad_detalle,
       ].some((valor) => String(valor ?? '').toLowerCase().includes(termino))
     })
-  }, [productos, categoria, texto])
+  }, [productosBase, onBuscar, categoria, texto])
 
   return (
     <div className="selector-productos">
@@ -50,25 +85,24 @@ export default function SelectorProductos({
           <input
             type="search"
             value={texto}
-            onChange={(evento) => setTexto(evento.target.value)}
-            placeholder="Código, nombre, categoría, marca o unidad"
+            onChange={(evento) => {
+              setTexto(evento.target.value)
+              if (onBuscar) {
+                setCargando(true)
+              }
+            }}
+            placeholder="Código o nombre del producto"
           />
         </label>
 
-        <label className="campo-comercial">
-          <span>Categoría</span>
-          <select
-            value={categoria}
-            onChange={(evento) => setCategoria(evento.target.value)}
-          >
-            <option value="">Todas las categorías</option>
-            {categorias.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
+        <CampoSelectorBuscable
+          etiqueta="Categoría"
+          valor={categoria}
+          onCambiar={setCategoria}
+          opciones={categorias}
+          textoOpcion={(item) => item.nombre}
+          placeholder="Todas las categorías"
+        />
       </div>
 
       <div className="selector-lista">
@@ -79,13 +113,23 @@ export default function SelectorProductos({
               <th>Producto</th>
               <th>Categoría</th>
               <th>Unidad</th>
-              <th className="numero">Precio</th>
+              <th className="numero">{tituloPrecio}</th>
               {mostrarStock && <th className="numero">Stock</th>}
               <th />
             </tr>
           </thead>
           <tbody>
-            {filtrados.length === 0 && (
+            {cargando && filtrados.length === 0 && (
+              <tr>
+                <td
+                  colSpan={mostrarStock ? 7 : 6}
+                  className="comercial-vacio"
+                >
+                  Buscando productos…
+                </td>
+              </tr>
+            )}
+            {!cargando && filtrados.length === 0 && (
               <tr>
                 <td
                   colSpan={mostrarStock ? 7 : 6}
@@ -108,7 +152,11 @@ export default function SelectorProductos({
                   <td>{producto.categoria_detalle}</td>
                   <td>{producto.unidad_detalle}</td>
                   <td className="numero">
-                    {formatearMoneda(producto.precio_unidad)}
+                    {precios
+                      ? precios[producto.id] !== undefined
+                        ? formatearMoneda(precios[producto.id])
+                        : '—'
+                      : formatearMoneda(producto.precio_unidad)}
                   </td>
                   {mostrarStock && (
                     <td

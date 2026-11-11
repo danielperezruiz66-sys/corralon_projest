@@ -16,12 +16,14 @@ Los permisos de escritura se declaran por viewset en `roles_escritura`
 """
 
 import calendar
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.db.models import Count, F, Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
@@ -60,6 +62,7 @@ from .models import (
     Stock,
     Sucursal,
     SucursalXEmpleado,
+    TransferenciaStock,
     Ubicacion,
     Unidad,
     Usuario,
@@ -79,7 +82,67 @@ from .permissions import (
 from .services import caja as caja_service
 from .services import compras as compras_service
 from .services import pagos as pagos_service
+from .services import proveedores as proveedores_service
+from .services import stock as stock_service
 from .services import ventas as ventas_service
+
+
+def _fecha_de_param(valor, nombre):
+    """Convierte un parametro AAAA-MM-DD en fecha; error 400 si es invalido."""
+    try:
+        fecha = parse_date((valor or '').strip())
+    except ValueError:
+        fecha = None
+    if fecha is None:
+        raise ValidationError(
+            {nombre: 'Formato de fecha invalido. Use AAAA-MM-DD.'}
+        )
+    return fecha
+
+
+def _filtrar_por_fecha(queryset, parametros, campo):
+    """Filtra un DateTimeField por dia exacto o rango de dias inclusivo.
+
+    Los limites se calculan en la zona horaria local para que 'hoy' coincida
+    con el dia del corralon y no con el dia UTC.
+    """
+    fecha = (parametros.get('fecha') or '').strip()
+    desde = (parametros.get('fecha_desde') or '').strip()
+    hasta = (parametros.get('fecha_hasta') or '').strip()
+    zona = timezone.get_current_timezone()
+
+    def inicio_del_dia(valor, nombre):
+        dia = _fecha_de_param(valor, nombre)
+        return timezone.make_aware(datetime.combine(dia, time.min), zona)
+
+    if fecha:
+        inicio = inicio_del_dia(fecha, 'fecha')
+        return queryset.filter(
+            **{
+                f'{campo}__gte': inicio,
+                f'{campo}__lt': inicio + timedelta(days=1),
+            }
+        )
+
+    dia_desde = _fecha_de_param(desde, 'fecha_desde') if desde else None
+    dia_hasta = _fecha_de_param(hasta, 'fecha_hasta') if hasta else None
+    if dia_desde and dia_hasta and dia_desde > dia_hasta:
+        raise ValidationError(
+            {
+                'fecha_desde': (
+                    'La fecha desde no puede ser posterior a la fecha hasta.'
+                )
+            }
+        )
+    if dia_desde:
+        inicio = timezone.make_aware(datetime.combine(dia_desde, time.min), zona)
+        queryset = queryset.filter(**{f'{campo}__gte': inicio})
+    if dia_hasta:
+        inicio = timezone.make_aware(datetime.combine(dia_hasta, time.min), zona)
+        queryset = queryset.filter(
+            **{f'{campo}__lt': inicio + timedelta(days=1)}
+        )
+    return queryset
 
 
 # =============================================================================
@@ -91,6 +154,7 @@ from .services import ventas as ventas_service
 def perfil(request):
     """Datos del usuario autenticado y sus roles, para que el cliente arme el menu."""
     empleado = getattr(request.user, 'empleado', None)
+    codigos = codigos_activos(request.user)
     roles = []
     if empleado is not None:
         roles = [
@@ -104,6 +168,16 @@ def perfil(request):
                 rol__codigo__isnull=False,
             ).select_related('rol')
         ]
+
+    if request.user.is_superuser or 'AD' in codigos:
+        sucursales = Sucursal.objects.all()
+    elif empleado is not None:
+        sucursales = Sucursal.objects.filter(
+            empleados_asignados__empleado=empleado,
+            empleados_asignados__estado=True,
+        ).distinct()
+    else:
+        sucursales = Sucursal.objects.none()
 
     return Response(
         {
@@ -122,7 +196,15 @@ def perfil(request):
                 else None
             ),
             'roles': roles,
-            'codigos': sorted(str(codigo) for codigo in codigos_activos(request.user)),
+            'codigos': sorted(str(codigo) for codigo in codigos),
+            'sucursales': [
+                {
+                    'id': sucursal.id,
+                    'nombre': sucursal.nombre,
+                    'es_central': sucursal.es_central,
+                }
+                for sucursal in sucursales
+            ],
         }
     )
 
@@ -251,20 +333,37 @@ def dashboard(request):
         campo='monto_compra',
     )
 
-    # Ventas pendientes que vencen en los próximos 10 minutos (o ya vencidas
-    # y todavía no barridas).
-    por_vencer = ventas.filter(
-        estado=Venta.EstadoVenta.PENDIENTE,
-        fecha_venta__lte=ahora - timedelta(minutes=20),
+    # Ventas pendientes sin pagos: las que estan por vencer en los proximos
+    # 10 minutos y las que ya vencieron y esperan el barrido.
+    minutos_para_confirmar = getattr(
+        settings,
+        'VENTAS_MINUTOS_PARA_CONFIRMAR',
+        30,
     )
-    proxima_vencer = por_vencer.order_by('fecha_venta').first()
+    pendientes_sin_pago = ventas.filter(
+        estado=Venta.EstadoVenta.PENDIENTE,
+        pagos__isnull=True,
+    )
+    por_vencer_qs = pendientes_sin_pago.filter(
+        fecha_venta__gt=ahora - timedelta(minutes=minutos_para_confirmar),
+        fecha_venta__lte=ahora
+        - timedelta(minutes=max(minutos_para_confirmar - 10, 0)),
+    ).order_by('fecha_venta')
+    vencidas_qs = pendientes_sin_pago.filter(
+        fecha_venta__lte=ahora - timedelta(minutes=minutos_para_confirmar),
+    ).order_by('fecha_venta')
+    proxima_vencer = por_vencer_qs.first()
     minutos_restantes = None
     if proxima_vencer is not None:
         transcurridos = (ahora - proxima_vencer.fecha_venta).total_seconds() / 60
-        minutos_restantes = max(0, round(30 - transcurridos))
+        minutos_restantes = max(0, round(minutos_para_confirmar - transcurridos))
 
-    stock_bajo_qs = stocks.filter(cantidad__lte=F('cant_min'))
+    stock_bajo_qs = stocks.filter(
+        cantidad__gte=0,
+        cantidad__lte=F('cant_min'),
+    )
     stock_negativo_qs = stocks.filter(cantidad__lt=0)
+    stock_critico_qs = stocks.filter(cantidad__lte=F('cant_min'))
     compras_pendientes_qs = compras.filter(fecha_recepcion__isnull=True)
     cajas_abiertas_qs = secciones.filter(
         estado=SeccionCaja.EstadoSeccion.ABIERTA
@@ -273,7 +372,6 @@ def dashboard(request):
     estados_venta_valida = [
         Venta.EstadoVenta.PENDIENTE,
         Venta.EstadoVenta.CONFIRMADA,
-        Venta.EstadoVenta.PARCIAL,
     ]
     filtro_ventas = Q(ventas__estado__in=estados_venta_valida)
     cajas_abiertas = []
@@ -301,6 +399,33 @@ def dashboard(request):
             }
         )
 
+    ventas_por_vencer = [
+        {
+            'id': venta.id,
+            'fecha': venta.fecha_venta.isoformat(),
+            'cliente': (
+                str(venta.cliente)
+                if venta.cliente
+                else venta.cliente_venta or 'Consumidor final'
+            ),
+            'monto': str(venta.monto_venta),
+            'seccion_caja': venta.seccion_caja_id,
+            'seccion_caja_detalle': str(venta.seccion_caja),
+            'sucursal': str(venta.seccion_caja.caja.sucursal),
+            'minutos_restantes': max(
+                0,
+                round(
+                    minutos_para_confirmar
+                    - (ahora - venta.fecha_venta).total_seconds() / 60
+                ),
+            ),
+        }
+        for venta in por_vencer_qs.select_related(
+            'cliente',
+            'seccion_caja__caja__sucursal',
+        )[:5]
+    ]
+
     compras_por_recibir = [
         {
             'id': compra.id,
@@ -310,6 +435,13 @@ def dashboard(request):
             'dias_esperando': max(0, (ahora - compra.fecha_compra).days),
             'estado': compra.estado,
             'estado_detalle': compra.get_estado_display(),
+            'estado_entrega': compra.estado_entrega,
+            'estado_entrega_detalle': compra.get_estado_entrega_display(),
+            'fecha_estimada_llegada': (
+                compra.fecha_estimada_llegada.isoformat()
+                if compra.fecha_estimada_llegada
+                else None
+            ),
         }
         for compra in compras_pendientes_qs.select_related('proveedor').order_by(
             'fecha_compra'
@@ -351,7 +483,11 @@ def dashboard(request):
         {
             'id': venta.id,
             'fecha': venta.fecha_venta.isoformat(),
-            'cliente': str(venta.cliente) if venta.cliente else 'Consumidor final',
+            'cliente': (
+                str(venta.cliente)
+                if venta.cliente
+                else venta.cliente_venta or 'Consumidor final'
+            ),
             'monto': str(venta.monto_venta),
             'estado': venta.estado,
             'estado_detalle': venta.get_estado_display(),
@@ -370,9 +506,9 @@ def dashboard(request):
             'cant_min': str(stock.cant_min),
             'alerta': 'NEGATIVO' if stock.cantidad < 0 else 'MINIMO',
         }
-        for stock in stock_bajo_qs.select_related('producto', 'sucursal').order_by(
-            'cantidad'
-        )[:5]
+        for stock in stock_critico_qs.select_related(
+            'producto', 'sucursal'
+        ).order_by('cantidad')[:5]
     ]
 
     empleados_qs = Empleado.objects.filter(
@@ -414,7 +550,8 @@ def dashboard(request):
                 },
                 'pendientes': {
                     **pendientes,
-                    'por_vencer': por_vencer.count(),
+                    'por_vencer': por_vencer_qs.count(),
+                    'vencidas': vencidas_qs.count(),
                     'minutos_restantes': minutos_restantes,
                 },
             },
@@ -433,7 +570,8 @@ def dashboard(request):
                 'proveedores_activos': proveedores_qs.count(),
             },
             'alertas': {
-                'ventas_por_vencer': por_vencer.count(),
+                'ventas_por_vencer': por_vencer_qs.count(),
+                'ventas_vencidas': vencidas_qs.count(),
                 'minutos_restantes': minutos_restantes,
                 'stock_negativo': stock_negativo_qs.count(),
                 'stock_bajo': stock_bajo_qs.count(),
@@ -445,6 +583,7 @@ def dashboard(request):
             ),
             'ventas_por_dia': serie,
             'ventas_recientes': recientes,
+            'ventas_por_vencer': ventas_por_vencer,
             'stock_critico': criticos,
             'compras_por_recibir': compras_por_recibir,
             'cajas_abiertas': cajas_abiertas,
@@ -525,7 +664,7 @@ class SucursalViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.SucursalSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = GESTION
-    filterset_fields = ['empresa', 'ubicacion']
+    filterset_fields = ['empresa', 'ubicacion', 'es_central']
     search_fields = ['nombre', 'empresa__nombre', 'ubicacion__localidad__nombre']
     ordering_fields = ['nombre']
 
@@ -603,6 +742,13 @@ class SeccionCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
     filterset_fields = ['caja', 'empleado', 'estado']
     search_fields = ['caja__sucursal__nombre', 'empleado__apellido', 'empleado__nombre']
     ordering_fields = ['fecha_hora_apertura', 'monto_inicial']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        sucursal = self.request.query_params.get('sucursal', '').strip()
+        if sucursal:
+            queryset = queryset.filter(caja__sucursal_id=sucursal)
+        return queryset
 
     def get_permissions(self):
         if self.action == 'auditar':
@@ -703,13 +849,29 @@ class UnidadViewSet(viewsets.ModelViewSet):
 
 
 class ProductoViewSet(viewsets.ModelViewSet):
-    queryset = Producto.objects.select_related('categoria', 'marca', 'unidad')
+    queryset = (
+        Producto.objects.select_related('categoria', 'marca', 'unidad')
+        .prefetch_related(
+            'sucursales_asociadas__sucursal',
+            'proveedores_asociados',
+        )
+    )
     serializer_class = serializers.ProductoSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = GESTION
     filterset_fields = ['categoria', 'marca', 'unidad']
     search_fields = ['codigo', 'nombre', 'descripcion']
     ordering_fields = ['nombre', 'codigo', 'precio_unidad']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        sucursal = self.request.query_params.get('sucursal', '').strip()
+        if sucursal:
+            queryset = queryset.filter(
+                sucursales_asociadas__sucursal_id=sucursal,
+                sucursales_asociadas__estado=True,
+            ).distinct()
+        return queryset
 
 
 class ProductoXSucursalViewSet(viewsets.ModelViewSet):
@@ -736,13 +898,90 @@ class DepositoViewSet(viewsets.ModelViewSet):
     ordering_fields = ['nombre']
 
 
-class StockViewSet(viewsets.ReadOnlyModelViewSet):
+class StockViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
     queryset = Stock.objects.select_related('producto', 'sucursal')
     serializer_class = serializers.StockSerializer
     permission_classes = [PermisoPorRol]
+    roles_escritura = (ADMIN, GERENTE, DEPOSITO)
     filterset_fields = ['producto', 'sucursal']
     search_fields = ['producto__nombre', 'producto__codigo', 'sucursal__nombre']
     ordering_fields = ['producto__nombre', 'cantidad']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        alerta = self.request.query_params.get('alerta', '').strip()
+        if alerta == 'negativo':
+            queryset = queryset.filter(cantidad__lt=0)
+        elif alerta == 'minimo':
+            queryset = queryset.filter(
+                cantidad__gte=0,
+                cantidad__lte=F('cant_min'),
+            )
+        elif alerta == 'ok':
+            queryset = queryset.filter(cantidad__gt=F('cant_min'))
+        return queryset
+
+    def get_serializer_class(self):
+        if self.action in ('update', 'partial_update'):
+            return serializers.StockConfigSerializer
+        if self.action == 'ajustar':
+            return serializers.AjusteStockSerializer
+        return super().get_serializer_class()
+
+    def update(self, request, *args, **kwargs):
+        parcial = kwargs.pop('partial', False)
+        stock = self.get_object()
+        entrada = self.get_serializer(
+            stock,
+            data=request.data,
+            partial=parcial,
+        )
+        entrada.is_valid(raise_exception=True)
+        entrada.save()
+        salida = serializers.StockSerializer(
+            stock,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
+
+    @action(detail=True, methods=['post'])
+    def ajustar(self, request, pk=None):
+        entrada = self.get_serializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        stock = stock_service.ajustar_stock(
+            self.get_object(),
+            entrada.validated_data['cantidad'],
+            entrada.validated_data.get('deposito'),
+            entrada.validated_data['motivo'],
+        )
+        salida = serializers.StockSerializer(
+            stock,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
+
+    @action(detail=False, methods=['post'], url_path='carga-masiva')
+    def carga_masiva(self, request):
+        entrada = serializers.CargaStockSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        datos = entrada.validated_data
+        stocks = stock_service.cargar_stock_sucursal(
+            datos['sucursal'],
+            datos['deposito'],
+            datos['items'],
+            datos['motivo'],
+        )
+        salida = serializers.StockSerializer(
+            stocks,
+            many=True,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
 
 
 class DetalleStockViewSet(viewsets.ReadOnlyModelViewSet):
@@ -771,19 +1010,146 @@ class MovimientoStockViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ['referencia', 'stock__producto__nombre']
     ordering_fields = ['fecha', 'cantidad']
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        sucursal = self.request.query_params.get('sucursal', '').strip()
+        producto = self.request.query_params.get('producto', '').strip()
+        if sucursal:
+            queryset = queryset.filter(stock__sucursal_id=sucursal)
+        if producto:
+            queryset = queryset.filter(stock__producto_id=producto)
+        return _filtrar_por_fecha(
+            queryset,
+            self.request.query_params,
+            'fecha',
+        )
+
+
+class TransferenciaStockViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = TransferenciaStock.objects.select_related(
+        'producto',
+        'deposito_origen__sucursal',
+        'deposito_destino__sucursal',
+        'stock_origen',
+    )
+    serializer_class = serializers.TransferenciaStockSerializer
+    permission_classes = [PermisoPorRol]
+    roles_escritura = (ADMIN, GERENTE, DEPOSITO)
+    filterset_fields = [
+        'producto',
+        'deposito_origen',
+        'deposito_destino',
+        'estado',
+    ]
+    search_fields = [
+        'producto__nombre',
+        'producto__codigo',
+        'motivo',
+    ]
+    ordering_fields = ['fecha_creacion', 'cantidad']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        sucursal = self.request.query_params.get('sucursal', '').strip()
+        if sucursal:
+            queryset = queryset.filter(
+                Q(deposito_origen__sucursal_id=sucursal)
+                | Q(deposito_destino__sucursal_id=sucursal)
+            ).distinct()
+        return queryset
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return serializers.TransferenciaStockCreateSerializer
+        return super().get_serializer_class()
+
+    def create(self, request, *args, **kwargs):
+        entrada = self.get_serializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        datos = entrada.validated_data
+
+        transferencia = stock_service.crear_transferencia(
+            datos['producto'],
+            datos['deposito_origen'],
+            datos['deposito_destino'],
+            datos['cantidad'],
+            datos.get('lote') or None,
+            datos.get('motivo') or '',
+        )
+        salida = serializers.TransferenciaStockSerializer(
+            transferencia,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def recibir(self, request, pk=None):
+        transferencia = stock_service.recibir_transferencia(
+            self.get_object(),
+        )
+        salida = serializers.TransferenciaStockSerializer(
+            transferencia,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
+
+    @action(detail=True, methods=['post'])
+    def cancelar(self, request, pk=None):
+        transferencia = stock_service.cancelar_transferencia(
+            self.get_object(),
+        )
+        salida = serializers.TransferenciaStockSerializer(
+            transferencia,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
+
 
 # =============================================================================
 # PROVEEDORES
 # =============================================================================
 
 class ProveedorViewSet(viewsets.ModelViewSet):
-    queryset = Proveedor.objects.all()
+    queryset = Proveedor.objects.prefetch_related(
+        'sucursales_asociadas__sucursal',
+    )
     serializer_class = serializers.ProveedorSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, DEPOSITO)
     filterset_fields = ['estado_prov']
     search_fields = ['cuit', 'nombre', 'razon_social']
     ordering_fields = ['razon_social', 'nombre']
+
+    @action(detail=True, methods=['post'], url_path='productos')
+    def productos(self, request, pk=None):
+        proveedor = self.get_object()
+        entrada = serializers.ProductoXProveedorBulkSerializer(
+            data=request.data,
+        )
+        entrada.is_valid(raise_exception=True)
+        asociaciones = proveedores_service.asociar_productos(
+            proveedor,
+            entrada.validated_data['items'],
+        )
+        asociaciones = ProductoXProveedor.objects.filter(
+            id__in=[asociacion.id for asociacion in asociaciones],
+        ).select_related(
+            'producto__categoria',
+            'producto__marca',
+            'producto__unidad',
+            'proveedor',
+        ).order_by('id')
+        salida = serializers.ProductoXProveedorSerializer(
+            asociaciones,
+            many=True,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
 
 
 class ProveedorXSucursalViewSet(viewsets.ModelViewSet):
@@ -797,7 +1163,12 @@ class ProveedorXSucursalViewSet(viewsets.ModelViewSet):
 
 
 class ProductoXProveedorViewSet(viewsets.ModelViewSet):
-    queryset = ProductoXProveedor.objects.select_related('producto', 'proveedor')
+    queryset = ProductoXProveedor.objects.select_related(
+        'producto__categoria',
+        'producto__marca',
+        'producto__unidad',
+        'proveedor',
+    )
     serializer_class = serializers.ProductoXProveedorSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, DEPOSITO)
@@ -834,8 +1205,85 @@ class ClienteViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.ClienteSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, CAJERO, VENDEDOR)
-    search_fields = ['dni', 'razon_social', 'nombre', 'apellido', 'email']
-    ordering_fields = ['apellido', 'nombre', 'razon_social']
+    filterset_fields = ['estado', 'condicion_iva', 'tipo_documento']
+    search_fields = [
+        'dni',
+        'razon_social',
+        'nombre',
+        'apellido',
+        'email',
+        'telefono',
+        'direccion',
+    ]
+    ordering_fields = ['apellido', 'nombre', 'razon_social', 'estado']
+
+    def get_serializer_class(self):
+        if self.action == 'estado':
+            return serializers.ClienteEstadoSerializer
+        return super().get_serializer_class()
+
+    @action(detail=True, methods=['patch'])
+    def estado(self, request, pk=None):
+        entrada = self.get_serializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        cliente = self.get_object()
+        cliente.estado = entrada.validated_data['estado']
+        cliente.save(update_fields=['estado'])
+        salida = serializers.ClienteSerializer(
+            cliente,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
+
+    @action(detail=True, methods=['get'])
+    def resumen(self, request, pk=None):
+        cliente = self.get_object()
+        ventas = list(
+            cliente.ventas.exclude(estado=Venta.EstadoVenta.ANULADA)
+            .prefetch_related('pagos')
+            .order_by('-fecha_venta')
+        )
+
+        total_comprado = Decimal('0.00')
+        total_pagado = Decimal('0.00')
+        saldo_pendiente = Decimal('0.00')
+        recientes = []
+
+        for venta in ventas:
+            pagado = sum(
+                (pago.monto_pagado for pago in venta.pagos.all()),
+                Decimal('0.00'),
+            )
+            saldo = max(Decimal('0.00'), venta.monto_venta - pagado)
+            total_comprado += venta.monto_venta
+            total_pagado += pagado
+            saldo_pendiente += saldo
+
+            if len(recientes) < 8:
+                recientes.append(
+                    {
+                        'id': venta.id,
+                        'fecha_venta': venta.fecha_venta.isoformat(),
+                        'monto_venta': str(venta.monto_venta),
+                        'estado': venta.estado,
+                        'estado_detalle': venta.get_estado_display(),
+                        'saldo': str(saldo),
+                    }
+                )
+
+        return Response(
+            {
+                'cliente': cliente.id,
+                'cantidad_ventas': len(ventas),
+                'total_comprado': str(total_comprado),
+                'total_pagado': str(total_pagado),
+                'saldo_pendiente': str(saldo_pendiente),
+                'ultima_venta': (
+                    ventas[0].fecha_venta.isoformat() if ventas else None
+                ),
+                'ventas_recientes': recientes,
+            }
+        )
 
 
 class VentaViewSet(
@@ -863,21 +1311,58 @@ class VentaViewSet(
                 | Q(cliente__nombre__icontains=search)
                 | Q(cliente__apellido__icontains=search)
                 | Q(cliente__dni__icontains=search)
+                | Q(cliente_venta__icontains=search)
             )
             if search.isdigit():
                 numero = int(search)
                 filtro |= Q(id=numero) | Q(seccion_caja_id=numero)
             queryset = queryset.filter(filtro)
-        return queryset
+
+        sucursal = self.request.query_params.get('sucursal', '').strip()
+        if sucursal:
+            queryset = queryset.filter(
+                seccion_caja__caja__sucursal_id=sucursal,
+            )
+
+        alerta = self.request.query_params.get('alerta', '').strip()
+        if alerta in ('por_vencer', 'vencida'):
+            minutos = getattr(
+                settings,
+                'VENTAS_MINUTOS_PARA_CONFIRMAR',
+                30,
+            )
+            ahora = timezone.now()
+            queryset = queryset.filter(
+                estado=Venta.EstadoVenta.PENDIENTE,
+                pagos__isnull=True,
+            )
+            if alerta == 'por_vencer':
+                queryset = queryset.filter(
+                    fecha_venta__gt=ahora - timedelta(minutes=minutos),
+                    fecha_venta__lte=ahora
+                    - timedelta(minutes=max(minutos - 10, 0)),
+                )
+            else:
+                queryset = queryset.filter(
+                    fecha_venta__lte=ahora - timedelta(minutes=minutos),
+                )
+
+        return _filtrar_por_fecha(
+            queryset,
+            self.request.query_params,
+            'fecha_venta',
+        )
 
     def get_permissions(self):
-        if self.action == 'cancelar':
+        if self.action in ('confirmar', 'cancelar', 'cobrar'):
             self.roles_escritura = (ADMIN, GERENTE, CAJERO)
         return super().get_permissions()
 
     def get_serializer_class(self):
         if self.action == 'create':
             return serializers.VentaCreateSerializer
+        if self.action == 'cobrar':
+            return serializers.CobroVentaSerializer
         return super().get_serializer_class()
 
     def create(self, request, *args, **kwargs):
@@ -889,6 +1374,7 @@ class VentaViewSet(
             datos['seccion_caja'],
             datos['items'],
             datos.get('cliente'),
+            datos.get('cliente_venta'),
         )
         salida = serializers.VentaSerializer(
             venta,
@@ -899,6 +1385,23 @@ class VentaViewSet(
     @action(detail=True, methods=['post'])
     def confirmar(self, request, pk=None):
         venta = ventas_service.confirmar_venta(self.get_object())
+        salida = serializers.VentaSerializer(
+            venta,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
+
+    @action(detail=True, methods=['post'])
+    def cobrar(self, request, pk=None):
+        entrada = self.get_serializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        datos = entrada.validated_data
+
+        _, venta = pagos_service.registrar_pagos_venta(
+            self.get_object(),
+            datos['pagos'],
+            datos.get('confirmar', False),
+        )
         salida = serializers.VentaSerializer(
             venta,
             context=self.get_serializer_context(),
@@ -979,7 +1482,7 @@ class CompraViewSet(
     serializer_class = serializers.CompraSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, DEPOSITO)
-    filterset_fields = ['seccion_caja', 'proveedor', 'estado']
+    filterset_fields = ['seccion_caja', 'proveedor', 'estado', 'estado_entrega']
     ordering_fields = ['fecha_compra', 'monto_compra']
 
     def get_queryset(self):
@@ -996,14 +1499,33 @@ class CompraViewSet(
                 filtro |= Q(id=numero) | Q(seccion_caja_id=numero)
             queryset = queryset.filter(filtro)
 
+        sucursal = self.request.query_params.get('sucursal', '').strip()
+        if sucursal:
+            queryset = queryset.filter(
+                seccion_caja__caja__sucursal_id=sucursal,
+            )
+
         por_recibir = self.request.query_params.get('por_recibir')
         if por_recibir in ('1', 'true', 'True'):
-            queryset = queryset.filter(fecha_recepcion__isnull=True)
-        return queryset
+            queryset = queryset.filter(
+                fecha_recepcion__isnull=True,
+            ).exclude(estado=Compra.EstadoCompra.ANULADA)
+
+        return _filtrar_por_fecha(
+            queryset,
+            self.request.query_params,
+            'fecha_compra',
+        )
 
     def get_serializer_class(self):
         if self.action == 'create':
             return serializers.CompraCreateSerializer
+        if self.action == 'en_camino':
+            return serializers.CompraEnCaminoSerializer
+        if self.action == 'recibir':
+            return serializers.CompraRecepcionSerializer
+        if self.action == 'pagar':
+            return serializers.PagoCompraMultipleSerializer
         return super().get_serializer_class()
 
     def create(self, request, *args, **kwargs):
@@ -1015,6 +1537,8 @@ class CompraViewSet(
             datos['seccion_caja'],
             datos['proveedor'],
             datos['items'],
+            datos.get('estado_entrega'),
+            datos.get('fecha_estimada_llegada'),
         )
         salida = serializers.CompraSerializer(
             compra,
@@ -1023,8 +1547,60 @@ class CompraViewSet(
         return Response(salida.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
+    def pagar(self, request, pk=None):
+        entrada = self.get_serializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+
+        _, compra = pagos_service.registrar_pagos_compra(
+            self.get_object(),
+            entrada.validated_data['pagos'],
+        )
+        salida = serializers.CompraSerializer(
+            compra,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
+
+    @action(detail=True, methods=['post'])
+    def anular(self, request, pk=None):
+        entrada = serializers.AnularCompraSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        compra = compras_service.anular_compra(
+            self.get_object(),
+            entrada.validated_data['motivo'],
+        )
+        salida = serializers.CompraSerializer(
+            compra,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
+
+    @action(detail=True, methods=['post'])
     def recibir(self, request, pk=None):
-        compra = compras_service.recibir_compra(self.get_object())
+        entrada = self.get_serializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        compra = compras_service.recibir_compra(
+            self.get_object(),
+            entrada.validated_data.get('deposito'),
+        )
+        salida = serializers.CompraSerializer(
+            compra,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
+
+    @action(detail=True, methods=['post'], url_path='en-camino')
+    def en_camino(self, request, pk=None):
+        compra = self.get_object()
+        entrada = serializers.CompraEnCaminoSerializer(
+            data=request.data,
+            context={'compra': compra},
+        )
+        entrada.is_valid(raise_exception=True)
+        compra = compras_service.marcar_en_camino(
+            compra,
+            entrada.validated_data.get('fecha_estimada_llegada'),
+        )
         salida = serializers.CompraSerializer(
             compra,
             context=self.get_serializer_context(),

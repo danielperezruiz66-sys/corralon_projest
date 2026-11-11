@@ -19,6 +19,7 @@ from app.models import (
     MetodoPago,
     Pais,
     Producto,
+    ProductoXProveedor,
     Provincia,
     Proveedor,
     Rol,
@@ -213,16 +214,37 @@ class BaseCorralonTestCase(APITestCase):
             format='json',
         )
 
-    def crear_compra(self, user=None, cantidad='10.000'):
+    def crear_compra(
+        self,
+        user=None,
+        cantidad='10.000',
+        precio='100.00',
+        producto=None,
+        proveedor=None,
+        **extra,
+    ):
+        producto = producto or self.producto
+        proveedor = proveedor or self.proveedor
+        ProductoXProveedor.objects.get_or_create(
+            producto=producto,
+            proveedor=proveedor,
+            defaults={'precio_lista': Decimal('80.00')},
+        )
         self.autenticar(user or self.user_deposito)
+        payload = {
+            'seccion_caja': self.seccion.id,
+            'proveedor': proveedor.id,
+            'items': [
+                {
+                    'producto': producto.id,
+                    'cantidad': cantidad,
+                    'precio': precio,
+                }
+            ],
+        }
+        payload.update(extra)
         return self.client.post(
             '/api/compras/',
-            {
-                'seccion_caja': self.seccion.id,
-                'proveedor': self.proveedor.id,
-                'items': [
-                    {'producto': self.producto.id, 'cantidad': cantidad}
-                ],
-            },
+            payload,
             format='json',
         )

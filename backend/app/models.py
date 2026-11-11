@@ -1,5 +1,7 @@
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
 
@@ -118,12 +120,23 @@ class Sucursal(models.Model):
     hora_c = models.TimeField(null=True, blank=True)
     contacto = models.CharField(max_length=30, null=True, blank=True)
     email_suc = models.EmailField(max_length=80, null=True, blank=True)
+    es_central = models.BooleanField(
+        default=False,
+        help_text='Sucursal principal de la empresa; recibe las compras por defecto.',
+    )
 
     class Meta:
         db_table = 'SUCURSALES'
         ordering = ['nombre']
         verbose_name = 'Sucursal'
         verbose_name_plural = 'Sucursales'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['empresa'],
+                condition=models.Q(es_central=True),
+                name='una_sucursal_central_por_empresa',
+            ),
+        ]
 
     def __str__(self):
         return self.nombre
@@ -721,14 +734,46 @@ class MetodoPago(models.Model):
 # =============================================================================
 
 class Cliente(models.Model):
+    class TipoDocumento(models.TextChoices):
+        DNI = 'DNI', 'DNI'
+        CUIT = 'CUIT', 'CUIT'
+        CUIL = 'CUIL', 'CUIL'
+        PASAPORTE = 'PAS', 'Pasaporte'
+        OTRO = 'OTRO', 'Otro'
+
+    class CondicionIVA(models.TextChoices):
+        RESPONSABLE_INSCRIPTO = 'RI', 'Responsable Inscripto'
+        MONOTRIBUTISTA = 'MT', 'Monotributista'
+        CONSUMIDOR_FINAL = 'CF', 'Consumidor Final'
+        EXENTO = 'EX', 'Exento'
+        NO_CATEGORIZADO = 'NC', 'No Categorizado'
+
     dni = models.CharField(max_length=15, unique=True, null=True, blank=True)
+    tipo_documento = models.CharField(
+        max_length=5,
+        choices=TipoDocumento.choices,
+        null=True,
+        blank=True,
+    )
     razon_social = models.CharField(max_length=100, null=True, blank=True)
     nombre = models.CharField(max_length=50, null=True, blank=True)
     apellido = models.CharField(max_length=50, null=True, blank=True)
     email = models.EmailField(max_length=80, null=True, blank=True)
     telefono = models.CharField(max_length=20, null=True, blank=True)
     direccion = models.CharField(max_length=120, null=True, blank=True)
-    condicion_iva = models.CharField(max_length=30, null=True, blank=True)
+    condicion_iva = models.CharField(
+        max_length=30,
+        choices=CondicionIVA.choices,
+        default=CondicionIVA.CONSUMIDOR_FINAL,
+        null=True,
+        blank=True,
+    )
+    ingresos_brutos = models.CharField(max_length=20, null=True, blank=True)
+    notas = models.TextField(null=True, blank=True)
+    estado = models.BooleanField(
+        default=True,
+        help_text='Indica si el cliente esta activo para operar.',
+    )
 
     history = HistoricalRecords()
 
@@ -746,7 +791,6 @@ class Venta(models.Model):
     class EstadoVenta(models.TextChoices):
         PENDIENTE = 'PE', 'Pendiente'
         CONFIRMADA = 'CO', 'Confirmada'
-        PARCIAL = 'PC', 'Parcial'
         ANULADA = 'AN', 'Anulada'
 
     seccion_caja = models.ForeignKey(
@@ -760,6 +804,12 @@ class Venta(models.Model):
         null=True,
         blank=True,
         related_name='ventas',
+    )
+    cliente_venta = models.CharField(
+        max_length=120,
+        null=True,
+        blank=True,
+        help_text='Nombre del consumidor final cuando no se registra un cliente.',
     )
     fecha_venta = models.DateTimeField(auto_now_add=True)
     monto_venta = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -872,6 +922,11 @@ class Compra(models.Model):
         PARCIAL = 'PC', 'Parcial'
         ANULADA = 'AN', 'Anulada'
 
+    class EstadoEntrega(models.TextChoices):
+        PENDIENTE = 'PE', 'Pendiente de recepcion'
+        EN_CAMINO = 'EC', 'En camino'
+        RECIBIDA = 'RE', 'Recibida'
+
     seccion_caja = models.ForeignKey(
         SeccionCaja,
         on_delete=models.PROTECT,
@@ -892,11 +947,27 @@ class Compra(models.Model):
         blank=True,
         help_text='Cuando se recibio la mercaderia y se repuso el stock.',
     )
+    estado_entrega = models.CharField(
+        max_length=2,
+        choices=EstadoEntrega.choices,
+        default=EstadoEntrega.PENDIENTE,
+        help_text='Situacion logistica de la mercaderia.',
+    )
+    fecha_estimada_llegada = models.DateField(
+        null=True,
+        blank=True,
+        help_text='Fecha estimada de llegada cuando la compra esta en camino.',
+    )
     monto_compra = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     estado = models.CharField(
         max_length=2,
         choices=EstadoCompra.choices,
         default=EstadoCompra.PENDIENTE,
+    )
+    motivo_cancelacion = models.TextField(
+        blank=True,
+        default='',
+        help_text='Motivo obligatorio al anular la compra.',
     )
 
     history = HistoricalRecords()
@@ -909,6 +980,25 @@ class Compra(models.Model):
 
     def __str__(self):
         return f'Compra {self.pk} - {self.monto_compra}'
+
+    def clean(self):
+        super().clean()
+        if self.fecha_estimada_llegada is None:
+            return
+        fecha_compra = (
+            timezone.localtime(self.fecha_compra).date()
+            if self.fecha_compra
+            else timezone.localdate()
+        )
+        if self.fecha_estimada_llegada < fecha_compra:
+            raise ValidationError(
+                {
+                    'fecha_estimada_llegada': (
+                        'La fecha estimada de llegada no puede ser anterior '
+                        'a la fecha de compra.'
+                    )
+                }
+            )
 
 
 class DetalleCompra(models.Model):
@@ -971,6 +1061,7 @@ class MovimientoStock(models.Model):
         CANCELACION = 'CA', 'Cancelacion de venta'
         COMPRA = 'CO', 'Compra'
         AJUSTE = 'AJ', 'Ajuste'
+        TRANSFERENCIA = 'TR', 'Transferencia'
 
     stock = models.ForeignKey(
         Stock,
@@ -1013,3 +1104,56 @@ class MovimientoStock(models.Model):
 
     def __str__(self):
         return f'{self.get_tipo_display()} {self.cantidad} - {self.stock}'
+
+
+class TransferenciaStock(models.Model):
+    class EstadoTransferencia(models.TextChoices):
+        EN_TRANSITO = 'ET', 'En transito'
+        RECIBIDA = 'RE', 'Recibida'
+        CANCELADA = 'CA', 'Cancelada'
+
+    producto = models.ForeignKey(
+        Producto,
+        on_delete=models.PROTECT,
+        related_name='transferencias_stock',
+    )
+    stock_origen = models.ForeignKey(
+        Stock,
+        on_delete=models.PROTECT,
+        related_name='transferencias_origen',
+    )
+    deposito_origen = models.ForeignKey(
+        Deposito,
+        on_delete=models.PROTECT,
+        related_name='transferencias_origen',
+    )
+    deposito_destino = models.ForeignKey(
+        Deposito,
+        on_delete=models.PROTECT,
+        related_name='transferencias_destino',
+    )
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3)
+    lote = models.CharField(max_length=30, null=True, blank=True)
+    estado = models.CharField(
+        max_length=2,
+        choices=EstadoTransferencia.choices,
+        default=EstadoTransferencia.EN_TRANSITO,
+    )
+    motivo = models.CharField(max_length=200, blank=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_recepcion = models.DateTimeField(null=True, blank=True)
+    fecha_cancelacion = models.DateTimeField(null=True, blank=True)
+
+    history = HistoricalRecords()
+
+    class Meta:
+        db_table = 'TRANSFERENCIAS_STOCK'
+        ordering = ['-fecha_creacion']
+        verbose_name = 'Transferencia de Stock'
+        verbose_name_plural = 'Transferencias de Stock'
+
+    def __str__(self):
+        return (
+            f'{self.producto} · {self.deposito_origen} → '
+            f'{self.deposito_destino}'
+        )

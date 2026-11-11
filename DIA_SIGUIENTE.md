@@ -1,119 +1,112 @@
 # Pendientes
 
-> Se reescribe al cerrar cada sesión. Solo contiene lo pendiente de la sesión
-> anterior; lo terminado o descartado se borra. No es un historial.
-> Contexto del proyecto: ver `AGENTS.md`.
+> Solo lo pendiente al cerrar la sesión anterior. Lo terminado o descartado se
+> borra. Contexto del proyecto: `AGENTS.md`.
 
-**Cerrado el:** 2026-11-04
+**Cerrado el:** 2026-11-11
 
-## 1. Frontend — sección Comercial
+**Empezar por:** probar en navegador Ventas, Compras, Clientes, Inventario y
+Proveedores; si todo está bien, empezar un módulo nuevo.
 
-**Hecho en esta sesión**
+## 1. QA en navegador
 
-- **Ventas**:
-  - listado con búsqueda por **N.º de venta, cliente, DNI o sección de caja**,
-    filtros por estado y paginación;
-  - **cuatro estados**: Pendiente, Parcial, Confirmada y Anulada; se eliminó
-    Pagada de ventas;
-  - el pago deja la venta pendiente hasta que el cajero la confirma. Al
-    confirmar queda Parcial o Confirmada según el total cobrado;
-  - acción **Cobrar** en la lista y en el detalle: elige método de pago y monto,
-    registra el pago y confirma la venta;
-  - la venta pendiente sin pagos se auto-anula a los 30 minutos; el cajero
-    también puede anularla manualmente;
-  - detalle de la venta con productos, totales y pagos registrados;
-  - alta de venta con sección de caja, cliente y detalle de productos; el botón
-    dice **Crear venta**;
-  - **Generar presupuesto**: arma un PDF imprimible con el borrador actual,
-    sin guardar la venta ni descontar stock.
-- **Compras**:
-  - listado con búsqueda por **N.º de compra, proveedor, CUIT o sección de
-    caja**, filtros por estado y “Por recibir”;
-  - detalle de la compra;
-  - alta de compra sin reponer stock;
-  - recepción de compra con reposición en el depósito predeterminado.
-- **Selector de productos** (venta y compra):
-  - lista filtrable por código, nombre, categoría, marca o unidad;
-  - muestra precio y stock de la sucursal de la caja;
-  - cantidades y precios editables en el detalle.
-- **Clientes**:
-  - búsqueda, listado paginado y alta en modal contra `/api/clientes/`;
-  - el acceso rápido del dashboard abre el formulario.
-- **Dashboard Admin**:
-  - cinco KPIs fijos, auto-refresh cada 30 s, alertas, cajas con ID de sección,
-    compras por recibir y acciones arriba.
-  - se quitaron el selector de período, el botón Actualizar, Ventas del mes y
-    el panel de accesos rápidos.
-- **Menú de navegación**:
-  - se eliminó el “Perfil” duplicado del pie del sidebar (ya está en Sistema);
-  - las rutas de módulo ahora validan `puedeVer`, igual que el menú.
-- **Backend**:
-  - se eliminó `PAGADA` de `Venta.EstadoVenta`; migración `0008` convierte las
-    ventas históricas `PA` a `CO`;
-  - el pago de una venta no cambia su estado: queda `PENDIENTE` hasta que se
-    llama a `confirmar`; la confirmación exige al menos un pago;
-  - la auto-cancelación ignora ventas pendientes que ya tienen pagos;
-  - `ventas.semana` (lunes a hoy) en `/api/dashboard/`;
-  - búsqueda de ventas/compras por ID, cliente/proveedor, DNI/CUIT y sección;
-  - `SeccionCajaSerializer` expone `sucursal` y `sucursal_detalle`;
-  - filtro `?por_recibir=1` en `/api/compras/`;
-  - total **61/61 tests** pasando.
-- Commits previos: `205e89e`, `b67e98b`, `983bed4`, `908add1`.
+- [ ] **Ventas:** búsqueda en vivo (sin Enter, cancela requests viejas, sin
+      parpadeo); presets de fecha, rango Desde/Hasta, día exacto y rango invertido;
+      inputs a la derecha en escritorio y debajo en mobile; orden por fecha/monto;
+      CSV; filtros persistidos en la URL (refrescar y volver atrás).
+- [ ] **Ventas:** consumidor final con nombre libre visible en listado, detalle,
+      cobro y presupuesto; pago parcial con varios métodos sigue Pendiente;
+      completar saldo y confirmar; check **Confirmar la venta al registrar los
+      pagos**; no superar el saldo; método inactivo no guarda; el vendedor no ve
+      cobrar/confirmar/anular; presupuesto con varios productos y PDF.
+- [ ] **Compras:** En camino con fecha estimada no mueve stock y la recepción lo
+      repone; pago parcial y saldo con varios métodos → Parcial/Pagada; anular
+      solo no recibida y sin pagos; filtros **Por recibir** y **En camino**
+      juntos y alineados; filtros de fecha, orden, CSV y URL; exige precio de
+      costo y fecha estimada, no usa el precio de venta; recibir con depósito
+      elegido y sin elegir (debe usar el principal de la sucursal central);
+      la fecha estimada no puede ser anterior a la compra; el selector solo
+      muestra productos del proveedor y cambiar de proveedor con carrito pide
+      confirmación y lo vacía; anular exige motivo y lo muestra en el detalle.
+- [ ] **Clientes:** buscador en tiempo real con el mismo diseño que Ventas/Compras;
+      editar datos fiscales y notas; cambiar estado desde la columna y desde el
+      formulario; DNI/CUIT duplicado; filtrar activos/inactivos y que un inactivo
+      no aparezca en el alta de venta; ficha con resumen de ventas, saldo,
+      WhatsApp, email y nueva venta; alta sin documento/tipo/contacto rechazada;
+      CSV con y sin filtros.
+- [ ] **Inventario:** crear/editar producto con sucursales, precio y costo (precio
+      no menor al costo); configurar mínimo y ajustar stock con lotes y
+      movimientos; filtros de stock por alerta y movimientos por fecha, producto,
+      sucursal y tipo; transferencia entre depósitos de la misma sucursal y entre
+      sucursales, confirmar una y cancelar otra; crear/editar depósitos y
+      catálogos; no eliminar un depósito con stock. En el alta de producto,
+      exigir proveedor y costo; probar los atajos `+` de categoría, marca,
+      unidad y proveedor sin perder los datos cargados. En transferencias,
+      buscar producto por código/nombre y depósito por nombre/sucursal. En
+      ajuste de stock, buscar depósito; en los filtros de inventario y en el
+      selector de productos, buscar categoría, marca y unidad. Al crear, recibir
+      o cancelar una transferencia, verificar que la lista cambie al estado
+      nuevo y resalte la fila.
+- [ ] **Carga de stock:** en Inventario → Stock, probar “Cargar stock”:
+      elegir sucursal y depósito, agregar varios productos, exigir lote,
+      vencimiento opcional, cantidades mayores a cero y verificar que suma al
+      stock y genera movimientos `AJ`. Probar con producto no activo en la
+      sucursal y con depósito de otra sucursal.
+- [ ] **Validaciones:** en Cliente, probar DNI con letras, CUIT incompleto,
+      email/teléfono inválidos; en Proveedor, CUIT con letras; en Producto,
+      código inválido, precio/costo; en Compra/Venta, cantidades, precios y
+      fechas; en pagos, método/monto. Verificar borde rojo, mensaje debajo y que
+      no permita guardar hasta corregir.
+- [ ] **Proveedores:** crear/editar con sucursales; cambiar estado desde la tabla;
+      asociar productos y costos.
+- [ ] **Selectores con búsqueda:** en Ventas buscar cliente por nombre/DNI; en
+      Compras buscar proveedor por nombre/CUIT; en Producto y Proveedores buscar
+      proveedor/producto por código o nombre. Verificar teclado, limpiar y que
+      el ítem creado quede seleccionado.
+- [ ] **Sucursales y cajas:** buscar sucursal en el encabezado y en depósitos;
+      buscar sección de caja en venta/compra; verificar que el filtro global se
+      mantenga y que los formularios sigan funcionando.
+- [ ] **Proveedor sin productos en compra:** crear proveedor desde el “+”,
+      verificar el mensaje, abrir “Asociar productos”, cargar varias filas con
+      costo, guardar y comprobar que los productos aparecen en la compra sin
+      cerrar el formulario ni abrir otra pestaña.
+- [ ] **Búsqueda remota:** verificar que Ventas, Compras, Producto y Proveedores
+      no descarguen listas completas de clientes/proveedores/productos; que la
+      búsqueda por DNI/CUIT/código/nombre funcione y que editar un registro con
+      valor inicial lo muestre seleccionado. En Ventas, probar el buscador
+      remoto de productos por sucursal.
+- [ ] **General:** el selector de sucursal recarga dashboard, ventas, compras y
+      stock; dashboard con ventas por vencer/vencidas y compras En camino; refresh
+      automático del token y cierre de sesión.
+- [ ] **Alertas del dashboard:** cada tarjeta abre su módulo con el filtro
+      aplicado (`/ventas?alerta=...`, `/productos?tab=stock&alerta=...`,
+      `/compras?por_recibir=1`); en stock, el producto abre resaltado y con
+      scroll; la tarjeta de cajas lleva al panel de cajas abiertas.
 
-**Pendiente inmediato**
+## 2. Módulos frontend
 
-- [ ] Probar en navegador el flujo completo de venta: crear, cobrar parcial,
-      completar pago, confirmar y anular.
-- [ ] Probar el PDF de presupuesto con una venta de varios productos.
-- [ ] Probar el flujo completo de compra: crear, recibir y verificar stock.
-- [ ] Desarrollar **Caja** (apertura, cierre, auditoría y pagos).
-- [ ] Desarrollar **Stock/Productos** y **Proveedores**.
+- [ ] Desarrollar **Caja** (apertura, cierre, auditoría e historial).
 - [ ] Desarrollar **Empleados**, **Perfil** y **Actividad**.
-- [ ] Definir métricas V2 del dashboard: top productos, formas de pago, ventas
-      por sucursal, diferencias de caja y actividad reciente.
-- [ ] Cambiar contraseña: **requiere endpoint nuevo en backend**.
-- [ ] Aplicar `puedeEscribir` a todas las acciones de escritura.
-- [ ] Probar el refresh automático del token y el cierre de sesión.
+- [ ] Reemplazar `EnDesarrollo` por las pantallas reales.
 
-## 2. Decisiones tomadas
+## 3. Backend
 
-- La semana se calcula de **lunes a hoy**.
-- El dashboard se refresca **cada 30 segundos** y al recuperar el foco.
-- “Registrar cliente” navega a **Clientes** y abre el formulario.
-- “Presupuesto” es un **borrador no persistido** con PDF imprimible; se genera
-  desde el formulario de venta antes de registrarla como pendiente.
-- Se eliminó el panel de accesos rápidos; quedan tres acciones arriba:
-  Nueva venta, Registrar cliente y Nuevo presupuesto.
-- Por ahora se trabaja solo la vista de **Administrador**.
-- Pedidos y Presupuestos como módulos del menú siguen omitidos; Presupuesto es
-  un atajo dentro de Ventas.
-- `prop-types`: **no se instala**.
-- El buscador de ventas/compras incluye ID, cliente/proveedor, DNI/CUIT y
-  sección de caja. Se puede escribir `#473` para buscar por número.
-- La grilla de productos reemplaza al `<select>`: se filtra por código, nombre,
-  categoría, marca o unidad y muestra precio y stock de la sucursal.
-- **Ventas queda con 4 estados**:
-  - Pendiente: creada, stock descontado, sin pago ni confirmación.
-  - Parcial: pago parcial y venta confirmada, con saldo.
-  - Confirmada: pago total y venta confirmada.
-  - Anulada: cancelada y stock restaurado.
-- El pago no cambia el estado por sí solo: la venta sigue Pendiente hasta que
-  el cajero confirma. La confirmación exige al menos un pago.
-- Compras conserva sus estados actuales (incluido Pagada) hasta que se trabaje
-  ese módulo.
+- [ ] Restringir en la API las sucursales asignadas para usuarios no-admin.
+- [ ] Endpoint de cambio de contraseña.
+- [ ] Evaluar reversión de pagos para anular una venta pendiente con pago parcial.
+- [ ] Aplicar `puedeEscribir` a las acciones de escritura de los módulos faltantes.
 
-## 3. Facturación (ARCA)
+## 4. Dashboard V2
 
-- [ ] **Bloqueado:** no hay CUIT, certificado `.crt`/`.key` ni punto de venta
-      habilitado. La integración WSAA + WSFEv1 queda documentada en `AGENTS.md`.
+- [ ] Definir métricas: top productos, formas de pago, ventas por sucursal,
+      diferencias de caja y actividad reciente.
+
+## 5. Facturación (ARCA) — bloqueada
+
+- [ ] Falta CUIT, certificado `.crt`/`.key` y punto de venta habilitado.
 - [ ] No hay servicio ni endpoint para emitir `Factura` (hoy es solo lectura).
 
-## 4. Operación del barrido
+## 6. Operación
 
 - [ ] Verificar la tarea `Corralon\CancelarVentasVencidas` en un arranque sin
       sesión iniciada (registrarla con cuenta de servicio si hiciera falta).
-
-## 5. Commit
-
-- [x] Commits previos: `205e89e`, `b67e98b`, `983bed4`, `908add1`.
-- [ ] Commit de Ventas, Compras y correcciones del menú.

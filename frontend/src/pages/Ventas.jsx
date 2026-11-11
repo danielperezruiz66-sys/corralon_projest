@@ -4,19 +4,29 @@ import Swal from 'sweetalert2'
 import {
   IconCash,
   IconCheck,
+  IconChevronDown,
+  IconChevronUp,
   IconCircleX,
+  IconDownload,
   IconEye,
   IconFileText,
   IconLoader2,
   IconPlus,
   IconSearch,
   IconShoppingCart,
+  IconTrash,
+  IconUser,
   IconX,
 } from '@tabler/icons-react'
 import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
+import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
 import FormularioVenta from '../components/comercial/FormularioVenta.jsx'
+import { useAuth } from '../context/auth-context'
+import { useSucursal } from '../context/sucursal-context'
+import useDebounce from '../hooks/useDebounce'
+import { descargarCsv, numeroCsv } from '../utils/csv'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
 
@@ -32,17 +42,12 @@ const ESTADOS = [
   {
     id: 'PE',
     etiqueta: 'Pendientes',
-    ayuda: 'Venta creada, con stock descontado, sin pago ni confirmación. Vence a los 30 minutos.',
+    ayuda: 'Venta creada, con stock descontado y sin confirmar. Puede tener pagos parciales. Vence a los 30 minutos si no tiene pagos.',
   },
   {
     id: 'CO',
     etiqueta: 'Confirmadas',
-    ayuda: 'Venta confirmada con el pago total registrado.',
-  },
-  {
-    id: 'PC',
-    etiqueta: 'Parciales',
-    ayuda: 'Venta confirmada con pago parcial; queda saldo pendiente.',
+    ayuda: 'Venta con el pago total registrado y confirmada por el cajero.',
   },
   {
     id: 'AN',
@@ -51,8 +56,21 @@ const ESTADOS = [
   },
 ]
 
+const ORDEN_INICIAL = '-fecha_venta'
+let siguientePagoId = 1
+
+function nuevoPago(metodo = '', monto = '') {
+  siguientePagoId += 1
+  return { id: siguientePagoId, metodo, monto }
+}
+
+function montoPago(valor) {
+  const numero = Number(valor)
+  return Number.isFinite(numero) ? Number(numero.toFixed(2)) : 0
+}
+
 function nombreCliente(venta) {
-  return venta.cliente_detalle || 'Consumidor final'
+  return venta.cliente_detalle || venta.cliente_venta || 'Consumidor final'
 }
 
 function claseEstado(estado) {
@@ -71,20 +89,42 @@ function saldoVenta(venta) {
 }
 
 export default function Ventas() {
+  const { puedeEscribir } = useAuth()
+  const { sucursalActiva } = useSucursal()
+  const puedeCobrar = puedeEscribir(['GE', 'CA'])
   const [searchParams, setSearchParams] = useSearchParams()
+  const [clienteInicial] = useState(
+    () => searchParams.get('cliente') || '',
+  )
   const [datos, setDatos] = useState(PAGINA_VACIA)
-  const [texto, setTexto] = useState('')
-  const [busqueda, setBusqueda] = useState('')
-  const [estado, setEstado] = useState('')
-  const [pagina, setPagina] = useState(1)
+  const [texto, setTexto] = useState(() => searchParams.get('search') || '')
+  const [estado, setEstado] = useState(
+    () => searchParams.get('estado') || '',
+  )
+  const [alerta, setAlerta] = useState(
+    () => searchParams.get('alerta') || '',
+  )
+  const [fechas, setFechas] = useState(() => ({
+    fecha: searchParams.get('fecha') || '',
+    desde: searchParams.get('fecha_desde') || '',
+    hasta: searchParams.get('fecha_hasta') || '',
+  }))
+  const [orden, setOrden] = useState(
+    () => searchParams.get('ordering') || ORDEN_INICIAL,
+  )
+  const [pagina, setPagina] = useState(
+    () => Number(searchParams.get('page')) || 1,
+  )
   const [refresco, setRefresco] = useState(0)
   const [cargando, setCargando] = useState(true)
+  const [actualizando, setActualizando] = useState(false)
+  const [exportando, setExportando] = useState(false)
   const [error, setError] = useState('')
   const [detalle, setDetalle] = useState(null)
   const [cobro, setCobro] = useState(null)
   const [metodos, setMetodos] = useState([])
-  const [metodo, setMetodo] = useState('')
-  const [monto, setMonto] = useState('')
+  const [pagosCobro, setPagosCobro] = useState([])
+  const [confirmarCobro, setConfirmarCobro] = useState(false)
   const [cobrando, setCobrando] = useState(false)
   const [modalAbierto, setModalAbierto] = useState(
     () =>
@@ -94,15 +134,28 @@ export default function Ventas() {
     () => (searchParams.get('presupuesto') === '1' ? 'presupuesto' : 'venta'),
   )
 
+  const textoDiferido = useDebounce(texto.trim(), 350)
+  const busqueda = textoDiferido
+  const rangoInvalido = Boolean(
+    fechas.desde && fechas.hasta && fechas.desde > fechas.hasta,
+  )
+  const hayFiltros = Boolean(
+    texto ||
+      estado ||
+      alerta ||
+      fechas.fecha ||
+      fechas.desde ||
+      fechas.hasta ||
+      orden !== ORDEN_INICIAL,
+  )
+  const buscando = texto.trim() !== busqueda || actualizando
+
   useEffect(() => {
     let vigente = true
     pedirTodas('/metodos-pago/?estado=true')
       .then((datos) => {
         if (vigente) {
           setMetodos(datos)
-          if (datos.length > 0) {
-            setMetodo(String(datos[0].id))
-          }
         }
       })
       .catch(() => {
@@ -117,13 +170,41 @@ export default function Ventas() {
   }, [])
 
   useEffect(() => {
-    if (searchParams.has('nueva') || searchParams.has('presupuesto')) {
-      setSearchParams({}, { replace: true })
+    const parametros = new URLSearchParams()
+    if (busqueda) {
+      parametros.set('search', busqueda)
     }
-  }, [searchParams, setSearchParams])
+    if (estado) {
+      parametros.set('estado', estado)
+    }
+    if (alerta) {
+      parametros.set('alerta', alerta)
+    }
+    if (fechas.fecha) {
+      parametros.set('fecha', fechas.fecha)
+    }
+    if (fechas.desde) {
+      parametros.set('fecha_desde', fechas.desde)
+    }
+    if (fechas.hasta) {
+      parametros.set('fecha_hasta', fechas.hasta)
+    }
+    if (orden !== ORDEN_INICIAL) {
+      parametros.set('ordering', orden)
+    }
+    if (pagina > 1) {
+      parametros.set('page', String(pagina))
+    }
+    setSearchParams(parametros, { replace: true })
+  }, [busqueda, estado, alerta, fechas, orden, pagina, setSearchParams])
 
   useEffect(() => {
+    if (rangoInvalido) {
+      return undefined
+    }
+
     let vigente = true
+    const controlador = new AbortController()
     const parametros = new URLSearchParams({ page: String(pagina) })
     if (busqueda) {
       parametros.set('search', busqueda)
@@ -131,8 +212,28 @@ export default function Ventas() {
     if (estado) {
       parametros.set('estado', estado)
     }
+    if (alerta) {
+      parametros.set('alerta', alerta)
+    }
+    if (sucursalActiva) {
+      parametros.set('sucursal', sucursalActiva)
+    }
+    if (fechas.fecha) {
+      parametros.set('fecha', fechas.fecha)
+    }
+    if (fechas.desde) {
+      parametros.set('fecha_desde', fechas.desde)
+    }
+    if (fechas.hasta) {
+      parametros.set('fecha_hasta', fechas.hasta)
+    }
+    if (orden) {
+      parametros.set('ordering', orden)
+    }
 
-    pedir(`/ventas/?${parametros.toString()}`)
+    pedir(`/ventas/?${parametros.toString()}`, {
+      signal: controlador.signal,
+    })
       .then((respuesta) => {
         if (vigente) {
           setDatos(respuesta)
@@ -140,65 +241,229 @@ export default function Ventas() {
         }
       })
       .catch((e) => {
-        if (vigente) {
-          setError(e.message)
+        if (!vigente || e.name === 'AbortError') {
+          return
         }
+        setError(e.message)
       })
       .finally(() => {
         if (vigente) {
           setCargando(false)
+          setActualizando(false)
         }
       })
 
     return () => {
       vigente = false
+      controlador.abort()
     }
-  }, [pagina, busqueda, estado, refresco])
+  }, [
+    pagina,
+    busqueda,
+    estado,
+    alerta,
+    fechas,
+    orden,
+    refresco,
+    rangoInvalido,
+    sucursalActiva,
+  ])
 
   function abrirNueva(modoNuevo = 'venta') {
     setModo(modoNuevo)
     setModalAbierto(true)
   }
 
-  function buscar(evento) {
-    evento.preventDefault()
-    setCargando(true)
-    setError('')
+  function limpiarTexto() {
+    setTexto('')
     setPagina(1)
-    setBusqueda(texto.trim())
-    setRefresco((valor) => valor + 1)
+    setError('')
+    setActualizando(true)
   }
 
-  function limpiar() {
-    setCargando(true)
-    setError('')
+  function limpiarTodo() {
     setTexto('')
-    setBusqueda('')
+    setEstado('')
+    setAlerta('')
+    setFechas({ fecha: '', desde: '', hasta: '' })
+    setOrden(ORDEN_INICIAL)
     setPagina(1)
-    setRefresco((valor) => valor + 1)
+    setError('')
+    setActualizando(true)
   }
 
   function cambiarEstado(nuevoEstado) {
-    if (nuevoEstado === estado) {
+    if (nuevoEstado === estado && !alerta) {
       return
     }
-    setCargando(true)
-    setError('')
     setEstado(nuevoEstado)
+    setAlerta('')
     setPagina(1)
+    setError('')
+    setActualizando(true)
+  }
+
+  function cambiarFechas(nuevas) {
+    setFechas(nuevas)
+    setPagina(1)
+    setError('')
+    setActualizando(
+      !(nuevas.desde && nuevas.hasta && nuevas.desde > nuevas.hasta),
+    )
   }
 
   function irAPagina(nueva) {
-    setCargando(true)
-    setError('')
     setPagina(nueva)
+    setError('')
+    setActualizando(true)
+  }
+
+  function alternarOrden(campo) {
+    setOrden((actual) =>
+      actual === `-${campo}` ? campo : `-${campo}`,
+    )
+    setPagina(1)
+    setActualizando(true)
+  }
+
+  function iconoOrden(campo) {
+    if (orden === campo) {
+      return <IconChevronUp size={14} />
+    }
+    if (orden === `-${campo}`) {
+      return <IconChevronDown size={14} />
+    }
+    return null
+  }
+
+  async function exportar() {
+    if (rangoInvalido) {
+      return
+    }
+    setExportando(true)
+    try {
+      const parametros = new URLSearchParams()
+      if (busqueda) {
+        parametros.set('search', busqueda)
+      }
+      if (estado) {
+        parametros.set('estado', estado)
+      }
+      if (alerta) {
+        parametros.set('alerta', alerta)
+      }
+      if (sucursalActiva) {
+        parametros.set('sucursal', sucursalActiva)
+      }
+      if (fechas.fecha) {
+        parametros.set('fecha', fechas.fecha)
+      }
+      if (fechas.desde) {
+        parametros.set('fecha_desde', fechas.desde)
+      }
+      if (fechas.hasta) {
+        parametros.set('fecha_hasta', fechas.hasta)
+      }
+      if (orden) {
+        parametros.set('ordering', orden)
+      }
+
+      const ventas = await pedirTodas(
+        `/ventas/?${parametros.toString()}`,
+      )
+      if (ventas.length === 0) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Sin resultados',
+          text: 'No hay ventas para exportar con los filtros actuales.',
+          confirmButtonColor: '#4a9da8',
+        })
+        return
+      }
+
+      const filas = ventas.map((venta) => [
+        venta.id,
+        formatearFechaHora(venta.fecha_venta),
+        nombreCliente(venta),
+        venta.seccion_caja_detalle || '',
+        numeroCsv(venta.monto_venta),
+        numeroCsv(totalPagado(venta)),
+        numeroCsv(saldoVenta(venta)),
+        venta.estado_detalle,
+      ])
+      descargarCsv(
+        `ventas-${new Date().toISOString().slice(0, 10)}.csv`,
+        [
+          'N.º de venta',
+          'Fecha',
+          'Cliente',
+          'Caja / Sección',
+          'Monto',
+          'Pagado',
+          'Saldo',
+          'Estado',
+        ],
+        filas,
+      )
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo exportar',
+        text: e.message,
+        confirmButtonColor: '#4a9da8',
+      })
+    } finally {
+      setExportando(false)
+    }
+  }
+
+  const saldoCobro = cobro ? saldoVenta(cobro) : 0
+  const totalCobro = pagosCobro.reduce(
+    (total, pago) => total + montoPago(pago.monto),
+    0,
+  )
+  const saldoDespuesCobro = saldoCobro - totalCobro
+  const excedeSaldoCobro = totalCobro > saldoCobro + 0.001
+  const cubreTotalCobro = saldoCobro > 0 && totalCobro >= saldoCobro - 0.001
+  const pagosIncompletos = pagosCobro.some(
+    (pago) => !pago.metodo || !(Number(pago.monto) > 0),
+  )
+  const confirmarEfectivo = confirmarCobro && cubreTotalCobro && !excedeSaldoCobro
+
+  function agregarPago() {
+    const usados = new Set(pagosCobro.map((pago) => pago.metodo))
+    const libre =
+      metodos.find((item) => !usados.has(String(item.id))) || metodos[0]
+    setPagosCobro((previos) => [
+      ...previos,
+      nuevoPago(libre ? String(libre.id) : '', ''),
+    ])
+  }
+
+  function actualizarPago(id, campo, valor) {
+    setPagosCobro((previos) =>
+      previos.map((pago) =>
+        pago.id === id ? { ...pago, [campo]: valor } : pago,
+      ),
+    )
+  }
+
+  function quitarPago(id) {
+    setPagosCobro((previos) =>
+      previos.length > 1
+        ? previos.filter((pago) => pago.id !== id)
+        : previos,
+    )
   }
 
   function abrirCobro(venta) {
     const saldo = saldoVenta(venta)
+    const metodoInicial = metodos[0] ? String(metodos[0].id) : ''
+    setPagosCobro([
+      nuevoPago(metodoInicial, saldo > 0 ? saldo.toFixed(2) : ''),
+    ])
+    setConfirmarCobro(false)
     setCobro(venta)
-    setMonto(saldo > 0 ? saldo.toFixed(2) : '0.00')
-    setMetodo(metodos[0] ? String(metodos[0].id) : '')
     setDetalle(null)
   }
 
@@ -206,32 +471,38 @@ export default function Ventas() {
     if (!cobro) {
       return
     }
-    if (!metodo) {
+    if (metodos.length === 0) {
       Swal.fire({
         icon: 'warning',
-        title: 'Falta el método de pago',
-        text: 'Seleccioná un método de pago activo.',
+        title: 'Sin métodos de pago',
+        text: 'Configurá al menos un método de pago activo.',
         confirmButtonColor: '#4a9da8',
       })
       return
     }
-
-    const montoNumero = Number(monto)
-    const saldo = saldoVenta(cobro)
-    if (!Number.isFinite(montoNumero) || montoNumero <= 0) {
+    if (pagosIncompletos) {
       Swal.fire({
         icon: 'warning',
-        title: 'Monto inválido',
-        text: 'El monto debe ser mayor que cero.',
+        title: 'Pagos incompletos',
+        text: 'Revisá el método y el monto de cada línea.',
         confirmButtonColor: '#4a9da8',
       })
       return
     }
-    if (montoNumero > saldo + 0.001) {
+    if (excedeSaldoCobro) {
       Swal.fire({
         icon: 'warning',
         title: 'Monto excedido',
-        text: `El saldo pendiente es ${formatearMoneda(saldo)}.`,
+        text: `El saldo pendiente es ${formatearMoneda(saldoCobro)}.`,
+        confirmButtonColor: '#4a9da8',
+      })
+      return
+    }
+    if (confirmarEfectivo && totalCobro < saldoCobro - 0.001) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Falta saldo',
+        text: 'Para confirmar la venta los pagos deben cubrir el total.',
         confirmButtonColor: '#4a9da8',
       })
       return
@@ -239,27 +510,33 @@ export default function Ventas() {
 
     setCobrando(true)
     try {
-      await pedir('/metodos-pago-ventas/', {
+      await pedir(`/ventas/${cobro.id}/cobrar/`, {
         method: 'POST',
         body: JSON.stringify({
-          venta: cobro.id,
-          metodo_pago: Number(metodo),
-          monto_pagado: montoNumero,
+          pagos: pagosCobro.map((pago) => ({
+            metodo_pago: Number(pago.metodo),
+            monto_pagado: montoPago(pago.monto).toFixed(2),
+          })),
+          confirmar: confirmarEfectivo,
         }),
       })
 
-      if (cobro.estado === 'PE') {
-        await pedir(`/ventas/${cobro.id}/confirmar/`, { method: 'POST' })
-      }
-
-      const quedaSaldo = montoNumero < saldo - 0.001
+      const quedaSaldo = totalCobro < saldoCobro - 0.001
       Swal.fire({
         icon: 'success',
-        title: quedaSaldo ? 'Pago parcial registrado' : 'Venta confirmada',
-        text: quedaSaldo
-          ? `Saldo pendiente: ${formatearMoneda(saldo - montoNumero)}`
-          : 'El pago total quedó registrado.',
-        timer: 1800,
+        title: confirmarEfectivo
+          ? 'Venta confirmada'
+          : quedaSaldo
+            ? 'Pagos registrados'
+            : 'Total cubierto',
+        text: confirmarEfectivo
+          ? 'Los pagos quedaron registrados y la venta se cerró.'
+          : quedaSaldo
+            ? `Saldo pendiente: ${formatearMoneda(
+                saldoCobro - totalCobro,
+              )}. La venta sigue pendiente.`
+            : 'Pagos registrados. Confirmá la venta para cerrarla.',
+        timer: 2400,
         showConfirmButton: false,
       })
       setCobro(null)
@@ -360,30 +637,55 @@ export default function Ventas() {
 
       <div className="comercial">
         <section className="comercial-barra">
-          <form className="comercial-busqueda" onSubmit={buscar}>
+          <form
+            className="comercial-busqueda"
+            onSubmit={(evento) => evento.preventDefault()}
+          >
             <IconSearch size={20} />
             <input
               type="search"
               value={texto}
-              onChange={(evento) => setTexto(evento.target.value)}
-              placeholder="Buscar por N.º de venta, cliente o DNI"
+              onChange={(evento) => {
+                setTexto(evento.target.value)
+                setPagina(1)
+              }}
+              placeholder="Buscar por N.º de venta, cliente, DNI o consumidor final"
               aria-label="Buscar ventas"
             />
-            <button type="submit" className="boton-comercial-secundario">
-              Buscar
-            </button>
-            {(texto || busqueda) && (
+            {buscando && (
+              <IconLoader2 className="icono-girando" size={18} />
+            )}
+            {texto && (
               <button
                 type="button"
-                className="boton-comercial-secundario"
-                onClick={limpiar}
+                className="boton-limpiar-busqueda"
+                onClick={limpiarTexto}
+                aria-label="Limpiar búsqueda"
               >
-                Limpiar
+                <IconX size={16} />
               </button>
             )}
           </form>
 
           <div className="comercial-acciones-barra">
+            {hayFiltros && (
+              <button
+                type="button"
+                className="boton-comercial-secundario"
+                onClick={limpiarTodo}
+              >
+                Limpiar filtros
+              </button>
+            )}
+            <button
+              type="button"
+              className="boton-comercial-secundario"
+              onClick={exportar}
+              disabled={exportando || rangoInvalido}
+            >
+              <IconDownload size={18} />
+              {exportando ? 'Exportando…' : 'Exportar CSV'}
+            </button>
             <button
               type="button"
               className="boton-comercial-secundario"
@@ -417,30 +719,101 @@ export default function Ventas() {
           ))}
         </section>
 
+        {alerta && (
+          <div className="filtro-origen">
+            <span>
+              Filtro del dashboard:{' '}
+              <strong>
+                {alerta === 'por_vencer'
+                  ? 'ventas por vencer'
+                  : 'ventas vencidas sin barrido'}
+              </strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setAlerta('')
+                setPagina(1)
+                setActualizando(true)
+              }}
+            >
+              <IconX size={15} />
+              Quitar filtro
+            </button>
+          </div>
+        )}
+
+        <FiltrosFecha
+          valores={fechas}
+          onCambiar={cambiarFechas}
+          error={
+            rangoInvalido
+              ? 'La fecha desde no puede ser posterior a la fecha hasta.'
+              : ''
+          }
+        />
+
         <p className="filtros-ayuda">
-          Pendiente: sin pago ni confirmación · Parcial: pago parcial y venta
-          confirmada · Confirmada: pago total y venta confirmada · Anulada:
-          stock restaurado.
+          Pendiente: creada y sin confirmar; puede tener pagos parciales.
+          Confirmada: paga y confirmada por el cajero. Anulada: stock
+          restaurado.
         </p>
 
         {error && <p className="comercial-error">{error}</p>}
 
-        <section className="comercial-panel">
+        <section
+          className={`comercial-panel ${
+            actualizando ? 'panel-actualizando' : ''
+          }`}
+        >
           <div className="comercial-tabla-scroll">
             <table className="tabla-comercial">
               <thead>
                 <tr>
                   <th>Venta</th>
-                  <th>Fecha</th>
+                  <th
+                    aria-sort={
+                      orden === 'fecha_venta'
+                        ? 'ascending'
+                        : orden === '-fecha_venta'
+                          ? 'descending'
+                          : 'none'
+                    }
+                  >
+                    <button
+                      type="button"
+                      className="encabezado-orden"
+                      onClick={() => alternarOrden('fecha_venta')}
+                    >
+                      Fecha {iconoOrden('fecha_venta')}
+                    </button>
+                  </th>
                   <th>Cliente</th>
                   <th>Caja / Sección</th>
-                  <th className="numero">Monto</th>
+                  <th
+                    className="numero"
+                    aria-sort={
+                      orden === 'monto_venta'
+                        ? 'ascending'
+                        : orden === '-monto_venta'
+                          ? 'descending'
+                          : 'none'
+                    }
+                  >
+                    <button
+                      type="button"
+                      className="encabezado-orden"
+                      onClick={() => alternarOrden('monto_venta')}
+                    >
+                      Monto {iconoOrden('monto_venta')}
+                    </button>
+                  </th>
                   <th>Estado</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {cargando && (
+                {cargando && !rangoInvalido && (
                   <tr>
                     <td colSpan="7" className="comercial-vacio">
                       Cargando ventas…
@@ -448,7 +821,10 @@ export default function Ventas() {
                   </tr>
                 )}
 
-                {!cargando && !error && datos.results.length === 0 && (
+                {!cargando &&
+                  !rangoInvalido &&
+                  !error &&
+                  datos.results.length === 0 && (
                   <tr>
                     <td colSpan="7" className="comercial-vacio">
                       No se encontraron ventas.
@@ -468,7 +844,12 @@ export default function Ventas() {
                         {venta.seccion_caja_detalle || '—'}
                       </td>
                       <td className="numero">
-                        {formatearMoneda(venta.monto_venta)}
+                        <strong>{formatearMoneda(venta.monto_venta)}</strong>
+                        {saldoVenta(venta) > 0 && (
+                          <small>
+                            Saldo: {formatearMoneda(saldoVenta(venta))}
+                          </small>
+                        )}
                       </td>
                       <td>
                         <span className={claseEstado(venta.estado)}>
@@ -485,32 +866,32 @@ export default function Ventas() {
                           >
                             <IconEye size={17} />
                           </button>
-                          {(venta.estado === 'PE' || venta.estado === 'PC') &&
+                          {puedeCobrar &&
+                            venta.estado === 'PE' &&
                             saldoVenta(venta) > 0 && (
                               <button
                                 type="button"
                                 className="boton-icono boton-icono-exito"
                                 onClick={() => abrirCobro(venta)}
-                                title={
-                                  venta.estado === 'PE'
-                                    ? 'Cobrar venta'
-                                    : 'Completar pago'
-                                }
+                                title="Cobrar venta"
                               >
                                 <IconCash size={17} />
                               </button>
                             )}
-                          {venta.estado === 'PE' && saldoVenta(venta) <= 0 && (
-                            <button
-                              type="button"
-                              className="boton-icono boton-icono-exito"
-                              onClick={() => confirmarVenta(venta)}
-                              title="Confirmar venta"
-                            >
-                              <IconCheck size={17} />
-                            </button>
-                          )}
-                          {venta.estado === 'PE' &&
+                          {puedeCobrar &&
+                            venta.estado === 'PE' &&
+                            saldoVenta(venta) <= 0 && (
+                              <button
+                                type="button"
+                                className="boton-icono boton-icono-exito"
+                                onClick={() => confirmarVenta(venta)}
+                                title="Confirmar venta"
+                              >
+                                <IconCheck size={17} />
+                              </button>
+                            )}
+                          {puedeCobrar &&
+                            venta.estado === 'PE' &&
                             totalPagado(venta) === 0 && (
                               <button
                                 type="button"
@@ -558,7 +939,10 @@ export default function Ventas() {
 
       {modalAbierto && (
         <FormularioVenta
+          key={sucursalActiva || 'todas'}
           modo={modo}
+          clienteInicial={clienteInicial}
+          sucursalActiva={sucursalActiva}
           onCerrar={() => setModalAbierto(false)}
           onGuardado={() => setRefresco((valor) => valor + 1)}
         />
@@ -655,29 +1039,30 @@ export default function Ventas() {
               >
                 Cerrar
               </button>
-              {detalle.estado === 'PE' && saldoVenta(detalle) <= 0 && (
-                <button
-                  type="button"
-                  className="boton-comercial-primario"
-                  onClick={() => {
-                    const venta = detalle
-                    setDetalle(null)
-                    confirmarVenta(venta)
-                  }}
-                >
-                  Confirmar venta
-                </button>
-              )}
-              {(detalle.estado === 'PE' || detalle.estado === 'PC') &&
+              {puedeCobrar &&
+                detalle.estado === 'PE' &&
+                saldoVenta(detalle) <= 0 && (
+                  <button
+                    type="button"
+                    className="boton-comercial-primario"
+                    onClick={() => {
+                      const venta = detalle
+                      setDetalle(null)
+                      confirmarVenta(venta)
+                    }}
+                  >
+                    Confirmar venta
+                  </button>
+                )}
+              {puedeCobrar &&
+                detalle.estado === 'PE' &&
                 saldoVenta(detalle) > 0 && (
                   <button
                     type="button"
                     className="boton-comercial-primario"
                     onClick={() => abrirCobro(detalle)}
                   >
-                    {detalle.estado === 'PE'
-                      ? 'Cobrar venta'
-                      : 'Completar pago'}
+                    Cobrar venta
                   </button>
                 )}
             </div>
@@ -687,12 +1072,11 @@ export default function Ventas() {
 
       {cobro && (
         <div className="comercial-modal-fondo" role="dialog" aria-modal="true">
-          <div className="comercial-modal comercial-modal-angosto">
+          <div className="comercial-modal comercial-modal-medio">
             <div className="comercial-modal-cabecera">
               <h2>
                 <IconCash size={24} />
-                {cobro.estado === 'PE' ? 'Cobrar venta' : 'Completar pago'} #
-                {cobro.id}
+                Cobrar venta #{cobro.id}
               </h2>
               <button
                 type="button"
@@ -703,6 +1087,11 @@ export default function Ventas() {
                 <IconX size={20} />
               </button>
             </div>
+
+            <p className="cobro-cliente">
+              <IconUser size={18} />
+              {nombreCliente(cobro)}
+            </p>
 
             <div className="cobro-resumen">
               <div>
@@ -719,35 +1108,128 @@ export default function Ventas() {
               </div>
             </div>
 
-            <div className="comercial-grid">
-              <label className="campo-comercial">
-                <span>Método de pago</span>
-                <select
-                  value={metodo}
-                  onChange={(evento) => setMetodo(evento.target.value)}
-                >
-                  {metodos.length === 0 && (
-                    <option value="">No hay métodos activos</option>
-                  )}
-                  {metodos.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.metodo_pago}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <p className="cobro-nota">
+              Podés combinar varios métodos de pago. Si la suma cubre el
+              saldo, podés confirmar la venta en el mismo paso.
+            </p>
 
-              <label className="campo-comercial">
-                <span>Monto a cobrar</span>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={monto}
-                  onChange={(evento) => setMonto(evento.target.value)}
-                />
-              </label>
+            <div className="cobro-pagos-lista">
+              {pagosCobro.map((pago, indice) => (
+                <div className="cobro-pago-fila" key={pago.id}>
+                  <label className="campo-comercial">
+                    <span>Método {indice + 1}</span>
+                    <select
+                      className={!pago.metodo ? 'input-error' : ''}
+                      value={pago.metodo}
+                      onChange={(evento) =>
+                        actualizarPago(
+                          pago.id,
+                          'metodo',
+                          evento.target.value,
+                        )
+                      }
+                    >
+                      <option value="">Seleccioná un método</option>
+                      {metodos.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.metodo_pago}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="campo-comercial">
+                    <span>Monto</span>
+                    <input
+                      type="number"
+                      className={
+                        !(Number(pago.monto) > 0) ? 'input-error' : ''
+                      }
+                      min="0.01"
+                      step="0.01"
+                      value={pago.monto}
+                      onChange={(evento) =>
+                        actualizarPago(
+                          pago.id,
+                          'monto',
+                          evento.target.value,
+                        )
+                      }
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="boton-quitar-pago"
+                    onClick={() => quitarPago(pago.id)}
+                    disabled={pagosCobro.length === 1}
+                    aria-label={`Quitar pago ${indice + 1}`}
+                    title="Quitar este pago"
+                  >
+                    <IconTrash size={17} />
+                  </button>
+                </div>
+              ))}
             </div>
+            {pagosIncompletos && (
+              <small className="mensaje-error-campo">
+                Completá método y monto en cada línea.
+              </small>
+            )}
+            {excedeSaldoCobro && (
+              <small className="mensaje-error-campo">
+                El total de los pagos supera el saldo pendiente.
+              </small>
+            )}
+
+            <button
+              type="button"
+              className="boton-agregar-pago"
+              onClick={agregarPago}
+              disabled={metodos.length === 0}
+            >
+              <IconPlus size={16} />
+              Agregar método de pago
+            </button>
+
+            <div className="cobro-totales">
+              <div>
+                <span>Total a registrar</span>
+                <strong>{formatearMoneda(totalCobro)}</strong>
+              </div>
+              <div>
+                <span>Saldo después</span>
+                <strong
+                  className={
+                    excedeSaldoCobro
+                      ? 'cobro-saldo-excedido'
+                      : saldoDespuesCobro <= 0
+                        ? 'cobro-saldo-cubierto'
+                        : ''
+                  }
+                >
+                  {formatearMoneda(Math.max(0, saldoDespuesCobro))}
+                </strong>
+              </div>
+            </div>
+
+            {excedeSaldoCobro && (
+              <p className="comercial-error">
+                Los pagos superan el saldo de{' '}
+                {formatearMoneda(saldoCobro)}.
+              </p>
+            )}
+
+            {cubreTotalCobro && !excedeSaldoCobro && (
+              <label className="cobro-confirmar">
+                <input
+                  type="checkbox"
+                  checked={confirmarCobro}
+                  onChange={(evento) =>
+                    setConfirmarCobro(evento.target.checked)
+                  }
+                />
+                <span>Confirmar la venta al registrar los pagos</span>
+              </label>
+            )}
 
             {metodos.length === 0 && (
               <p className="comercial-error">
@@ -767,17 +1249,22 @@ export default function Ventas() {
                 type="button"
                 className="boton-comercial-primario"
                 onClick={registrarCobro}
-                disabled={cobrando || metodos.length === 0}
+                disabled={
+                  cobrando ||
+                  metodos.length === 0 ||
+                  pagosIncompletos ||
+                  excedeSaldoCobro
+                }
               >
                 {cobrando ? (
                   <>
                     <IconLoader2 className="icono-girando" size={18} />
                     Registrando…
                   </>
-                ) : cobro.estado === 'PE' ? (
-                  'Registrar pago y confirmar'
+                ) : confirmarEfectivo ? (
+                  'Registrar pagos y confirmar'
                 ) : (
-                  'Registrar pago'
+                  'Registrar pagos'
                 )}
               </button>
             </div>

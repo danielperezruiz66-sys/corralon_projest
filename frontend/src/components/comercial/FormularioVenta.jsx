@@ -1,15 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Swal from 'sweetalert2'
 import {
   IconFileText,
   IconLoader2,
   IconShoppingCart,
   IconTrash,
+  IconUserPlus,
   IconX,
 } from '@tabler/icons-react'
 import { pedirTodas } from '../../api/catalogos'
 import { pedir } from '../../api/client'
+import FormularioCliente from '../clientes/FormularioCliente.jsx'
+import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 import { formatearMoneda } from '../../utils/formato'
+import MensajeError from '../common/MensajeError.jsx'
 import SelectorProductos from './SelectorProductos'
 
 function escaparHtml(valor) {
@@ -29,35 +33,45 @@ function fechaActual() {
   return new Date().toLocaleDateString('es-AR')
 }
 
-export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }) {
+export default function FormularioVenta({ modo = 'venta', clienteInicial = '', sucursalActiva = '', onCerrar, onGuardado }) {
   const [secciones, setSecciones] = useState([])
-  const [clientes, setClientes] = useState([])
-  const [productos, setProductos] = useState([])
   const [seccion, setSeccion] = useState('')
-  const [cliente, setCliente] = useState('')
+  const [cliente, setCliente] = useState(
+    clienteInicial ? String(clienteInicial) : '',
+  )
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
+  const [clienteVenta, setClienteVenta] = useState('')
+  const [modalCliente, setModalCliente] = useState(false)
   const [items, setItems] = useState([])
   const [stocks, setStocks] = useState({})
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [errores, setErrores] = useState({})
+
+  const buscarClientes = useCallback(async (texto) => {
+    const respuesta = await pedir(
+      `/clientes/?search=${encodeURIComponent(texto)}&estado=true&page=1`,
+    )
+    return respuesta.results || []
+  }, [])
 
   useEffect(() => {
     let vigente = true
 
-    Promise.all([
-      pedirTodas('/secciones-caja/?estado=AB'),
-      pedirTodas('/clientes/'),
-      pedirTodas('/productos/'),
-    ])
-      .then(([seccionesData, clientesData, productosData]) => {
+    pedirTodas('/secciones-caja/?estado=AB')
+      .then((seccionesData) => {
         if (!vigente) {
           return
         }
-        setSecciones(seccionesData)
-        setClientes(clientesData)
-        setProductos(productosData)
-        if (seccionesData.length > 0) {
-          setSeccion(String(seccionesData[0].id))
+        const disponibles = sucursalActiva
+          ? seccionesData.filter(
+              (item) => String(item.sucursal) === String(sucursalActiva),
+            )
+          : seccionesData
+        setSecciones(disponibles)
+        if (disponibles.length > 0) {
+          setSeccion(String(disponibles[0].id))
         }
       })
       .catch((e) => {
@@ -74,7 +88,24 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
     return () => {
       vigente = false
     }
-  }, [])
+  }, [sucursalActiva])
+
+  useEffect(() => {
+    if (!clienteInicial) {
+      return undefined
+    }
+    let vigente = true
+    pedir(`/clientes/${clienteInicial}/`)
+      .then((clienteData) => {
+        if (vigente) {
+          setClienteSeleccionado((actual) => actual || clienteData)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      vigente = false
+    }
+  }, [clienteInicial])
 
   const seccionActual = secciones.find(
     (item) => String(item.id) === seccion,
@@ -83,6 +114,23 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
   const total = items.reduce(
     (acumulado, item) => acumulado + item.cantidad * item.precio,
     0,
+  )
+
+  const buscarProductos = useCallback(
+    async (texto) => {
+      const parametros = new URLSearchParams({
+        search: texto,
+        page: '1',
+      })
+      if (sucursalActual) {
+        parametros.set('sucursal', sucursalActual)
+      }
+      const respuesta = await pedir(
+        `/productos/?${parametros.toString()}`,
+      )
+      return respuesta.results || []
+    },
+    [sucursalActual],
   )
 
   useEffect(() => {
@@ -105,6 +153,7 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
       .catch(() => {
         if (vigente) {
           setStocks({})
+          setProductos([])
         }
       })
 
@@ -113,8 +162,21 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
     }
   }, [sucursalActual])
 
-  function agregarProducto(producto) {
-    setItems((previos) => {
+  function clienteCreado(nuevo) {
+    setCliente(String(nuevo.id))
+    setClienteSeleccionado(nuevo)
+    setClienteVenta('')
+    setModalCliente(false)
+    Swal.fire({
+      icon: 'success',
+      title: 'Cliente registrado',
+      text: 'Quedó seleccionado en la venta.',
+      timer: 1600,
+      showConfirmButton: false,
+    })
+  }
+
+  function agregarProducto(producto) {    setItems((previos) => {
       const indice = previos.findIndex(
         (item) => item.producto.id === producto.id,
       )
@@ -154,40 +216,38 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
 
   function validarItems() {
     if (items.length === 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Detalle vacío',
-        text: 'Agregá al menos un producto.',
-        confirmButtonColor: '#4a9da8',
-      })
+      setErrores((previos) => ({
+        ...previos,
+        items: 'Agregá al menos un producto.',
+      }))
       return false
     }
-    const invalido = items.some(
-      (item) => !(item.cantidad > 0) || !(item.precio >= 0),
-    )
-    if (invalido) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Valores inválidos',
-        text: 'Revisá las cantidades y los precios del detalle.',
-        confirmButtonColor: '#4a9da8',
-      })
-      return false
-    }
-    return true
+    const nuevos = {}
+    items.forEach((item, indice) => {
+      if (!(Number(item.cantidad) > 0)) {
+        nuevos[`cantidad-${indice}`] =
+          'Ingresá una cantidad mayor a cero.'
+      }
+      if (!(Number(item.precio) > 0)) {
+        nuevos[`precio-${indice}`] = 'Ingresá un precio mayor a cero.'
+      }
+    })
+    setErrores((previos) => ({ ...previos, items: nuevos }))
+    return Object.keys(nuevos).length === 0
   }
 
   async function registrarVenta() {
     if (!seccion) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Falta la caja',
-        text: 'No hay una sección de caja abierta para registrar la venta.',
-        confirmButtonColor: '#4a9da8',
+      setErrores({ seccion: 'No hay una sección de caja abierta.' })
+      requestAnimationFrame(() => {
+        document.querySelector('.input-error')?.focus()
       })
       return
     }
     if (!validarItems()) {
+      requestAnimationFrame(() => {
+        document.querySelector('.input-error')?.focus()
+      })
       return
     }
 
@@ -198,6 +258,7 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
         body: JSON.stringify({
           seccion_caja: Number(seccion),
           cliente: cliente ? Number(cliente) : null,
+          cliente_venta: cliente ? null : clienteVenta.trim() || null,
           items: items.map((item) => ({
             producto: item.producto.id,
             cantidad: item.cantidad,
@@ -215,6 +276,18 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
       onGuardado?.()
       onCerrar()
     } catch (e) {
+      if (e.campos) {
+        const mapa = { seccion_caja: 'seccion' }
+        const nuevos = {}
+        Object.entries(e.campos).forEach(([campo, mensaje]) => {
+          nuevos[mapa[campo] || campo] = mensaje
+        })
+        setErrores(nuevos)
+        requestAnimationFrame(() => {
+          document.querySelector('.input-error')?.focus()
+        })
+        return
+      }
       Swal.fire({
         icon: 'error',
         title: 'No se pudo registrar',
@@ -231,15 +304,17 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
       return
     }
 
-    const clienteElegido = clientes.find(
-      (item) => String(item.id) === cliente,
-    )
+    const clienteElegido =
+      clienteSeleccionado &&
+      String(clienteSeleccionado.id) === String(cliente)
+        ? clienteSeleccionado
+        : null
     const nombreCliente = clienteElegido
       ? clienteElegido.razon_social ||
         [clienteElegido.apellido, clienteElegido.nombre]
           .filter(Boolean)
           .join(', ')
-      : 'Consumidor final'
+      : clienteVenta.trim() || 'Consumidor final'
 
     const filas = items
       .map(
@@ -326,7 +401,8 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
   }
 
   return (
-    <div className="comercial-modal-fondo" role="dialog" aria-modal="true">
+    <>
+      <div className="comercial-modal-fondo" role="dialog" aria-modal="true">
       <div className="comercial-modal">
         <div className="comercial-modal-cabecera">
           <h2>
@@ -360,45 +436,76 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
 
             <div className="comercial-grid">
               {modo === 'venta' && (
-                <label className="campo-comercial">
-                  <span>Sección de caja</span>
-                  <select
-                    value={seccion}
-                    onChange={(evento) => setSeccion(evento.target.value)}
-                  >
-                    {secciones.length === 0 && (
-                      <option value="">No hay cajas abiertas</option>
-                    )}
-                    {secciones.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        Sección #{item.id} · {item.caja_detalle} ·{' '}
-                        {item.empleado_detalle}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <CampoSelectorBuscable
+                  etiqueta="Sección de caja"
+                  valor={seccion}
+                  onCambiar={(valor) => {
+                    setSeccion(valor)
+                    setItems([])
+                    setStocks({})
+                  }}
+                  opciones={secciones}
+                  textoOpcion={(item) =>
+                    `Sección #${item.id} · ${item.caja_detalle} · ${item.empleado_detalle}`
+                  }
+                  placeholder={
+                    secciones.length === 0
+                      ? 'No hay cajas abiertas'
+                      : 'Buscar sección'
+                  }
+                  error={Boolean(errores.seccion)}
+                  mensajeError={errores.seccion}
+                />
               )}
 
-              <label className="campo-comercial">
-                <span>Cliente</span>
-                <select
-                  value={cliente}
-                  onChange={(evento) => setCliente(evento.target.value)}
-                >
-                  <option value="">Consumidor final</option>
-                  {clientes.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.razon_social ||
-                        [item.apellido, item.nombre].filter(Boolean).join(', ') ||
-                        `Cliente #${item.id}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <CampoSelectorBuscable
+                etiqueta="Cliente"
+                valor={cliente}
+                onCambiar={(valor, opcion) => {
+                  setCliente(valor)
+                  setClienteSeleccionado(opcion || null)
+                  if (valor) {
+                    setClienteVenta('')
+                  }
+                }}
+                opciones={[]}
+                opcionSeleccionada={clienteSeleccionado}
+                onBuscar={buscarClientes}
+                textoOpcion={(item) =>
+                  item.razon_social ||
+                  [item.apellido, item.nombre]
+                    .filter(Boolean)
+                    .join(', ') ||
+                  `Cliente #${item.id}`
+                }
+                textoSecundario={(item) =>
+                  item.dni ? `DNI/CUIT ${item.dni}` : ''
+                }
+                placeholder="Buscar por nombre, DNI o razón social"
+                onCrear={() => setModalCliente(true)}
+                tituloCrear="Registrar cliente"
+                icono={IconUserPlus}
+                textoBoton="Registrar"
+              />
+
+              {!cliente && (
+                <label className="campo-comercial">
+                  <span>Nombre del consumidor final (opcional)</span>
+                  <input
+                    type="text"
+                    maxLength={120}
+                    value={clienteVenta}
+                    onChange={(evento) => setClienteVenta(evento.target.value)}
+                    placeholder="Ej. Juan Pérez"
+                  />
+                </label>
+              )}
             </div>
 
             <SelectorProductos
-              productos={productos}
+              key={sucursalActual || 'todas'}
+              productos={[]}
+              onBuscar={buscarProductos}
               stocks={stocks}
               mostrarStock={Boolean(sucursalActual)}
               onAgregar={agregarProducto}
@@ -434,7 +541,11 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
                       <td className="numero">
                         <input
                           type="number"
-                          className="input-tabla"
+                          className={`input-tabla ${
+                            errores.items?.[`cantidad-${indice}`]
+                              ? 'input-error'
+                              : ''
+                          }`}
                           min="0.001"
                           step="0.001"
                           value={item.cantidad}
@@ -446,11 +557,18 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
                             )
                           }
                         />
+                        <MensajeError>
+                          {errores.items?.[`cantidad-${indice}`]}
+                        </MensajeError>
                       </td>
                       <td className="numero">
                         <input
                           type="number"
-                          className="input-tabla"
+                          className={`input-tabla ${
+                            errores.items?.[`precio-${indice}`]
+                              ? 'input-error'
+                              : ''
+                          }`}
                           min="0"
                           step="0.01"
                           value={item.precio}
@@ -458,6 +576,9 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
                             actualizarItem(indice, 'precio', evento.target.value)
                           }
                         />
+                        <MensajeError>
+                          {errores.items?.[`precio-${indice}`]}
+                        </MensajeError>
                       </td>
                       <td className="numero">
                         {formatearMoneda(item.cantidad * item.precio)}
@@ -477,6 +598,9 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
                 </tbody>
               </table>
             </div>
+            {typeof errores.items === 'string' && (
+              <MensajeError>{errores.items}</MensajeError>
+            )}
 
             <div className="comercial-total">
               <span>Total</span>
@@ -491,18 +615,16 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
               >
                 Cancelar
               </button>
-              <button
-                type="button"
-                className={
-                  modo === 'presupuesto'
-                    ? 'boton-comercial-primario'
-                    : 'boton-comercial-secundario'
-                }
-                onClick={generarPresupuesto}
-              >
-                <IconFileText size={18} />
-                Generar presupuesto
-              </button>
+              {modo === 'presupuesto' && (
+                <button
+                  type="button"
+                  className="boton-comercial-primario"
+                  onClick={generarPresupuesto}
+                >
+                  <IconFileText size={18} />
+                  Generar presupuesto
+                </button>
+              )}
               {modo === 'venta' && (
                 <button
                   type="button"
@@ -524,6 +646,14 @@ export default function FormularioVenta({ modo = 'venta', onCerrar, onGuardado }
           </>
         )}
       </div>
-    </div>
+      </div>
+
+      {modalCliente && (
+        <FormularioCliente
+          onCerrar={() => setModalCliente(false)}
+          onCreado={clienteCreado}
+        />
+      )}
+    </>
   )
 }

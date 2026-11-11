@@ -137,61 +137,22 @@ npm run build
 
 ```
 corralon_projest/
-├── backend/                # Entorno Backend (Python / Django)
-│   ├── config/             # Configuración general del proyecto
-│   │   ├── settings.py     # Ajustes (lee secretos desde ../.env)
-│   │   ├── urls.py         # Rutas principales
-│   │   ├── asgi.py         # Punto de entrada ASGI
-│   │   └── wsgi.py         # Punto de entrada WSGI
-│   ├── app/                # Aplicación principal (gestión)
-│   │   ├── migrations/     # Migraciones de la base de datos
-│   │   ├── management/     # Comandos personalizados (seed_data)
-│   │   ├── models.py       # Modelos de datos (35) agrupados por dominio
-│   │   ├── services/       # Lógica de negocio por dominio
-│   │   ├── tests/          # Tests automatizados de la API
-│   │   ├── exceptions.py   # Errores de negocio → respuestas HTTP
-│   │   ├── permissions.py  # Permisos por rol
-│   │   ├── views.py
-│   │   ├── admin.py
-│   │   ├── apps.py
-│   │   └── backends.py     # Autenticación (login por usuario o legajo)
-│   ├── logs/               # Salida del barrido de ventas vencidas
-│   ├── manage.py           # Utilidad de línea de comandos de Django
-│   └── requirements.txt    # Dependencias del proyecto
-│
-├── scripts/                # Tareas programadas de Windows (.bat)
-├── frontend/               # Entorno Frontend (React + Vite + JS)
-│   ├── public/
-│   ├── src/
-│   │   ├── api/            # Cliente HTTP con JWT y refresh automático
-│   │   ├── auth/           # Sesión, perfil y permisos por rol
-│   │   ├── components/     # Login y layout general
-│   │   ├── pages/          # Inicio, Productos y Facturación
-│   │   ├── assets/
-│   │   ├── secciones.js    # Definición del menú
-│   │   ├── App.css
-│   │   ├── App.jsx
-│   │   ├── index.css
-│   │   └── main.jsx
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.js
-│
-├── .env.example            # Plantilla de variables de entorno
-├── .gitignore              # Ignorados globales del repositorio
-└── INSTRUCCIONES.md
+├── backend/                # Django + DRF
+│   ├── config/             # settings, urls, asgi, wsgi
+│   ├── app/                # única app: models, services, views, serializers,
+│   │                       # migrations, tests, management/commands
+│   ├── logs/               # salida del barrido (no se commitea)
+│   ├── manage.py
+│   └── requirements.txt
+├── frontend/               # React + Vite (src/api, context, pages, components)
+├── scripts/                # tareas programadas de Windows
+├── .env.example
+├── AGENTS.md               # contexto y reglas para agentes
+├── DIA_SIGUIENTE.md        # pendientes de la sesión anterior
+└── INSTRUCCIONES.md        # esta guía
 ```
 
-## Módulos del sistema (modelos)
-
-- **Geografía:** Países, Provincias, Localidades, Ubicaciones
-- **Organización:** Empresas, Sucursales, Empleados, Roles, asignaciones
-- **Catálogo:** Categorías, Marcas, Unidades, Productos
-- **Stock:** Depósitos, Stock, Detalles de Stock, Productos por Sucursal
-- **Cajas:** Cajas y Secciones de Caja (turnos)
-- **Ventas / Compras:** Ventas, Detalles, Facturas, Compras, Detalles
-- **Pagos:** Métodos de Pago y sus relaciones con Ventas/Compras
-- **Proveedores:** Proveedores, Productos por Proveedor, Proveedores por Sucursal
+Los dominios, modelos y reglas de negocio están en `AGENTS.md`.
 
 ## Comandos útiles
 

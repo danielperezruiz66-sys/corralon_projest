@@ -40,6 +40,7 @@ from app.models import (
     Stock,
     Sucursal,
     SucursalXEmpleado,
+    TransferenciaStock,
     Ubicacion,
     Unidad,
     Venta,
@@ -214,7 +215,7 @@ class Command(BaseCommand):
     def _reset(self):
         self.stdout.write('Borrando tablas de negocio...')
         modelos = [
-            DetalleCierreCaja, MovimientoStock,
+            TransferenciaStock, DetalleCierreCaja, MovimientoStock,
             MetodoPagoXCompra, MetodoPagoXVenta, DetalleCompra, DetalleVenta,
             Factura, Compra, Venta, Cliente, MetodoPago,
             DetalleStock, Stock, ProductoXSucursal, ProductoXProveedor,
@@ -312,8 +313,9 @@ class Command(BaseCommand):
             (empresas[0], ubicaciones[3], 'Sucursal Rosario'),
             (empresas[1], ubicaciones[5], 'Sucursal Cordoba'),
         ]
+        Sucursal.objects.filter(empresa__in=empresas).update(es_central=False)
         return [
-            Sucursal.objects.get_or_create(
+            Sucursal.objects.update_or_create(
                 empresa=e,
                 ubicacion=u,
                 nombre=n,
@@ -322,6 +324,7 @@ class Command(BaseCommand):
                     'hora_c': '18:00:00',
                     'contacto': '3415559999',
                     'email_suc': f'{n.lower().replace(" ", "")}@corralon.com',
+                    'es_central': n == 'Casa Central',
                 },
             )[0]
             for e, u, n in datos
@@ -450,6 +453,7 @@ class Command(BaseCommand):
             ('Deposito Norte', 2, True),
             ('Deposito Sur', 3, True),
             ('Deposito Anexo', 0, False),
+            ('Deposito Corralon', 0, False),
         ]
         return [
             Deposito.objects.update_or_create(
@@ -622,16 +626,30 @@ class Command(BaseCommand):
         ]
 
     def _clientes(self):
+        condiciones = {
+            'Consumidor Final': Cliente.CondicionIVA.CONSUMIDOR_FINAL,
+            'Monotributo': Cliente.CondicionIVA.MONOTRIBUTISTA,
+            'Resp. Inscripto': Cliente.CondicionIVA.RESPONSABLE_INSCRIPTO,
+        }
         result = []
-        for rs, cuit, iva in CLIENTES:
+        for indice, (rs, cuit, iva) in enumerate(CLIENTES):
             cliente, _ = Cliente.objects.get_or_create(
                 razon_social=rs,
                 defaults={
                     'dni': None if cuit is None else f'20{cuit[-8:]}',
-                    'email': f'cliente{len(result) + 1}@mail.com',
+                    'tipo_documento': (
+                        Cliente.TipoDocumento.CUIT if cuit else None
+                    ),
+                    'email': f'cliente{indice + 1}@mail.com',
                     'telefono': '3415550000',
                     'direccion': 'Calle Falsa 123',
-                    'condicion_iva': iva,
+                    'condicion_iva': condiciones.get(
+                        iva,
+                        Cliente.CondicionIVA.NO_CATEGORIZADO,
+                    ),
+                    'ingresos_brutos': None,
+                    'notas': None,
+                    'estado': True,
                 },
             )
             result.append(cliente)
@@ -651,7 +669,7 @@ class Command(BaseCommand):
             seccion = random.choice(secciones)
             cliente = random.choice(clientes)
             estado_pago = random.choice(
-                ['CONFIRMADA', 'CONFIRMADA', 'PARCIAL', 'PENDIENTE']
+                ['CONFIRMADA', 'CONFIRMADA', 'PENDIENTE_CON_PAGO', 'PENDIENTE']
             )
             fecha = ahora - timedelta(days=random.randint(0, DIAS_HISTORIAL))
             if estado_pago == 'PENDIENTE':
@@ -711,18 +729,27 @@ class Command(BaseCommand):
             if estado_pago == 'CONFIRMADA':
                 venta.estado = Venta.EstadoVenta.CONFIRMADA
                 self._pagar(venta, total, metodos, 'venta')
-            elif estado_pago == 'PARCIAL':
-                venta.estado = Venta.EstadoVenta.PARCIAL
-                self._pagar(venta, (total / 2).quantize(Decimal('0.01')), metodos, 'venta')
+            elif estado_pago == 'PENDIENTE_CON_PAGO':
+                # Pago parcial: la venta sigue Pendiente hasta completar el
+                # saldo y confirmarla manualmente.
+                venta.estado = Venta.EstadoVenta.PENDIENTE
+                self._pagar(
+                    venta,
+                    (total / 2).quantize(Decimal('0.01')),
+                    metodos,
+                    'venta',
+                )
             else:
                 venta.estado = Venta.EstadoVenta.PENDIENTE
             venta.save()
 
-            if venta.estado in (
-                Venta.EstadoVenta.CONFIRMADA,
-                Venta.EstadoVenta.PARCIAL,
-            ):
-                tipo = 'A' if 'Inscripto' in (cliente.condicion_iva or '') else 'B'
+            if venta.estado == Venta.EstadoVenta.CONFIRMADA:
+                tipo = (
+                    'A'
+                    if cliente.condicion_iva
+                    == Cliente.CondicionIVA.RESPONSABLE_INSCRIPTO
+                    else 'B'
+                )
                 Factura.objects.get_or_create(
                     venta=venta,
                     defaults={'tipo': tipo, 'direccion_pdf': f'/media/facturas/{venta.pk}.pdf'},
@@ -748,13 +775,29 @@ class Command(BaseCommand):
 
     # ----------------------------------------------------------------- compras
     def _compras(self, ids, cantidad):
-        productos = ids['producto']
         secciones = ids['seccion']
         metodos = ids['metodo']
         proveedores = ids['proveedor']
         ahora = timezone.now()
+        productos_por_proveedor = {}
+        for asociacion in ProductoXProveedor.objects.filter(
+            estado=True
+        ).select_related('producto'):
+            productos_por_proveedor.setdefault(
+                asociacion.proveedor_id,
+                [],
+            ).append(asociacion.producto)
+        proveedores_con_productos = [
+            proveedor
+            for proveedor in proveedores
+            if productos_por_proveedor.get(proveedor.id)
+        ]
 
         for _ in range(cantidad):
+            if not proveedores_con_productos:
+                return
+            proveedor = random.choice(proveedores_con_productos)
+            disponibles = productos_por_proveedor[proveedor.id]
             seccion = random.choice(secciones)
             sucursal = seccion.caja.sucursal
             fecha_compra = ahora - timedelta(days=random.randint(0, DIAS_HISTORIAL))
@@ -762,8 +805,9 @@ class Command(BaseCommand):
             deposito = stock_service.deposito_predeterminado(sucursal)
             compra = Compra.objects.create(
                 seccion_caja=seccion,
-                proveedor=random.choice(proveedores),
+                proveedor=proveedor,
                 fecha_compra=fecha_compra,
+                estado_entrega=Compra.EstadoEntrega.RECIBIDA,
                 monto_compra=Decimal('0.00'),
             )
             # `fecha_compra` es auto_now_add: se corrige despues de crear.
@@ -774,7 +818,8 @@ class Command(BaseCommand):
             compra.refresh_from_db()
 
             total = Decimal('0.00')
-            for prod in random.sample(productos, random.randint(1, 3)):
+            cantidad_items = random.randint(1, min(3, len(disponibles)))
+            for prod in random.sample(disponibles, cantidad_items):
                 cant = Decimal(random.randint(10, 100))
                 precio = (prod.precio_unidad * Decimal('0.7')).quantize(Decimal('0.01'))
                 subtotal = (cant * precio).quantize(Decimal('0.01'))

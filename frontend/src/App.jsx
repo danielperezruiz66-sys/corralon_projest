@@ -8,7 +8,9 @@ import Compras from './pages/Compras.jsx'
 import EnDesarrollo from './pages/EnDesarrollo.jsx'
 import Facturacion from './pages/Facturacion.jsx'
 import Inicio from './pages/Inicio.jsx'
+import Inventario from './pages/Inventario.jsx'
 import Login from './pages/Login.jsx'
+import Proveedores from './pages/Proveedores.jsx'
 import Ventas from './pages/Ventas.jsx'
 
 function RutaProtegida() {
@@ -33,6 +35,12 @@ function contenidoModulo(modulo) {
   }
   if (modulo.path === '/compras') {
     return <Compras />
+  }
+  if (modulo.path === '/productos') {
+    return <Inventario />
+  }
+  if (modulo.path === '/proveedores') {
+    return <Proveedores />
   }
   return <EnDesarrollo titulo={modulo.name} detalle={modulo.detalle} />
 }

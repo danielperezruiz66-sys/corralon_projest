@@ -11,6 +11,7 @@ devuelven tal cual las arma el handler por defecto.
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models.deletion import ProtectedError
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 
@@ -38,6 +39,17 @@ def corralon_exception_handler(exc, context):
         return Response(
             {'detail': 'El objeto solicitado no existe.', 'codigo': 'no_encontrado'},
             status=404,
+        )
+
+    if isinstance(exc, ProtectedError):
+        return Response(
+            {
+                'detail': (
+                    'No se puede eliminar porque tiene registros asociados.'
+                ),
+                'codigo': 'protegido',
+            },
+            status=400,
         )
 
     if isinstance(exc, ValueError):

@@ -108,8 +108,11 @@ class SeedStockTests(TestCase):
         self.assertFalse(Venta.objects.filter(detalles__isnull=True).exists())
 
     def test_cancelar_venta_pendiente_restaura_stock(self):
-        venta = Venta.objects.filter(estado=Venta.EstadoVenta.PENDIENTE).first()
-        self.assertIsNotNone(venta, 'El seed no genero ventas pendientes.')
+        venta = Venta.objects.filter(
+            estado=Venta.EstadoVenta.PENDIENTE,
+            pagos__isnull=True,
+        ).first()
+        self.assertIsNotNone(venta, 'El seed no genero ventas pendientes sin pagos.')
 
         detalle = venta.detalles.first()
         stock = Stock.objects.get(

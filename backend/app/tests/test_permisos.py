@@ -50,7 +50,12 @@ class PermisoEscrituraTests(BaseCorralonTestCase):
         self.autenticar(self.user_vendedor)
         vendedor = self.client.post(
             '/api/clientes/',
-            {'razon_social': 'Cliente vendedor'},
+            {
+                'razon_social': 'Cliente vendedor',
+                'tipo_documento': 'CUIT',
+                'dni': '30700000001',
+                'telefono': '3415550001',
+            },
             format='json',
         )
         self.assertEqual(vendedor.status_code, 201)
@@ -58,10 +63,45 @@ class PermisoEscrituraTests(BaseCorralonTestCase):
         self.autenticar(self.user_deposito)
         deposito = self.client.post(
             '/api/clientes/',
-            {'razon_social': 'Cliente deposito'},
+            {
+                'razon_social': 'Cliente deposito',
+                'tipo_documento': 'CUIT',
+                'dni': '30700000002',
+                'telefono': '3415550002',
+            },
             format='json',
         )
         self.assertEqual(deposito.status_code, 403)
+
+    def test_cajero_puede_editar_un_cliente(self):
+        self.autenticar(self.user_cajero)
+        creado = self.client.post(
+            '/api/clientes/',
+            {
+                'razon_social': 'Cliente editable',
+                'tipo_documento': 'CUIT',
+                'dni': '30700000003',
+                'telefono': '3415550003',
+            },
+            format='json',
+        )
+
+        respuesta = self.client.patch(
+            f'/api/clientes/{creado.data["id"]}/',
+            {'telefono': '3415555555'},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['telefono'], '3415555555')
+
+        self.autenticar(self.user_deposito)
+        denegado = self.client.patch(
+            f'/api/clientes/{creado.data["id"]}/',
+            {'telefono': '3415555556'},
+            format='json',
+        )
+        self.assertEqual(denegado.status_code, 403)
 
     def test_depositos_los_gestiona_el_encargado(self):
         datos = {
@@ -97,6 +137,54 @@ class PermisoEscrituraTests(BaseCorralonTestCase):
 
         self.assertEqual(respuesta.status_code, 403)
 
+    def test_el_vendedor_no_cobra_ni_confirma_la_venta(self):
+        venta = self.crear_venta(user=self.user_vendedor)
+        venta_id = venta.data['id']
+
+        self.autenticar(self.user_vendedor)
+        pago = self.client.post(
+            '/api/metodos-pago-ventas/',
+            {
+                'venta': venta_id,
+                'metodo_pago': self.efectivo.id,
+                'monto_pagado': '200.00',
+            },
+            format='json',
+        )
+        self.assertEqual(pago.status_code, 403)
+
+        confirmar = self.client.post(f'/api/ventas/{venta_id}/confirmar/')
+        self.assertEqual(confirmar.status_code, 403)
+
+        cobro = self.client.post(
+            f'/api/ventas/{venta_id}/cobrar/',
+            {
+                'pagos': [
+                    {
+                        'metodo_pago': self.efectivo.id,
+                        'monto_pagado': '200.00',
+                    }
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(cobro.status_code, 403)
+
+        self.autenticar(self.user_cajero)
+        pago = self.client.post(
+            '/api/metodos-pago-ventas/',
+            {
+                'venta': venta_id,
+                'metodo_pago': self.efectivo.id,
+                'monto_pagado': '200.00',
+            },
+            format='json',
+        )
+        self.assertEqual(pago.status_code, 201)
+
+        confirmar = self.client.post(f'/api/ventas/{venta_id}/confirmar/')
+        self.assertEqual(confirmar.status_code, 200)
+
     def test_caja_la_operan_admin_gerente_y_cajero(self):
         self.assertEqual(
             self.crear_venta(user=self.user_cajero).status_code,
@@ -118,3 +206,57 @@ class PermisoEscrituraTests(BaseCorralonTestCase):
         self.autenticar(self.admin)
         admin = self.client.get('/api/usuarios/')
         self.assertEqual(admin.status_code, 200)
+
+    def test_compras_las_paga_y_anula_el_encargado_de_deposito(self):
+        compra = self.crear_compra(user=self.user_deposito)
+        compra_id = compra.data['id']
+
+        self.autenticar(self.user_deposito)
+        pago = self.client.post(
+            f'/api/compras/{compra_id}/pagar/',
+            {
+                'pagos': [
+                    {
+                        'metodo_pago': self.efectivo.id,
+                        'monto_pagado': '100.00',
+                    }
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(pago.status_code, 200)
+
+        otra = self.crear_compra(user=self.user_deposito)
+        self.autenticar(self.user_deposito)
+        anular = self.client.post(
+            f'/api/compras/{otra.data["id"]}/anular/',
+            {'motivo': 'Compra de prueba'},
+            format='json',
+        )
+        self.assertEqual(anular.status_code, 200)
+
+    def test_el_vendedor_no_paga_ni_anula_compras(self):
+        compra = self.crear_compra(user=self.user_deposito)
+        compra_id = compra.data['id']
+
+        self.autenticar(self.user_vendedor)
+        pago = self.client.post(
+            f'/api/compras/{compra_id}/pagar/',
+            {
+                'pagos': [
+                    {
+                        'metodo_pago': self.efectivo.id,
+                        'monto_pagado': '100.00',
+                    }
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(pago.status_code, 403)
+
+        anular = self.client.post(
+            f'/api/compras/{compra_id}/anular/',
+            {'motivo': 'Compra de prueba'},
+            format='json',
+        )
+        self.assertEqual(anular.status_code, 403)

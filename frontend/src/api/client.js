@@ -94,7 +94,31 @@ export async function pedir(ruta, opciones = {}, reintentar = true) {
     } catch {
       datos = null
     }
-    throw new Error(mensajeDeError(datos, respuesta.status))
+    const error = new Error(mensajeDeError(datos, respuesta.status))
+    const campos = {}
+    if (datos && typeof datos === 'object') {
+      Object.entries(datos).forEach(([campo, valor]) => {
+        if (
+          campo === 'detail' ||
+          campo === 'codigo' ||
+          campo === 'non_field_errors'
+        ) {
+          return
+        }
+        if (
+          Array.isArray(valor) &&
+          valor.some((item) => item && typeof item === 'object')
+        ) {
+          return
+        }
+        campos[campo] = Array.isArray(valor)
+          ? valor.join(' ')
+          : String(valor)
+      })
+    }
+    error.datos = datos
+    error.campos = Object.keys(campos).length > 0 ? campos : null
+    throw error
   }
 
   if (respuesta.status === 204) {

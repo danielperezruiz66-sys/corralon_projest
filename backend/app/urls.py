@@ -55,6 +55,11 @@ router.register(
     views.MovimientoStockViewSet,
     basename='movimiento-stock',
 )
+router.register(
+    'transferencias-stock',
+    views.TransferenciaStockViewSet,
+    basename='transferencia-stock',
+)
 
 # PROVEEDORES
 router.register('proveedores', views.ProveedorViewSet, basename='proveedor')

@@ -1,551 +1,280 @@
-# AGENTS.md — Contexto del proyecto
+# AGENTS.md — Corralón Fer-Cons
 
-> **Cómo mantener este archivo:** refleja el **estado real** del proyecto, no el ideal.
-> Al terminar cada sesión de trabajo: actualizar "Estado actual" y borrar lo que ya
-> no sea cierto o ya no aporte. Si algo deja de ser verdad, **se elimina** (no se deja
-> tachado ni "histórico").
->
-> Lo que **falta hacer** no va acá: va en `DIA_SIGUIENTE.md` (ver sección 10), que se
-> reescribe en cada sesión y solo contiene lo pendiente del día anterior.
->
-> `INSTRUCCIONES.md` es otra cosa: es la guía de instalación para el equipo.
-> No mezclar ambos documentos.
+> Contexto permanente para agentes. Los pendientes del día van en
+> `DIA_SIGUIENTE.md`; la instalación para el equipo, en `INSTRUCCIONES.md`.
+> Al cerrar una sesión: actualizar este archivo si cambió el estado y reescribir
+> `DIA_SIGUIENTE.md` solo con lo pendiente (lo terminado se borra).
 
-**Última actualización:** 2026-11-03
+**Última actualización:** 2026-11-11
 
----
+## 1. Proyecto y stack
 
-## 1. Qué es el proyecto
+Sistema de gestión para un corralón de materiales: geografía, organización,
+catálogo, stock, caja, ventas, compras, facturación, pagos y proveedores.
+Arquitectura desacoplada:
 
-**Corralón Fer-Cons** — sistema de gestión para un corralón de materiales de construcción.
+- `backend/` — Django 6.1 + DRF + PostgreSQL 16 (puerto 5433 por defecto),
+  Python 3.14. Entorno virtual en la raíz (`venv/`).
+- `frontend/` — React 19 + Vite 8 + JavaScript (sin TypeScript) + Tailwind 4,
+  React Router 7, Tabler Icons, SweetAlert2 y react-hook-form. Node 20+.
+- API en `http://localhost:8000`, Vite en `http://localhost:5173`.
+- `.env` en la raíz (no se commitea); plantilla en `.env.example`.
 
-Cubre: geografía, organización (empresas/sucursales/empleados), catálogo de
-productos, stock por depósito, cajas y turnos, ventas, compras, facturación,
-pagos y proveedores.
+Estado: backend Fase 1+2 completo (35 viewsets, 153 tests); frontend con
+Dashboard, Ventas, Compras, Clientes, Inventario y Proveedores. Faltan Caja,
+Empleados, Perfil y Actividad. Facturación ARCA bloqueada.
 
-Arquitectura **desacoplada**:
-
-- `backend/` → API REST con Django + DRF, PostgreSQL
-- `frontend/` → React con Vite (JavaScript, sin TypeScript)
-
-## 2. Estado actual (2026-11-03)
-
-| Área | Estado |
-|---|---|
-| Estructura del repo (`backend/` + `frontend/`) | ✅ Hecha |
-| Modelos de datos (35) en `models.py` por secciones | ✅ Hechos |
-| Migraciones (`0001`–`0007`) | ✅ Aplicadas y consistentes (`makemigrations --check` sin cambios) |
-| Autenticación (login por usuario **o** legajo) | ✅ Funcional |
-| Comando de datos de prueba (`seed_data`) | ✅ Funcional |
-| Admin de Django | ✅ Configurado (Usuario + Empleado inline) |
-| API REST — configuración base (JWT, paginación, permisos, filtros) | ✅ Lista — `/api/token/` y `/api/token/refresh/` funcionando |
-| API REST — serializers, viewsets y rutas de negocio | ✅ **Fase 1** — 34 viewsets + `GET /api/perfil/` + `GET /api/dashboard/` |
-| API REST — escritura transaccional (ventas, compras, caja, pagos) | ✅ **Fase 2** — acciones que delegan en `services/` |
-| Lógica de negocio (`services/`) | ✅ stock, caja, ventas, compras y pagos |
-| Permisos por rol (Admin, Gerente, Cajero, Vendedor, Enc. depósito) | ✅ Aplicados por viewset y acción |
-| Auto-cancelación de ventas | ✅ Umbral 30 min · barrido cada 10 min (tarea de Windows registrada) |
-| Seed con libro de movimientos | ✅ Ventas y compras generan `MovimientoStock` e histórico coherente |
-| Tests | ✅ 61 tests (`manage.py test app`) |
-| Facturación (ARCA) | ⛔ Bloqueada: sin CUIT, certificado ni punto de venta |
-| Frontend — base | ✅ Login JWT (usuario o legajo), perfil y dashboard real |
-| Frontend — rediseño visual (referencia `Fer-Cons-feature-api-rest-auth`) | ✅ **Fase 0–2 + login, dashboard Admin, Ventas, Compras y Clientes** — Tailwind 4, router, sidebar, menú por roles, dashboard con auto-refresh, ventas con presupuesto imprimible, compras con recepción y alta de clientes; el resto de los módulos muestra pantalla provisional |
-| Frontend — módulos de negocio | ⏳ Pendientes de conectar (ventas, compras, caja, productos, empleados, proveedores, perfil, actividad) |
-
-**Lo que sigue está en `DIA_SIGUIENTE.md`.**
-
-> Estado del repo: la Fase 2 de la API (escritura + roles + tests) y el seed con
-> libro de movimientos están en la base de desarrollo; falta commitear. La tarea
-> programada `Corralon\CancelarVentasVencidas` ya está registrada en este equipo.
-
-## 3. Stack y versiones
-
-**Backend** (`backend/requirements.txt`)
-
-| Paquete | Versión |
-|---|---|
-| Django | 6.1.1 |
-| djangorestframework | 3.18.1 |
-| djangorestframework-simplejwt | 5.5.1 |
-| django-filter | 26.2 |
-| django-simple-history | 3.13.0 |
-| django-cors-headers | 4.9.0 |
-| psycopg[binary] | 3.3.6 |
-| python-decouple | 3.8 |
-| PyJWT | 2.15.1 |
-
-- Python 3.14 · PostgreSQL 16+ (por defecto puerto **5433**, configurable en `.env`)
-- Entorno virtual `venv/` en la **raíz** del repo (Windows: `venv/Scripts/python.exe`)
-
-**Frontend** (`frontend/package.json`)
-
-| Paquete | Versión |
-|---|---|
-| React | 19.3.1 |
-| Vite | 8.3.5 |
-| @vitejs/plugin-react | 6.1.2 |
-| oxlint | 1.89.0 |
-
-- Node.js 20+ · Puerto de desarrollo **5173**
-
-## 4. Estructura del repo
+## 2. Estructura y arquitectura
 
 ```text
-corralon_projest/
-├── backend/
-│   ├── config/            # settings.py, urls.py, asgi.py, wsgi.py
-│   ├── app/               # ÚNICA Django app del proyecto
-│   │   ├── models.py      # 35 modelos, agrupados por dominio con comentarios
-│   │   ├── services/      # stock, caja, ventas, compras y pagos
-│   │   ├── management/commands/  # seed_data, cancelar_ventas_vencidas
-│   │   ├── migrations/    # 0001–0007 (historial, modelo, roles canónicos)
-│   │   ├── tests/         # tests de API, servicios y permisos
-│   │   ├── admin.py  apps.py  backends.py  exceptions.py  permissions.py
-│   │   ├── serializers.py  urls.py  views.py
-│   ├── logs/              # salida del barrido (no se commitea)
-│   ├── manage.py
-│   └── requirements.txt
-├── frontend/              # React + Vite (cliente de la API)
-├── scripts/               # tareas programadas de Windows (.bat)
-├── .env                   # NO se commitea (está en .gitignore)
-├── .env.example
-├── INSTRUCCIONES.md       # guía de instalación para el equipo
-├── AGENTS.md              # este archivo (contexto del proyecto)
-└── DIA_SIGUIENTE.md       # pendientes de la sesión anterior
+backend/
+├── config/            # settings.py, urls.py, asgi.py, wsgi.py
+└── app/               # ÚNICA app Django
+    ├── models.py      # 35 modelos por secciones (# ==== DOMINIO ====)
+    ├── services/      # stock, caja, ventas, compras, pagos, proveedores
+    ├── management/commands/  # seed_data, cancelar_ventas_vencidas
+    ├── migrations/    # 0001–0014
+    ├── tests/         # 153 tests
+    ├── admin.py  apps.py  backends.py  exceptions.py  permissions.py
+    └── serializers.py  urls.py  views.py
+frontend/src/
+├── api/  context/  pages/  components/  styles/
+├── data/menuConfig.js  hooks/  utils/
+└── App.jsx  index.css  main.jsx
+scripts/               # tareas programadas de Windows
 ```
 
-## 5. Backend: arquitectura
+Reglas fijas:
 
-### Decisión: una sola Django app, modularizada por dentro
+- Una sola app Django (`app`). **No** crear apps por dominio.
+- `models.py` es un solo archivo: no dividirlo en un paquete `models/`.
+- `backends.py` es solo autenticación; no mover allí lógica de modelos/vistas.
+- No cambiar `AUTH_USER_MODEL` (`app.Usuario`) ni los `db_table`.
+- Endpoints nuevos en `app/urls.py`, no en `config/urls.py`.
+- No crear archivos vacíos "por si acaso".
 
-Se evaluó crear una Django app por dominio (`apps/ventas/`, `apps/caja/`, …) y se
-**descartó**. Se volvió a plantear al configurar la API (2026-11-01) y se confirmó
-la app única. Motivos:
+## 3. Backend: datos y reglas de negocio
 
-- cambia el `app_label` de los modelos → obliga a regenerar todas las migraciones;
-- mover `Usuario` implicaría tocar `AUTH_USER_MODEL` (el cambio más delicado de Django);
-- rompe la estructura base del proyecto.
+Modelos por dominio (el orden de definición importa: una clase va después de
+las que referencia):
 
-En su lugar, `models.py` es un **único archivo** dividido en secciones por dominio
-con comentarios, y la lógica de negocio irá en `services/`. `app_label` sigue siendo
-`app` → **las migraciones no se tocan**.
+| Sección | Modelos |
+|---|---|
+| GEOGRAFIA | Pais, Provincia, Localidad, Ubicacion |
+| ORGANIZACION | Empresa, Sucursal, Usuario, Empleado, Rol, EmpleadoXRol, SucursalXEmpleado |
+| CAJA | Caja, SeccionCaja, DetalleCierreCaja |
+| CATALOGO | Categoria, Marca, Unidad, Producto, ProductoXSucursal |
+| STOCK | Deposito, Stock, DetalleStock, MovimientoStock, TransferenciaStock |
+| PROVEEDORES | Proveedor, ProveedorXSucursal, ProductoXProveedor |
+| PAGOS | MetodoPago |
+| VENTAS | Cliente, Venta, DetalleVenta, Factura, MetodoPagoXVenta |
+| COMPRAS | Compra, DetalleCompra, MetodoPagoXCompra |
 
-> Si en el futuro se quiere separación total en apps, es una fase aparte, con
-> tests que la respalden y asumiendo la cirugía de migraciones.
+Reglas:
 
-### Secciones de `models.py`
+- Las cantidades de stock son `DecimalField(12,3)`; los importes,
+  `DecimalField(10,2)`.
+- `DetalleStock` es la fuente de verdad. `Stock.cantidad` = suma de detalles.
+  Solo `services/stock.py` escribe detalles y recalcula el total.
+- `MovimientoStock` es el libro: `VE` venta, `CA` cancelación, `CO` compra,
+  `AJ` ajuste, `TR` transferencia.
+- Stock negativo: piso `Stock.cant_negativa_max` (default `-10`). El faltante se
+  guarda como `DetalleStock` negativo sin lote en el depósito predeterminado.
+- Carga masiva por sucursal: suma cantidades en un depósito de la sucursal, exige
+  lote (vencimiento opcional), producto activo en la sucursal y registra
+  movimientos `AJ` con referencia `carga-stock: <motivo>`.
+- `Deposito.es_predeterminado`: uno por sucursal. `Sucursal.es_central`: única
+  por empresa; recibe las compras si no se elige depósito.
+- `TransferenciaStock`: descuenta el origen y queda `ET`; al recibir ingresa en
+  destino (`RE`); al cancelar vuelve al origen (`CA`).
+- `Venta.EstadoVenta`: `PE` Pendiente, `CO` Confirmada, `AN` Anulada. **No
+  existe Parcial.** Nace pendiente y descuenta stock; acepta pagos parciales sin
+  cambiar de estado; se confirma con el saldo en cero. Sin pagos y tras 30 min
+  (`VENTAS_MINUTOS_PARA_CONFIRMAR`) se auto-anula y restaura stock. Una venta
+  pendiente con pagos no se auto-cancela ni se puede anular.
+- `Venta.cliente_venta`: nombre libre opcional para consumidor final.
+- `Cliente`: `estado` activo/inactivo, `tipo_documento`, `condicion_iva` (`RI`,
+  `MT`, `CF`, `EX`, `NC`), `ingresos_brutos`, `notas`. Al crear exige identidad,
+  tipo y número de documento y al menos un teléfono o email. Un cliente inactivo
+  no se ofrece ni se acepta en ventas. El resumen se calcula en
+  `GET /api/clientes/{id}/resumen/`.
+- `Producto`: código, nombre, categoría, marca, unidad, precio de venta > 0 y al
+  menos una sucursal activa. Al crear por API se exige `proveedor` y
+  `precio_lista`; el serializer crea/actualiza `ProductoXProveedor` en la misma
+  transacción. El precio de venta debe superar el costo activo más alto de
+  `ProductoXProveedor`.
+- `Proveedor`: CUIT, nombre, razón social y al menos una sucursal activa. Los
+  costos viven en `ProductoXProveedor.precio_lista` y deben ser menores al
+  precio de venta. `POST /api/proveedores/{id}/productos/` asocia/actualiza
+  varios productos en bloque dentro de una transacción.
+- `Compra.estado_entrega`: `PE` Pendiente, `EC` En camino, `RE` Recibida. Es
+  independiente del estado de pago (`PE`/`PC`/`PA`/`AN`). Registrar o marcar en
+  camino no mueve stock; `recibir_compra` repone el depósito elegido (o el
+  central por defecto) y la deja `RECIBIDA`. `fecha_estimada_llegada` es
+  obligatoria en `EC` y no puede ser anterior a `fecha_compra` (se valida en
+  `Compra.clean()`, en los serializers y en los servicios). Anular solo si no
+  está recibida y no tiene pagos, con `motivo_cancelacion` obligatorio. Cada
+  detalle exige costo > 0, no usa el precio de venta y el producto debe tener un
+  `ProductoXProveedor` activo del proveedor de la compra.
+- `SeccionCaja`: `monto_teorico` calculado por el sistema, `monto_final` contado.
+  `DetalleCierreCaja` guarda `monto_sistema` vs `monto_real` por método.
+  `MetodoPago.es_efectivo` suma el `monto_inicial` al teórico.
+- `Rol.codigo`: `AD` Admin, `GE` Gerente, `CA` Cajero, `VE` Vendedor, `ED`
+  Encargado de depósito. Sin código = solo lectura.
+- `django-simple-history` en modelos críticos (Usuario sin password, Empleado,
+  Producto, Stock, DetalleStock, MovimientoStock, TransferenciaStock,
+  Proveedor, SeccionCaja, DetalleCierreCaja, Cliente, Venta, DetalleVenta,
+  Factura, MetodoPagoXVenta, Compra, DetalleCompra, MetodoPagoXCompra).
+  `HistoryRequestMiddleware` guarda el usuario autenticado en `history_user`.
 
-Encabezados con el formato `# ==== DOMINIO ====`. No se crean archivos ni paquetes
-por dominio.
+## 4. Servicios
 
-| Sección | Modelos | Depende de |
-|---|---|---|
-| GEOGRAFIA | Pais, Provincia, Localidad, Ubicacion | — |
-| ORGANIZACION | Empresa, Sucursal, Usuario, Empleado, Rol, EmpleadoXRol, SucursalXEmpleado | geografia |
-| CAJA | Caja, SeccionCaja | organizacion |
-| CATALOGO | Categoria, Marca, Unidad, Producto, ProductoXSucursal | organizacion |
-| STOCK | Deposito, Stock, DetalleStock | catalogo, organizacion |
-| PROVEEDORES | Proveedor, ProveedorXSucursal, ProductoXProveedor | catalogo, organizacion |
-| PAGOS | MetodoPago | — |
-| VENTAS | Cliente, Venta, DetalleVenta, Factura, MetodoPagoXVenta | caja, catalogo, pagos |
-| COMPRAS | Compra, DetalleCompra, MetodoPagoXCompra | caja, catalogo, pagos |
-
-Como es un solo archivo, **el orden importa**: cada clase debe definirse *después*
-de los modelos que referencia. El orden actual de las secciones ya es válido; al
-agregar un modelo, ubicarlo en su sección (mover la sección solo si es necesario).
-
-### Modelo — reglas vigentes
-
-Decisiones ya aplicadas en `migrations/0003_*`:
-
-- **Todas las cantidades son `DecimalField(12,3)`**: `Stock.cantidad`,
-  `Stock.cant_min`, `DetalleStock.cantidad`, `DetalleVenta.cantidad_venta` y
-  `DetalleCompra.cantidad_compra`. La unidad del producto puede ser kilo, metro
-  o litro.
-- **`DetalleStock` es la fuente de verdad** del stock. `Stock.cantidad` es el
-  **total** (producto + sucursal) y debe mantenerse igual a la suma de sus
-  detalles. Lo recalculan los servicios dentro de la transacción.
-- **`Compra.proveedor`** es una FK a `Proveedor`. Queda `null=True` para no
-  romper compras históricas; los servicios deben exigirlo en compras nuevas.
-- **Recepción de compras con depósito predeterminado**: `DetalleCompra` no
-  tiene depósito ni lote. Cada `Deposito` pertenece a una `Sucursal` y puede
-  marcarse `es_predeterminado=True` (uno solo por sucursal). El servicio de
-  compras usa ese depósito.
-- `Deposito.sucursal` es nullable por compatibilidad; un depósito predeterminado
-  debe tener sucursal (lo valida el serializer).
-- **`Factura` tiene `HistoricalRecords`**, igual que el resto de VENTAS.
-- **Stock negativo controlado**: `Stock.cant_negativa_max` (default `-10`) es el
-  piso permitido. Por debajo de ese piso la venta se rechaza. El faltante se
-  guarda como un `DetalleStock` negativo sin lote en el depósito predeterminado,
-  para que la suma de detalles siga igualando `Stock.cantidad`.
-- **`MovimientoStock`** es el libro de movimientos (`VE` venta, `CA` cancelación,
-  `CO` compra, `AJ` ajuste). Permite revertir una venta cancelada sobre los
-  mismos lotes. Se registra dentro de la transacción del servicio.
-- **`Venta.EstadoVenta`** tiene cuatro estados: `PENDIENTE` (`PE`),
-  `CONFIRMADA` (`CO`), `PARCIAL` (`PC`) y `ANULADA` (`AN`). Una venta nace
-  `PENDIENTE` y descuenta stock; el cajero registra el pago y la confirma. Si
-  no hay pago ni confirmación en **30 minutos**
-  (`VENTAS_MINUTOS_PARA_CONFIRMAR`) se anula y restaura el stock. Una venta
-  `PENDIENTE` con pagos registrados no se auto-cancela.
-- **`Compra.fecha_recepcion`** marca cuándo se repuso el stock. La compra se
-  registra sin tocar stock y solo repone al recibirse.
-- **Cierre de caja con teórico y real**: `SeccionCaja.monto_teorico` lo calcula
-  el sistema y `monto_final` es lo contado por el usuario. El detalle por método
-  de pago vive en `DetalleCierreCaja` (`monto_sistema` vs `monto_real`).
-- **`MetodoPago.es_efectivo`** identifica el método que suma el `monto_inicial`
-  de la sección al calcular el teórico.
-- **`Rol.codigo`** identifica el rol funcional que usan los permisos
-  (`AD`, `GE`, `CA`, `VE`, `ED`). Es único y nullable: los roles que no son
-  funcionales (ej. Chofer) quedan sin código y solo permiten lectura. La
-  `ocupacion` es el nombre visible y puede cambiar sin romper permisos.
-
-### `services/` — lógica de negocio
-
-Convención: un módulo por dominio, con el mismo nombre que su sección de `models.py`.
-
-```text
-services/stock.py    → movimientos, FEFO/FIFO, stock negativo y restauración
-services/caja.py     → apertura, cálculo del teórico y cierre con montos reales
-services/ventas.py   → crear/confirmar/cancelar ventas y auto-cancelación
-services/compras.py  → registrar compra y reponer stock al recibirla
-services/pagos.py    → registrar pagos de ventas/compras y recalcular estado
-```
-
-Funciones principales:
+La lógica de negocio vive en `backend/app/services/`. Las vistas validan la
+entrada y delegan; no escriben directamente.
 
 | Módulo | Funciones |
 |---|---|
-| `stock.py` | `obtener_stock`, `consumir_stock`, `reponer_stock`, `restaurar_stock`, `recalcular_stock`, `deposito_predeterminado` |
+| `stock.py` | `obtener_stock`, `consumir_stock`, `reponer_stock`, `restaurar_stock`, `recalcular_stock`, `deposito_predeterminado`, `ajustar_stock`, `cargar_stock_sucursal`, `crear_transferencia`, `recibir_transferencia`, `cancelar_transferencia` |
 | `caja.py` | `abrir_seccion`, `calcular_teorico`, `cerrar_seccion`, `auditar_seccion` |
 | `ventas.py` | `crear_venta`, `confirmar_venta`, `cancelar_venta`, `cancelar_ventas_vencidas` |
-| `compras.py` | `registrar_compra`, `recibir_compra` |
-| `pagos.py` | `registrar_pago_venta`, `registrar_pago_compra` |
+| `compras.py` | `registrar_compra`, `anular_compra`, `marcar_en_camino`, `recibir_compra` |
+| `pagos.py` | `registrar_pago_venta`, `registrar_pagos_venta`, `registrar_pago_compra`, `registrar_pagos_compra` |
+| `proveedores.py` | `asociar_productos` |
 
-Reglas que respetan:
-
-- `services/stock.py` es el único que escribe `DetalleStock` y recalcula
-  `Stock.cantidad` como la suma de los detalles, dentro de la transacción.
-  Usa `select_for_update` (con `of=('self',)` cuando hay joins nullable).
-- `services/ventas.py` descuenta stock al crear la venta y lo restaura al
-  cancelarla, revirtiendo los `MovimientoStock` originales. Rechaza con
-  `StockInsuficiente` si se supera `Stock.cant_negativa_max`.
-- `services/compras.py` exige proveedor activo y repone en el `Deposito` con
-  `es_predeterminado=True` de la sucursal de la caja.
-- `services/caja.py` calcula el teórico como pagos de ventas − pagos de compras
-  + `monto_inicial` del método `es_efectivo`, y guarda el detalle por método.
-- `services/pagos.py` no permite pagar de más, ni sobre un documento anulado,
-  ni con un método inactivo. En ventas, el pago deja la venta `PENDIENTE`
-  hasta que se confirma; al confirmar queda `PARCIAL` o `CONFIRMADA` según el
-  total cubierto. En compras, el estado pasa a `PARCIAL` o `PAGADA`.
-- La auto-cancelación de ventas corre con
-  `manage.py cancelar_ventas_vencidas [--minutos 30]`. La tarea
-  `Corralon\CancelarVentasVencidas` la ejecuta cada 10 minutos
-  (`scripts/programar_cancelacion.bat`).
-
-Las vistas deben validar la entrada y **delegar** en los servicios, para que la
-lógica sea reutilizable y testeable sin HTTP.
+Reglas: stock usa `select_for_update` y recalcula dentro de la transacción;
+ventas rechaza stock bajo el piso, clientes inactivos, precio <= 0 y venta bajo
+costo; compras exige proveedor activo; pagos no permite pagar de más, documentos
+anulados ni métodos inactivos; `proveedores.asociar_productos` crea/actualiza
+costos en bloque y valida costo < precio de venta. `registrar_pagos_*` guarda
+varios métodos en una misma transacción.
 
 `Stock`, `DetalleStock`, `MovimientoStock`, `DetalleVenta`, `Factura` y
-`DetalleCompra` son de solo lectura. `Venta`, `Compra`, `SeccionCaja` y los
-pagos se escriben únicamente a través de acciones que llaman a los servicios;
-no aceptan `PUT`/`PATCH`/`DELETE`.
+`DetalleCompra` son de solo lectura. `Venta`, `Compra`, `SeccionCaja` y los pagos
+se escriben solo mediante acciones que llaman a los servicios (sin
+`PUT`/`PATCH`/`DELETE`).
 
-### Facturación electrónica (ARCA) — bloqueada
+## 5. API y permisos
 
-`Factura` existe y es de solo lectura: **no hay emisión**. La integración queda
-pendiente hasta tener CUIT del emisor, certificado `.crt`/`.key` y punto de venta
-habilitado en ARCA. Mientras tanto el frontend muestra la sección en
-mantenimiento.
-
-Cuando se retome, el flujo tiene dos capas:
-
-1. **WSAA** — se firma el TRA (PKCS#7) y ARCA devuelve `token` + `sign` por ~12 h.
-   Hay que cachearlos: pedir otro antes de tiempo se rechaza.
-2. **WSFEv1** — `FECompUltimoAutorizado` para el número siguiente y
-   `FECAESolicitar` para el CAE del comprobante.
-
-Reglas a respetar: empezar por **homologación**, no reintentar a ciegas después
-de un timeout (consultar `FECompConsultar` antes de repetir, porque la
-numeración es secuencial) y contemplar RG 5616 (`CondicionIVAReceptorId`) y
-RG 4892 (QR oficial). `Cliente.condicion_iva` es texto libre; habrá que
-normalizarlo a los códigos de ARCA.
-
-### API REST — configuración base
-
-Todo cuelga de `/api/` (`config/urls.py` → `app/urls.py`).
-
-| Pieza | Configuración |
-|---|---|
-| Autenticación | JWT con `djangorestframework-simplejwt` |
-| Login | `POST /api/token/` — acepta `username` **o** `legajo` (lo resuelve `UsuarioBackend`) |
-| Refresco | `POST /api/token/refresh/` — rota el refresh y blacklistea el anterior |
-| Tokens | Access 60 min · Refresh 7 días · header `Authorization: Bearer <token>` |
-| Permisos | `PermisoPorRol`: lectura para autenticados, escritura según el rol |
-| Errores de negocio | `app.exceptions.corralon_exception_handler` — `StockInsuficiente`/`ValueError` → `400` con `codigo` |
-| Perfil | `GET /api/perfil/` — usuario, empleado, roles y códigos activos |
-| Dashboard | `GET /api/dashboard/?periodo=hoy\|7d\|mes&sucursal=<id>` — KPIs de hoy y semana, comparaciones, alertas, serie de 7 días, cajas abiertas con ID de sección, compras por recibir y stock crítico |
-| Paginación | `PageNumberPagination`, `PAGE_SIZE = 20` |
-| Filtros | `DjangoFilterBackend` + `SearchFilter` + `OrderingFilter` |
-| Routers | `DefaultRouter` en `app/urls.py` — 34 viewsets + `perfil` y `dashboard` |
-
-El esquema sirve para web (React) y mobile (React Native): el cliente solo
-necesita los dos endpoints de token y el header `Authorization`.
-
-#### Rutas de la Fase 1
-
-| Dominio | Prefijos |
-|---|---|
-| GEOGRAFIA | `paises`, `provincias`, `localidades`, `ubicaciones` |
-| ORGANIZACION | `empresas`, `sucursales`, `usuarios`, `empleados`, `roles`, `empleados-roles`, `sucursales-empleados` |
-| CAJA | `cajas` (CRUD, gerencia), `secciones-caja` (abrir/cerrar/auditar) |
-| CATALOGO | `categorias`, `marcas`, `unidades`, `productos`, `productos-sucursales` |
-| STOCK | `depositos` (CRUD, con sucursal y predeterminado), `stocks`, `detalles-stock` y `movimientos-stock` (solo lectura) |
-| PROVEEDORES | `proveedores`, `proveedores-sucursales`, `productos-proveedores` |
-| PAGOS | `metodos-pago` |
-| VENTAS | `clientes` (CRUD), `ventas` (crear/confirmar/cancelar), `detalles-venta` y `facturas` (solo lectura), `metodos-pago-ventas` (registrar pago) |
-| COMPRAS | `compras` (registrar/recibir), `detalles-compra` (solo lectura), `metodos-pago-compras` (registrar pago) |
-
-#### Endpoints de escritura (Fase 2)
-
-| Endpoint | Acción | Servicio |
-|---|---|---|
-| `POST /api/ventas/` | Crear venta pendiente y descontar stock | `ventas.crear_venta` |
-| `POST /api/ventas/{id}/confirmar/` | Confirmar venta con pagos registrados | `ventas.confirmar_venta` |
-| `POST /api/ventas/{id}/cancelar/` | Anular y restaurar stock (`motivo` opcional) | `ventas.cancelar_venta` |
-| `POST /api/compras/` | Registrar compra (no toca stock) | `compras.registrar_compra` |
-| `POST /api/compras/{id}/recibir/` | Reponer stock en el depósito predeterminado | `compras.recibir_compra` |
-| `POST /api/secciones-caja/` | Abrir sección (`empleado` sale del usuario) | `caja.abrir_seccion` |
-| `POST /api/secciones-caja/{id}/cerrar/` | Cerrar con `montos_reales` por método | `caja.cerrar_seccion` |
-| `POST /api/secciones-caja/{id}/auditar/` | Auditar una sección cerrada | `caja.auditar_seccion` |
-| `POST /api/metodos-pago-ventas/` | Registrar pago de venta | `pagos.registrar_pago_venta` |
-| `POST /api/metodos-pago-compras/` | Registrar pago de compra | `pagos.registrar_pago_compra` |
-
-Los errores de negocio devuelven `400` con `{"detail": "...", "codigo": "..."}`;
-`codigo` es `stock_insuficiente`, `error_de_negocio`, `validacion` o
-`no_encontrado`.
-
-#### Permisos por rol
-
-Los roles funcionales viven en `Rol.codigo` (`AD`, `GE`, `CA`, `VE`, `ED`). Un
-`EmpleadoXRol` activo otorga el código; `is_superuser` y `AD` pueden todo.
-Sin rol, el usuario queda en solo lectura.
-
-| Módulo | Admin | Gerente | Cajero | Vendedor | Enc. depósito |
-|---|---|---|---|---|---|
-| Geografía / Organización | ✍️ | ✍️ | 👁 | 👁 | 👁 |
-| Usuarios | ✍️ | — | — | — | — |
-| Catálogo | ✍️ | ✍️ | 👁 | 👁 | 👁 |
-| Depósitos | ✍️ | ✍️ | 👁 | 👁 | ✍️ |
-| Stocks / movimientos | 👁 | 👁 | 👁 | 👁 | 👁 |
-| Proveedores | ✍️ | ✍️ | 👁 | 👁 | ✍️ |
-| Clientes | ✍️ | ✍️ | ✍️ | ✍️ | 👁 |
-| Cajas (registro) | ✍️ | ✍️ | 👁 | 👁 | 👁 |
-| Secciones: abrir/cerrar | ✍️ | ✍️ | ✍️ | — | — |
-| Secciones: auditar | ✍️ | ✍️ | — | — | — |
-| Ventas: crear/confirmar | ✍️ | ✍️ | ✍️ | ✍️ | — |
-| Ventas: cancelar | ✍️ | ✍️ | ✍️ | — | — |
-| Compras | ✍️ | ✍️ | — | — | ✍️ |
-| Pagos | ✍️ | ✍️ | ✍️ | — | ✍️ |
-| Métodos de pago | ✍️ | ✍️ | 👁 | 👁 | 👁 |
-
-Reglas de escritura:
-
-- `Usuario` exige `IsAdminUser`; la contraseña es write-only y se guarda con
-  `set_password()` (nunca se devuelve). `is_superuser` es de solo lectura.
-- `Producto` no expone `sucursales` (M2M con `through`); se gestiona con
-  `productos-sucursales`.
-- Las tablas puente tienen endpoint propio.
-- Los viewsets de escritura transaccional son `GenericViewSet` con
-  `Create`/`List`/`Retrieve`: no aceptan `PUT`, `PATCH` ni `DELETE`.
-
-### Auditoría — `django-simple-history`
-
-`HistoricalRecords()` en los modelos críticos:
-
-- ORGANIZACION: `Usuario` (con `excluded_fields=['password']`) y `Empleado`
-- CATALOGO: `Producto`
-- STOCK: `Stock`, `DetalleStock`, `MovimientoStock`
-- PROVEEDORES: `Proveedor`
-- CAJA: `SeccionCaja`, `DetalleCierreCaja`
-- VENTAS: `Cliente`, `Venta`, `DetalleVenta`, `Factura`, `MetodoPagoXVenta`
-- COMPRAS: `Compra`, `DetalleCompra`, `MetodoPagoXCompra`
-
-`HistoryRequestMiddleware` guarda el usuario autenticado en `history_user`
-(solo cuando la operación pasa por una request; en shell queda `None`).
-Las tablas `Historical*` se crean en `0002_*`, `0003_*` (`HistoricalFactura`) y
-`0004_*` (`HistoricalDetalleCierreCaja`, `HistoricalMovimientoStock`).
-
-### Autenticación — `app/backends.py`
-
-- `AUTH_USER_MODEL = 'app.Usuario'` (definido en `models.py`, sección ORGANIZACION)
-- `AUTHENTICATION_BACKENDS = ['app.backends.UsuarioBackend']`
-- `Usuario` extiende `AbstractUser` **solo con datos de login**; los datos
-  personales/laborales viven en `Empleado` (OneToOne con `related_name='empleado'`).
-- El backend permite iniciar sesión con **`username` o `legajo`** del empleado
-  (`Q(username=...) | Q(empleado__legajo=...)`).
-- El nombre `backends.py` es el estándar de Django (`AUTHENTICATION_BACKENDS`).
-  **No renombrar** ni mover esa lógica a otro módulo.
-
-### Otros puntos de configuración
-
-- `.env` en la **raíz**; `python-decouple` lo encuentra subiendo desde `config/settings.py`.
-- `CORS_ALLOW_ALL_ORIGINS = True` (solo válido para desarrollo).
-- Email en consola (`MAILERS` con `console.EmailBackend`).
-- `TIME_ZONE = 'UTC'`, `LANGUAGE_CODE = 'en-us'` (sin traducir todavía).
+- JWT: `POST /api/token/` (acepta `username` o `legajo`) y
+  `POST /api/token/refresh/`. Header `Authorization: Bearer <token>`.
+- Paginación 20; filtros DjangoFilter + Search + Ordering. Ventas y compras
+  aceptan `fecha`, `fecha_desde` y `fecha_hasta` (`AAAA-MM-DD`).
+- Errores de negocio: `400 {"detail": "...", "codigo": "..."}` con `codigo` =
+  `stock_insuficiente`, `error_de_negocio`, `validacion`, `no_encontrado` o
+  `protegido`.
+- Routers: 35 viewsets en `app/urls.py` + `GET /api/perfil/` y
+  `GET /api/dashboard/?periodo=hoy|7d|mes&sucursal=<id>`.
+- Escrituras clave:
+  - `POST /api/ventas/`, `/{id}/confirmar/`, `/{id}/cobrar/`, `/{id}/cancelar/`
+  - `PATCH /api/clientes/{id}/estado/`
+  - `PATCH /api/stocks/{id}/` y `POST /api/stocks/{id}/ajustar/`
+  - `POST /api/stocks/carga-masiva/` (suma stock por sucursal, lote obligatorio)
+  - `POST /api/transferencias-stock/`, `/{id}/recibir/`, `/{id}/cancelar/`
+  - `POST /api/compras/`, `/{id}/pagar/`, `/{id}/anular/`, `/{id}/en-camino/`,
+    `/{id}/recibir/`
+  - `POST /api/secciones-caja/`, `/{id}/cerrar/`, `/{id}/auditar/`
+  - `POST /api/metodos-pago-ventas/` y `/api/metodos-pago-compras/`
+- Permisos: lectura para autenticados; escritura por rol. `is_superuser` y `AD`
+  pueden todo. Caja: abrir/cerrar `AD/GE/CA`, auditar `AD/GE`. Ventas: crear
+  `AD/GE/CA/VE`; cobrar, confirmar y anular `AD/GE/CA` (el vendedor no).
+  Compras: `AD/GE/ED`. Pagos: `AD/GE/CA/ED`. Sin rol = solo lectura.
+- `Usuario` exige `IsAdminUser`, contraseña write-only con `set_password()`.
+  `Producto` acepta `sucursales` write-only y sincroniza `ProductoXSucursal`.
 
 ## 6. Frontend
 
-React 19 + Vite 8, JavaScript y `.jsx`. Tailwind 4 con los tokens de la
-referencia visual, React Router 7, Tabler Icons, SweetAlert2 y react-hook-form.
-
-```text
-frontend/src/
-├── api/client.js             # fetch con JWT, refresh automático y errores
-├── api/auth.js               # login (usuario o legajo), perfil y logout
-├── context/AuthContext.jsx   # proveedor de sesión real (JWT)
-├── context/auth-context.js   # AuthContext + useAuth
-├── data/menuConfig.js        # categorías, módulos, roles e íconos
-├── components/MenuDesplegable.jsx
-├── components/Encabezado.jsx
-├── components/sidebar/       # Header, Category, Item, Footer
-├── components/common/        # InputField, InputPassword, ButtonSubmit
-├── pages/Login.jsx
-├── pages/Inicio.jsx          # dashboard contra /api/dashboard/
-├── pages/Ventas.jsx          # listado, confirmación, anulación y presupuesto
-├── pages/Compras.jsx         # listado, registro y recepción
-├── pages/Clientes.jsx        # alta, búsqueda y listado de clientes
-├── components/comercial/     # FormularioVenta, FormularioCompra
-├── pages/EnDesarrollo.jsx    # provisional para módulos sin conectar
-├── pages/Facturacion.jsx     # mantenimiento ARCA
-├── pages/CambiarContrasena.jsx
-├── styles/                   # Login, MenuDesplegable, Encabezado, Inicio, Clientes, Comercial, Placeholder
-├── utils/formato.js
-├── App.jsx  index.css  main.jsx
-```
-
-- Rutas: `/login` es pública; el resto vive dentro del layout protegido
-  `MenuDesplegable`. `/` es el dashboard, cada módulo del menú tiene su ruta
-  (hoy provisional) y `/facturacion` muestra la pantalla de mantenimiento.
-- `useAuth()` expone `user` normalizado (`nombre`, `legajo`, `rol`, `codigos`),
-  `cargando`, `login`, `logout`, `puedeVer(modulo)` y `puedeEscribir(roles)`.
-- El menú se filtra con los códigos de rol de `menuConfig.js` (`AD`, `GE`, `CA`,
-  `VE`, `ED`); `is_superuser` y `AD` ven todo. Un usuario sin rol solo ve Inicio
-  y Perfil.
+- Rutas protegidas; `/login` es pública. `useAuth()` expone `user`, `login`,
+  `logout`, `puedeVer(modulo)` y `puedeEscribir(roles)`. El menú y las rutas
+  filtran por `AD/GE/CA/VE/ED`; sin rol solo Inicio y Perfil.
+- Selector global de sucursal en el encabezado, persistido en `localStorage`
+  (`corralon.sucursal`). Las opciones salen de `/api/perfil/` (admin ve todas,
+  el resto solo las asignadas). Filtra dashboard, ventas, compras, caja, stock,
+  movimientos, depósitos y transferencias. Clientes, proveedores, productos y
+  catálogos son globales.
 - Tokens en `localStorage` (`corralon.acceso` / `corralon.refresco`). Ante un
-  `401`, `pedir()` renueva el access y reintenta una vez; si el refresh falla,
-  limpia la sesión.
-- Vite hace proxy de `/api` a `http://localhost:8000` (`vite.config.js`). Para
-  apuntar a otro backend se usa `VITE_API_URL`.
-- El dashboard Admin consume `GET /api/dashboard/` con filtro de sucursal y
-  refresco automático cada 30 s (también al volver a la pestaña). Muestra
-  franja de alertas, cinco KPIs (hoy, semana, pendientes, cajas y compras),
-  evolución de ventas de 7 días, cajas abiertas con ID de sección, últimas
-  ventas, stock crítico y compras por recibir. Arriba tiene accesos a Nueva
-  venta, Registrar cliente y Nuevo presupuesto.
-- La sección Clientes permite buscar, listar y dar de alta clientes contra
-  `/api/clientes/`; el acceso rápido del dashboard abre el formulario con
-  `?nuevo=1`.
-- Ventas: listado con filtros por estado y búsqueda por N.º de venta, cliente,
-  DNI o sección de caja. Confirmación, anulación y alta con detalle de productos.
-  El botón **Generar presupuesto** arma un PDF imprimible desde el borrador, sin
-  guardar la venta.
-- Compras: listado con filtro “Por recibir” y búsqueda por N.º de compra,
-  proveedor, CUIT o sección de caja. Alta de compra sin mover stock y recepción
-  que repone en el depósito predeterminado.
-- El alta de venta/compra usa `SelectorProductos`: lista filtrable por código,
-  nombre, categoría, marca o unidad, con precio y stock de la sucursal de la
-  caja. Las cantidades y precios del detalle son editables.
-- Ventas usa cuatro estados: Pendiente (sin pago ni confirmación), Parcial
-  (pago parcial, venta confirmada), Confirmada (pago total, venta confirmada) y
-  Anulada. La acción **Cobrar** registra el pago y confirma la venta.
-- Los filtros de estado muestran una leyenda con el significado de cada estado.
-- El menú filtra por rol y las rutas de módulo también validan `puedeVer`: un
-  usuario no puede entrar por URL a un módulo que no ve en el menú.
-- Facturación se muestra con un cartel de **mantenimiento** hasta habilitar ARCA.
-- Verificación: `npm run lint` (0 warnings) y `npm run build`.
+  `401`, `pedir()` renueva y reintenta una vez; si falla, cierra sesión.
+- Módulos listos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores.
+  Pendientes: Caja, Empleados, Perfil y Actividad (`EnDesarrollo`).
+- Convenciones UI: búsqueda en vivo con debounce, filtros persistidos en la URL,
+  exportación CSV, presupuesto imprimible, cobro multi-método, recepción de
+  compras con depósito, ajustes y transferencias de stock, costos por proveedor.
+- Alta de compra: el selector muestra solo los productos del proveedor elegido.
+  Si se cambia de proveedor con líneas cargadas, se confirma y se vacía el
+  carrito. La fecha estimada de llegada no puede ser anterior a la compra.
+- Inventario: el alta/edición de producto exige proveedor y precio de costo. Los
+  selects de categoría, marca, unidad y proveedor tienen un atajo `+` que abre
+  el formulario de alta sin perder los datos del producto. Al crear, recibir o
+  cancelar una transferencia, la lista pasa al estado nuevo y resalta la fila.
+- Selects de entidades con `CampoSelectorBuscable`: búsqueda local o remota,
+  navegación por teclado y atajo opcional de alta. Se usa en venta (cliente),
+  compra (proveedor), producto (proveedor y catálogos), costo de proveedor
+  (proveedor y producto), transferencias (producto remoto; depósitos local),
+  ajuste de stock (depósito), sucursales (depósito y encabezado), sección de
+  caja (venta/compra) y filtros de inventario/selector de productos (categoría,
+  marca y unidad local). El modal se renderiza fuera del formulario principal y
+  auto-selecciona el ítem creado.
+- Los formularios ya no cargan catálogos completos de clientes, proveedores ni
+  productos: buscan contra la API. `FormularioVenta` usa `SelectorProductos`
+  remoto; `FormularioCompra` carga solo los productos del proveedor elegido.
+  `ProductoXProveedorSerializer` incluye los datos del producto para evitar
+  precargar el catálogo. Los valores iniciales (por ejemplo `clienteInicial` por
+  URL) se resuelven con una consulta puntual por ID.
+- Validaciones de formularios: `utils/validaciones.js` centraliza DNI/CUIT,
+  email, teléfono, códigos, números y textos. Los campos inválidos usan
+  `MensajeError`, clase `.input-error` y bloquean el envío; se enfoca el primer
+  error. `pedir()` conserva `error.campos` para mapear errores de DRF al input.
+- Compra: si el proveedor no tiene productos, se asocian desde un modal múltiple
+  con proveedor fijo, sin abrir otra pestaña ni perder el borrador. Al guardar se
+  recargan los productos del proveedor y quedan disponibles en la compra.
+- Navegación desde las alertas del dashboard:
+  `/ventas?alerta=por_vencer|vencida`,
+  `/productos?tab=stock&alerta=negativo|minimo&producto=<id>` y
+  `/compras?por_recibir=1`. Inventario resalta y hace scroll al producto.
+  Cajas abiertas ancla al panel `#cajas-abiertas` hasta que exista el módulo.
+- Facturación muestra mantenimiento hasta habilitar ARCA.
 
-> **Pendiente:** conectar los módulos de negocio (ventas, compras, caja,
-> productos, empleados, proveedores, perfil y actividad) y reemplazar
-> `EnDesarrollo` por las pantallas reales, manteniendo esta paleta y estructura.
+## 7. Facturación (ARCA) — bloqueada
 
-## 7. Datos de prueba
+`Factura` existe y es solo lectura; no hay emisión. Falta CUIT del emisor,
+certificado `.crt`/`.key` y punto de venta habilitado. Al retomar: empezar por
+homologación; WSAA (TRA + token/sign cacheados ~12 h) y WSFEv1
+(`FECompUltimoAutorizado` + `FECAESolicitar`); tras un timeout consultar
+`FECompConsultar` antes de reintentar; contemplar RG 5616
+(`CondicionIVAReceptorId`) y RG 4892 (QR).
 
-```bash
-cd backend
-python manage.py seed_data [--reset] [--ventas 50] [--compras 20]
-```
-
-- Idempotente para el usuario admin; `--reset` borra las tablas de negocio antes de poblar.
-- Es determinista (`random.seed(42)`).
-- Genera 180 días de historial de ventas/compras.
-- Los depósitos quedan repartidos entre las sucursales, con uno predeterminado
-  por sucursal. Cada lote está en un depósito de la misma sucursal que su stock
-  y `Stock.cantidad` coincide con la suma de sus detalles.
-- Las compras se procesan **antes** que las ventas: reponen stock en el depósito
-  predeterminado de la sucursal y después las ventas lo consumen, así ninguna
-  venta se rechaza por `StockInsuficiente`.
-- Ventas y compras generan sus `MovimientoStock` (`VE`/`CO`) con la fecha del
-  documento, y cada lote de compra queda con `fecha_ingreso = fecha_recepcion`.
-- El stock inicial arranca con 100–300 unidades por lote (1–2 lotes por
-  producto/sucursal) y `fecha_ingreso` anterior a los 180 días de historial.
-- Las ventas `PENDIENTE` quedan dentro de la ventana de auto-cancelación (25
-  minutos como máximo) para que el barrido no las anule al ejecutarse.
-- Crea los roles funcionales con su `codigo` y asigna los empleados demo
-  (Gerente, Cajero, Vendedor, Encargado de depósito). El rol Chofer queda sin
-  código (solo lectura).
-- Credenciales que crea: superusuario `admin` / `admin1234` y empleados demo
-  con contraseña `test1234` (se listan al final de la ejecución).
-- Cancelar una venta del seed restaura stock como en producción, porque el
-  libro de movimientos está completo. Cubierto por `tests/test_seed.py`.
-
-## 8. Convenciones de código
-
-- **Idioma:** nombres de modelos, campos, `db_table` y `verbose_name` en español.
-- `db_table` en MAYÚSCULAS y plural (`USUARIOS`, `SECCIONES_CAJA`, `METODO_DE_PAGO_X_COMPRAS`).
-- `Meta` siempre con `ordering`, `verbose_name` y `verbose_name_plural`.
-- Comillas simples en Python.
-- Los modelos usan `TextChoices` para los estados (ej. `Caja.EstadoCaja`).
-- No se usa `default_auto_field` explícito en los `AppConfig` (configuración mínima).
-- Frontend: JS (no TS), archivos `.jsx`.
-
-## 9. Verificación antes de cerrar cualquier cambio
+## 8. Comandos y verificación
 
 ```bash
 cd backend
-python manage.py check                            # 0 issues
-python manage.py makemigrations --check --dry-run # "No changes detected" si no se tocaron modelos
-python manage.py migrate                          # aplicar migraciones pendientes
-python manage.py test app                         # 61 tests
+../venv/Scripts/python.exe manage.py check                 # 0 issues
+../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
+../venv/Scripts/python.exe manage.py migrate
+../venv/Scripts/python.exe manage.py test app              # 153 tests
+../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 50] [--compras 20]
+../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 
 cd ../frontend
-npm run lint                                      # 0 warnings
-npm run build                                     # compila la SPA
+npm run lint                                               # 0 warnings
+npm run build
 ```
 
-Si se tocaron modelos, generar la migración correspondiente y **no** editar
-migraciones a mano.
+Antes de cerrar un cambio: check, makemigrations --check, migrate, tests, lint y
+build. Si se tocaron modelos, generar la migración; no editar migraciones a mano.
+El seed es determinista (`random.seed(42)`), crea `admin`/`admin1234` y empleados
+demo con `test1234`. La tarea de Windows `Corralon\CancelarVentasVencidas` corre
+el barrido cada 10 minutos (`scripts/programar_cancelacion.bat`).
 
-## 10. Seguimiento diario — `DIA_SIGUIENTE.md`
+## 9. Convenciones
 
-En la raíz del repo existe `DIA_SIGUIENTE.md`, con **solo** lo que quedó pendiente
-al cerrar la sesión anterior.
+- Nombres de modelos, campos, `db_table` y `verbose_name` en español.
+- `db_table` en MAYÚSCULAS y plural (`USUARIOS`, `SECCIONES_CAJA`).
+- `Meta` con `ordering`, `verbose_name` y `verbose_name_plural`.
+- Comillas simples en Python; `TextChoices` para estados.
+- Frontend: JavaScript y `.jsx` (no TypeScript).
 
-- Al **empezar** a trabajar: leerlo primero. Es la lista de tareas del día.
-- Al **cerrar**: reescribirlo con lo que quedó pendiente. Lo terminado o descartado
-  se **borra**; no es un historial (para eso está git).
-- Se actualiza **junto con** `AGENTS.md`: si cambia el estado del proyecto, cambian los dos.
-- Si no queda nada pendiente, el archivo contiene solo: `Sin pendientes.`
+## 10. Cierre de sesión
 
-El contexto estable (arquitectura, convenciones, deuda técnica) vive en `AGENTS.md`.
-Las tareas del día viven en `DIA_SIGUIENTE.md`.
-
-## 11. Reglas para agentes
-
-- **No mover** la lógica de modelos/vistas/admin a `backends.py`. Ese archivo es
-  solo autenticación.
-- **No cambiar** `AUTH_USER_MODEL` ni el nombre de las tablas.
-- **No crear** apps Django nuevas por dominio sin decidirlo explícitamente con el usuario.
-- **No dividir** `models.py` en un paquete `models/`: el agrupamiento es por comentarios.
-- Los endpoints nuevos se registran en el `router` de `app/urls.py`, no en `config/urls.py`.
-- **No inventar** archivos vacíos "por si acaso"; se crean cuando hay contenido real.
-- Antes de reorganizar: verificar con los comandos de la sección 9.
-- Al cerrar la sesión: actualizar `AGENTS.md` y reescribir `DIA_SIGUIENTE.md` (sección 10).
+1. Leer `DIA_SIGUIENTE.md` al empezar.
+2. Al terminar, actualizar este archivo si cambió el estado y reescribir
+   `DIA_SIGUIENTE.md` solo con lo pendiente. Lo terminado o descartado se borra.
+3. Si no queda nada: `Sin pendientes.`

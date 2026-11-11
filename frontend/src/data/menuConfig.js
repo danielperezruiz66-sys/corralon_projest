@@ -60,7 +60,7 @@ export const menuCategories = [
       {
         name: 'Clientes',
         path: '/clientes',
-        detalle: 'Alta y consulta de clientes',
+        detalle: 'Alta, edición y consulta de clientes',
         icono: IconAddressBook,
         roles: ['AD', 'GE', 'CA', 'VE'],
       },
@@ -72,18 +72,18 @@ export const menuCategories = [
     icono: IconPackage,
     modules: [
       {
-        name: 'Stock y productos',
+        name: 'Inventario',
         path: '/productos',
-        detalle: 'Catálogo, precios y depósitos',
+        detalle: 'Productos, stock, movimientos y depósitos',
         icono: IconBuildingWarehouse,
         roles: ['AD', 'GE', 'CA', 'VE', 'ED'],
       },
       {
         name: 'Proveedores',
         path: '/proveedores',
-        detalle: 'Información y estado',
+        detalle: 'Información, sucursales y costos',
         icono: IconTruck,
-        roles: ['AD', 'GE'],
+        roles: ['AD', 'GE', 'ED'],
       },
     ],
   },

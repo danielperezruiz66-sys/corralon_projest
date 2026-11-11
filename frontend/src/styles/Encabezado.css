@@ -4,6 +4,7 @@ ESTILOS DE ENCABEZADO - FER-CONS
 
 .encabezado-principal {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -15,6 +16,62 @@ ESTILOS DE ENCABEZADO - FER-CONS
   box-sizing: border-box;
 }
 
+.encabezado-derecha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.selector-sucursal-encabezado {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 9999px;
+  background-color: rgba(255, 255, 255, 0.16);
+  padding: 0.35rem 0.45rem 0.35rem 0.8rem;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.selector-sucursal-encabezado .campo-comercial {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.selector-sucursal-encabezado .campo-con-atajo,
+.selector-sucursal-encabezado .selector-buscable {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.selector-sucursal-encabezado .selector-buscable input {
+  width: 9.5rem;
+  border: none;
+  border-radius: 9999px;
+  background-color: #ffffff;
+  padding: 0.35rem 0.65rem;
+  color: var(--color-oscuro);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.selector-sucursal-encabezado .selector-buscable input:focus-visible {
+  outline: 2px solid var(--color-sidebar);
+}
+
+.selector-sucursal-encabezado .selector-buscable-lista {
+  right: auto;
+  left: 0;
+  min-width: 12rem;
+}
+
 @media (min-width: 768px) {
   .encabezado-principal {
     border-radius: 0;
@@ -22,6 +79,11 @@ ESTILOS DE ENCABEZADO - FER-CONS
     padding-left: 3rem;
     padding-right: 3rem;
     color: var(--color-oscuro);
+  }
+
+  .selector-sucursal-encabezado {
+    background-color: var(--color-fondo);
+    color: var(--color-sidebar);
   }
 }
 

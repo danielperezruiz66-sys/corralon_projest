@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import {
   IconAlertTriangle,
   IconCash,
@@ -19,6 +19,7 @@ import {
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import { useAuth } from '../context/auth-context'
+import { useSucursal } from '../context/sucursal-context'
 import {
   etiquetaDia,
   formatearFecha,
@@ -44,6 +45,7 @@ const DATOS_VACIOS = {
       monto: '0',
       ticket_promedio: '0',
       por_vencer: 0,
+      vencidas: 0,
       minutos_restantes: null,
     },
   },
@@ -57,6 +59,7 @@ const DATOS_VACIOS = {
   equipo: { empleados_activos: 0, proveedores_activos: 0 },
   alertas: {
     ventas_por_vencer: 0,
+    ventas_vencidas: 0,
     minutos_restantes: null,
     stock_negativo: 0,
     stock_bajo: 0,
@@ -66,6 +69,7 @@ const DATOS_VACIOS = {
   serie_etiqueta: 'Últimos 7 días',
   ventas_por_dia: [],
   ventas_recientes: [],
+  ventas_por_vencer: [],
   stock_critico: [],
   compras_por_recibir: [],
   cajas_abiertas: [],
@@ -112,8 +116,9 @@ function EstadoVenta({ estado, etiqueta }) {
 
 export default function Inicio() {
   const { user } = useAuth()
+  const { sucursalActiva } = useSucursal()
+  const location = useLocation()
   const [datos, setDatos] = useState(DATOS_VACIOS)
-  const [sucursal, setSucursal] = useState('')
   const [cargando, setCargando] = useState(true)
   const [actualizando, setActualizando] = useState(false)
   const [tieneDatos, setTieneDatos] = useState(false)
@@ -123,12 +128,12 @@ export default function Inicio() {
 
   const consultar = useCallback(() => {
     const parametros = new URLSearchParams()
-    if (sucursal) {
-      parametros.set('sucursal', sucursal)
+    if (sucursalActiva) {
+      parametros.set('sucursal', sucursalActiva)
     }
     const consulta = parametros.toString()
     return pedir(`/dashboard/${consulta ? `?${consulta}` : ''}`)
-  }, [sucursal])
+  }, [sucursalActiva])
 
   const cargar = useCallback(async () => {
     if (solicitudRef.current) {
@@ -181,6 +186,16 @@ export default function Inicio() {
   }, [consultar])
 
   useEffect(() => {
+    if (cargando || !location.hash) {
+      return
+    }
+    const destino = document.getElementById(location.hash.slice(1))
+    if (destino) {
+      destino.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [cargando, location.hash])
+
+  useEffect(() => {
     const intervalo = setInterval(() => {
       if (document.visibilityState === 'visible') {
         setActualizando(true)
@@ -209,12 +224,6 @@ export default function Inicio() {
       document.removeEventListener('visibilitychange', alCambiarVisibilidad)
     }
   }, [cargar])
-
-  const cambiarSucursal = (evento) => {
-    setSucursal(evento.target.value)
-    setActualizando(true)
-    setError('')
-  }
 
   const reintentar = () => {
     setActualizando(true)
@@ -273,6 +282,12 @@ export default function Inicio() {
     (total, item) => total + (Number(item.monto_inicial) || 0),
     0,
   )
+  const proximaPorVencer = datos.ventas_por_vencer?.[0]
+  const detalleVencimiento = proximaPorVencer
+    ? `Venta #${proximaPorVencer.id} · ${proximaPorVencer.cliente} · ${formatearMoneda(
+        proximaPorVencer.monto,
+      )} · ${proximaPorVencer.minutos_restantes} min`
+    : 'Revisar ventas pendientes'
 
   const alertasActivas = [
     alertas.ventas_por_vencer > 0 && {
@@ -282,11 +297,18 @@ export default function Inicio() {
       titulo: `${alertas.ventas_por_vencer} venta${
         alertas.ventas_por_vencer === 1 ? '' : 's'
       } por vencer`,
-      detalle:
-        alertas.minutos_restantes !== null
-          ? `Próxima en ${alertas.minutos_restantes} min`
-          : 'Revisar ventas pendientes',
-      to: '/ventas',
+      detalle: detalleVencimiento,
+      to: '/ventas?alerta=por_vencer',
+    },
+    alertas.ventas_vencidas > 0 && {
+      id: 'vencidas',
+      tono: 'peligro',
+      icono: IconClock,
+      titulo: `${alertas.ventas_vencidas} venta${
+        alertas.ventas_vencidas === 1 ? '' : 's'
+      } vencida${alertas.ventas_vencidas === 1 ? '' : 's'} sin barrido`,
+      detalle: 'El barrido automático las anula en la próxima ejecución',
+      to: '/ventas?alerta=vencida',
     },
     alertas.stock_negativo > 0 && {
       id: 'negativo',
@@ -296,7 +318,7 @@ export default function Inicio() {
         alertas.stock_negativo === 1 ? '' : 's'
       } con stock negativo`,
       detalle: 'Revisar reposición urgente',
-      to: '/productos',
+      to: '/productos?tab=stock&alerta=negativo',
     },
     alertas.stock_bajo > 0 && {
       id: 'bajo',
@@ -306,7 +328,7 @@ export default function Inicio() {
         alertas.stock_bajo === 1 ? '' : 's'
       } bajo el mínimo`,
       detalle: 'Programar compra',
-      to: '/productos',
+      to: '/productos?tab=stock&alerta=minimo',
     },
     alertas.compras_por_recibir > 0 && {
       id: 'compras',
@@ -316,7 +338,7 @@ export default function Inicio() {
         alertas.compras_por_recibir === 1 ? '' : 's'
       } sin recibir`,
       detalle: 'Pendientes de recepción',
-      to: '/compras',
+      to: '/compras?por_recibir=1',
     },
     alertas.cajas_abiertas > 0 && {
       id: 'cajas',
@@ -326,7 +348,7 @@ export default function Inicio() {
         alertas.cajas_abiertas === 1 ? '' : 's'
       } abierta${alertas.cajas_abiertas === 1 ? '' : 's'}`,
       detalle: 'Secciones en curso',
-      to: '/caja',
+      to: '#cajas-abiertas',
     },
   ].filter(Boolean)
 
@@ -339,22 +361,6 @@ export default function Inicio() {
 
       <div className="dashboard">
         <section className="dashboard-controles">
-          <label className="control-grupo">
-            <span className="control-etiqueta">Sucursal</span>
-            <select
-              className="control-select"
-              value={sucursal}
-              onChange={cambiarSucursal}
-            >
-              <option value="">Todas las sucursales</option>
-              {datos.filtros.sucursales.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.nombre}
-                </option>
-              ))}
-            </select>
-          </label>
-
           <div className="dashboard-acciones">
             <Link
               to="/ventas?nueva=1"
@@ -420,6 +426,54 @@ export default function Inicio() {
           </section>
         )}
 
+        {datos.ventas_por_vencer.length > 0 && (
+          <section className="panel panel-vencimientos">
+            <div className="panel-cabecera">
+              <h2 className="panel-titulo">
+                <IconClock size={24} />
+                Ventas por vencer
+              </h2>
+              <Link
+                to="/ventas?alerta=por_vencer"
+                className="panel-enlace"
+              >
+                Ver por vencer
+              </Link>
+            </div>
+            <ul className="vencimiento-lista">
+              {datos.ventas_por_vencer.map((venta) => (
+                <li key={venta.id}>
+                  <Link
+                    to={`/ventas?alerta=por_vencer&search=${venta.id}`}
+                    className="vencimiento-item vencimiento-item-enlace"
+                  >
+                    <div className="vencimiento-info">
+                      <strong>
+                        Venta #{venta.id} · {venta.cliente}
+                      </strong>
+                      <small>
+                        {venta.seccion_caja_detalle} · {venta.sucursal}
+                      </small>
+                    </div>
+                    <div className="vencimiento-tiempo">
+                      <span
+                        className={
+                          venta.minutos_restantes <= 5
+                            ? 'vencimiento-chip vencimiento-urgente'
+                            : 'vencimiento-chip'
+                        }
+                      >
+                        {venta.minutos_restantes} min
+                      </span>
+                      <small>{formatearMoneda(venta.monto)}</small>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         <section className="dashboard-kpis">
           <TarjetaKpi
             icono={IconCurrencyDollar}
@@ -464,6 +518,12 @@ export default function Inicio() {
                     {ventas.pendientes.minutos_restantes !== null
                       ? ` · ${ventas.pendientes.minutos_restantes} min`
                       : ''}
+                  </span>
+                )}
+                {ventas.pendientes.vencidas > 0 && (
+                  <span className="kpi-alerta-texto">
+                    {ventas.pendientes.vencidas} vencida
+                    {ventas.pendientes.vencidas === 1 ? '' : 's'} sin barrido
                   </span>
                 )}
               </>
@@ -570,7 +630,7 @@ export default function Inicio() {
             </div>
           </article>
 
-          <article className="panel">
+          <article className="panel" id="cajas-abiertas">
             <div className="panel-cabecera">
               <h2 className="panel-titulo">
                 <IconCash size={24} />
@@ -666,7 +726,10 @@ export default function Inicio() {
                 <IconAlertTriangle size={24} />
                 Stock crítico
               </h2>
-              <Link to="/productos" className="panel-enlace">
+              <Link
+                to="/productos?tab=stock"
+                className="panel-enlace"
+              >
                 Ver stock
               </Link>
             </div>
@@ -678,36 +741,48 @@ export default function Inicio() {
             ) : (
               <ul className="stock-lista">
                 {datos.stock_critico.map((item) => (
-                  <li className="stock-item" key={item.id}>
-                    <div>
-                      <strong>{item.producto}</strong>
-                      <small>{item.sucursal}</small>
-                    </div>
-                    <div className="stock-cantidades">
-                      <span className="stock-cantidad">
-                        {formatearNumero(item.cantidad)}
-                      </span>
-                      <small>mín. {formatearNumero(item.cant_min)}</small>
-                    </div>
-                    <span
-                      className={`badge ${
-                        item.alerta === 'NEGATIVO'
-                          ? 'badge-peligro'
-                          : 'badge-aviso'
-                      }`}
+                  <li key={item.id}>
+                    <Link
+                      to={`/productos?tab=stock&alerta=${
+                        item.alerta === 'NEGATIVO' ? 'negativo' : 'minimo'
+                      }&producto=${item.producto_id}`}
+                      className="stock-item stock-item-enlace"
+                      title={`Ver ${item.producto} en Inventario`}
                     >
-                      {item.alerta === 'NEGATIVO' ? 'Negativo' : 'Mínimo'}
-                    </span>
+                      <div>
+                        <strong>{item.producto}</strong>
+                        <small>{item.sucursal}</small>
+                      </div>
+                      <div className="stock-cantidades">
+                        <span className="stock-cantidad">
+                          {formatearNumero(item.cantidad)}
+                        </span>
+                        <small>mín. {formatearNumero(item.cant_min)}</small>
+                      </div>
+                      <span
+                        className={`badge ${
+                          item.alerta === 'NEGATIVO'
+                            ? 'badge-peligro'
+                            : 'badge-aviso'
+                        }`}
+                      >
+                        {item.alerta === 'NEGATIVO' ? 'Negativo' : 'Mínimo'}
+                      </span>
+                    </Link>
                   </li>
                 ))}
               </ul>
             )}
 
             {stock.negativo > 0 && (
-              <p className="panel-alerta">
+              <Link
+                to="/productos?tab=stock&alerta=negativo"
+                className="panel-alerta panel-alerta-enlace"
+              >
                 Hay {stock.negativo} registro
-                {stock.negativo === 1 ? '' : 's'} con stock negativo.
-              </p>
+                {stock.negativo === 1 ? '' : 's'} con stock negativo. Ver en
+                Inventario.
+              </Link>
             )}
           </article>
         </section>
@@ -718,7 +793,10 @@ export default function Inicio() {
               <IconTruckDelivery size={24} />
               Compras por recibir
             </h2>
-            <Link to="/compras" className="panel-enlace">
+            <Link
+              to="/compras?por_recibir=1"
+              className="panel-enlace"
+            >
               Ver compras
             </Link>
           </div>
@@ -730,19 +808,39 @@ export default function Inicio() {
           ) : (
             <ul className="compra-lista">
               {datos.compras_por_recibir.map((item) => (
-                <li className="compra-item" key={item.id}>
-                  <div className="compra-info">
-                    <strong>{item.proveedor}</strong>
-                    <small>
-                      {formatearFecha(item.fecha_compra)} ·{' '}
-                      {item.dias_esperando} día
-                      {item.dias_esperando === 1 ? '' : 's'} esperando
-                    </small>
-                  </div>
-                  <div className="compra-monto">
-                    <strong>{formatearMoneda(item.monto)}</strong>
-                    <span className="badge badge-pe">Pendiente</span>
-                  </div>
+                <li key={item.id}>
+                  <Link
+                    to={`/compras?por_recibir=1&search=${item.id}`}
+                    className="compra-item compra-item-enlace"
+                    title={`Ver compra #${item.id}`}
+                  >
+                    <div className="compra-info">
+                      <strong>{item.proveedor}</strong>
+                      <small>
+                        {formatearFecha(item.fecha_compra)} ·{' '}
+                        {item.dias_esperando} día
+                        {item.dias_esperando === 1 ? '' : 's'} esperando
+                        {item.fecha_estimada_llegada
+                          ? ` · llega ${formatearFecha(item.fecha_estimada_llegada)}`
+                          : ''}
+                      </small>
+                    </div>
+                    <div className="compra-monto">
+                      <strong>{formatearMoneda(item.monto)}</strong>
+                      <span
+                        className={`badge ${
+                          item.estado_entrega === 'EC'
+                            ? 'badge-aviso'
+                            : 'badge-pe'
+                        }`}
+                      >
+                        {item.estado_entrega_detalle ||
+                          (item.estado_entrega === 'EC'
+                            ? 'En camino'
+                            : 'Por recibir')}
+                      </span>
+                    </div>
+                  </Link>
                 </li>
               ))}
             </ul>
