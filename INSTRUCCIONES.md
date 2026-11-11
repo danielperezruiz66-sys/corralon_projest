@@ -1,33 +1,33 @@
 # INSTRUCCIONES
 
-Guía para levantar el proyecto **Corralón Fer-Cons** en tu equipo.
+Guía para instalar, ejecutar y cargar los datos de prueba de **Corralón Fer-Cons**.
 
-El repositorio está dividido en dos entornos independientes:
+El repositorio tiene dos partes independientes:
 
-- `backend/` → API Django (Python)
-- `frontend/` → Aplicación React (Vite + JavaScript)
+- `backend/` → API Django + PostgreSQL.
+- `frontend/` → React + Vite.
 
-## Requisitos previos
+Para arquitectura, modelos y reglas de negocio, ver `AGENTS.md`.
 
-Antes de empezar, asegurate de tener instalado:
+## 1. Requisitos
 
-- **Python 3.14** o superior — https://www.python.org/downloads/
-- **PostgreSQL 16** o superior — https://www.postgresql.org/download/
-- **Node.js 20** o superior — https://nodejs.org/
-- **Git** — https://git-scm.com/downloads
+- **Python 3.14+**
+- **PostgreSQL 16+**
+- **Node.js 20+**
+- **Git**
 
-> Al instalar Python en Windows, marcá la casilla **"Add Python to PATH"**.
+En Windows, al instalar Python marcá **“Add Python to PATH”**.
 
-## 1. Clonar el repositorio
+## 2. Instalar el proyecto
+
+### 2.1 Clonar
 
 ```bash
 git clone <URL-del-repositorio>
 cd corralon_projest
 ```
 
-## 2. Backend (Django)
-
-### 2.1 Crear y activar el entorno virtual
+### 2.2 Backend
 
 Desde la raíz del repositorio:
 
@@ -35,82 +35,81 @@ Desde la raíz del repositorio:
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
+pip install -r backend\requirements.txt
+copy .env.example .env
 ```
 
 **Windows (CMD):**
 ```cmd
 python -m venv venv
 venv\Scripts\activate.bat
+pip install -r backend\requirements.txt
+copy .env.example .env
 ```
 
 **Linux/Mac:**
 ```bash
 python3 -m venv venv
 source venv/bin/activate
+pip install -r backend/requirements.txt
+cp .env.example .env
 ```
 
-> Si PowerShell bloquea el script de activación, ejecutá una vez:
+> Si PowerShell bloquea la activación:
 > `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
 
-### 2.2 Instalar dependencias
+Editá `.env` (en la raíz) y configurá al menos `DB_PASSWORD`. Por defecto el
+proyecto usa la base `corralon_bd`, usuario `postgres` y puerto **5433**. Si tu
+PostgreSQL usa el puerto estándar, cambiá `DB_PORT=5432`.
 
-Con el entorno virtual activado, entrá a `backend/` e instalá:
-
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-### 2.3 Configurar las variables de entorno
-
-El archivo `.env` vive en la **raíz del repositorio** (Django lo lee automáticamente
-desde `backend/config/settings.py`).
-
-1. Copiá el archivo de ejemplo:
-   ```bash
-   copy .env.example .env      # Windows
-   cp .env.example .env        # Linux/Mac
-   ```
-2. Abrí `.env` y completá los valores:
-   - `SECRET_KEY`: una clave secreta cualquiera (en desarrollo sirve la que trae).
-   - `DB_PASSWORD`: tu contraseña de PostgreSQL.
-   - El resto de valores (`DB_NAME`, `DB_USER`, etc.) dejá los que vienen por defecto salvo que uses otros.
-
-> El archivo `.env` es privado de cada desarrollador y **no se sube** al repositorio.
-
-### 2.4 Crear la base de datos en PostgreSQL
-
-Ingresá a PostgreSQL y creá la base:
+### 2.3 Crear la base de datos
 
 ```sql
 CREATE DATABASE corralon_bd WITH ENCODING 'UTF8';
 ```
 
-Desde consola:
+O desde consola:
+
 ```bash
-createdb -U postgres corralon_bd
+createdb -U postgres -p 5433 corralon_bd
 ```
 
-> Por defecto el proyecto apunta al puerto **5433** (`DB_PORT` en `.env`).
-> Si tu PostgreSQL escucha en el puerto estándar, cambiá `DB_PORT=5432`.
-
-### 2.5 Aplicar migraciones
+### 2.4 Migrar y cargar datos de prueba
 
 ```bash
+cd backend
 python manage.py migrate
+python manage.py seed_data --reset
 ```
 
-### 2.6 Levantar el servidor
+`--reset` **borra los datos de negocio actuales** y genera un entorno completo:
+
+- 2 sucursales en Salta: **Salta Capital** y **Campo Quijano**.
+- 2 depósitos y 1 caja por sucursal.
+- 4 empleados por sucursal (Administrador, Cajero, Vendedor y Encargado de depósito).
+- 30 productos con categoría, marca, unidad, precio de venta, costo y stock.
+- 6 meses de compras y ventas (240 ventas y 72 compras por defecto).
+
+Para una carga más liviana:
+
+```bash
+python manage.py seed_data --reset --ventas 50 --compras 20
+```
+
+> Ejecutá `seed_data` únicamente sobre una base de desarrollo: reemplaza todos
+> los datos de negocio.
+
+### 2.5 Levantar el backend
 
 ```bash
 python manage.py runserver
 ```
 
-El servidor queda disponible en: **http://127.0.0.1:8000/**
+API disponible en **http://127.0.0.1:8000/**.
 
-## 3. Frontend (React + Vite)
+## 3. Frontend
 
-En otra terminal, desde la raíz del repositorio:
+En otra terminal, desde la raíz:
 
 ```bash
 cd frontend
@@ -118,83 +117,72 @@ npm install
 npm run dev
 ```
 
-El servidor de Vite queda disponible en: **http://localhost:5173/**
+Aplicación disponible en **http://localhost:5173/**.
 
-Vite redirige las llamadas a `/api` hacia el backend en **http://localhost:8000**,
-así que el servidor de Django tiene que estar levantado. Para apuntar a otro
-backend, definí `VITE_API_URL` al iniciar Vite.
+Vite redirige `/api` a `http://localhost:8000`, así que el backend debe estar
+corriendo. Para usar otra URL, definí `VITE_API_URL`.
 
-La pantalla de login acepta **usuario o legajo**. Con los datos de `seed_data`
-podés entrar con `admin` / `admin1234` o con `maria.gomez` / `test1234`.
+## 4. Usuarios de prueba
 
-Para compilar la versión de producción:
+El login acepta **usuario o legajo**. Todos los usuarios de sucursal usan la
+contraseña `test1234`.
 
-```bash
-npm run build
-```
+| Usuario | Rol | Legajo |
+|---|---|---|
+| `admin` / `admin1234` | Superusuario | — |
+| `admin.salta` | Administrador | 0001 |
+| `cajero.salta` | Cajero | 0002 |
+| `vendedor.salta` | Vendedor | 0003 |
+| `deposito.salta` | Encargado de depósito | 0004 |
+| `admin.quijano` | Administrador | 0005 |
+| `cajero.quijano` | Cajero | 0006 |
+| `vendedor.quijano` | Vendedor | 0007 |
+| `deposito.quijano` | Encargado de depósito | 0008 |
 
-## Estructura del proyecto
+## 5. Comandos útiles
 
-```
-corralon_projest/
-├── backend/                # Django + DRF
-│   ├── config/             # settings, urls, asgi, wsgi
-│   ├── app/                # única app: models, services, views, serializers,
-│   │                       # migrations, tests, management/commands
-│   ├── logs/               # salida del barrido (no se commitea)
-│   ├── manage.py
-│   └── requirements.txt
-├── frontend/               # React + Vite (src/api, context, pages, components)
-├── scripts/                # tareas programadas de Windows
-├── .env.example
-├── AGENTS.md               # contexto y reglas para agentes
-├── DIA_SIGUIENTE.md        # pendientes de la sesión anterior
-└── INSTRUCCIONES.md        # esta guía
-```
+Desde `backend/`:
 
-Los dominios, modelos y reglas de negocio están en `AGENTS.md`.
-
-## Comandos útiles
-
-| Acción | Comando (desde `backend/`) |
+| Acción | Comando |
 |---|---|
-| Verificar el proyecto | `python manage.py check` |
-| Crear migraciones | `python manage.py makemigrations` |
+| Verificar configuración | `python manage.py check` |
 | Aplicar migraciones | `python manage.py migrate` |
-| Crear superusuario | `python manage.py createsuperuser` |
-| Levantar servidor | `python manage.py runserver` |
 | Correr los tests | `python manage.py test app` |
-| Cancelar ventas vencidas | `python manage.py cancelar_ventas_vencidas --minutos 30` |
 | Cargar datos de prueba | `python manage.py seed_data --reset` |
+| Cancelar ventas vencidas | `python manage.py cancelar_ventas_vencidas --minutos 30` |
 
-| Acción | Comando (desde `frontend/`) |
+Desde `frontend/`:
+
+| Acción | Comando |
 |---|---|
-| Instalar dependencias | `npm install` |
-| Levantar servidor de desarrollo | `npm run dev` |
-| Compilar para producción | `npm run build` |
+| Desarrollo | `npm run dev` |
+| Compilar producción | `npm run build` |
 | Analizar el código | `npm run lint` |
 
-## Tareas programadas
+## 6. Actualizar el proyecto
 
-Las ventas `PENDIENTE` se cancelan solas cuando superan el umbral configurado en
-`.env` (`VENTAS_MINUTOS_PARA_CONFIRMAR`, 30 minutos por defecto). El barrido
-debe correr cada `VENTAS_BARRIDO_MINUTOS` (10 minutos por defecto).
+Después de un `git pull`:
 
-**Windows (Programador de tareas).** Ejecutar una vez:
+```bash
+pip install -r backend/requirements.txt
+cd backend
+python manage.py migrate
+cd ../frontend
+npm install
+```
+
+## 7. Cancelación automática de ventas
+
+Las ventas pendientes sin pagos se anulan según `VENTAS_MINUTOS_PARA_CONFIRMAR`
+(30 minutos por defecto). El barrido debe ejecutarse cada 10 minutos.
+
+**Windows:** ejecutar una vez:
 
 ```bat
 scripts\programar_cancelacion.bat
 ```
 
-Crea la tarea `Corralon\CancelarVentasVencidas`, que corre
-`scripts\cancelar_ventas_vencidas.bat` cada 10 minutos y escribe el resultado
-en `backend\logs\cancelar_ventas_vencidas.log`.
-
-> Por defecto la tarea corre con la sesión del usuario abierta. Si el servidor
-> queda sin sesión iniciada, registrarla con las credenciales de una cuenta de
-> servicio (`schtasks /Create ... /RU USUARIO /RP CONTRASEÑA`).
-
-**Linux (cron).** Agregar al crontab del usuario que corre el backend:
+**Linux:** agregar al cron:
 
 ```cron
 */10 * * * * cd /ruta/al/proyecto/backend && ../venv/bin/python manage.py cancelar_ventas_vencidas >> logs/cancelar_ventas_vencidas.log 2>&1

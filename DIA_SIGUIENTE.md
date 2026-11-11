@@ -10,6 +10,11 @@ Proveedores; si todo está bien, empezar un módulo nuevo.
 
 ## 1. QA en navegador
 
+- [ ] **Datos de prueba:** correr `seed_data --reset` y verificar 2 sucursales
+      (Salta Capital y Campo Quijano), 2 depósitos y 1 caja por sucursal, 4
+      empleados por sucursal (Administrador, Cajero, Vendedor y Encargado de
+      depósito), 30 productos con categoría, marca, unidad, precio de venta,
+      costo y stock, y compras/ventas de los últimos 6 meses.
 - [ ] **Ventas:** búsqueda en vivo (sin Enter, cancela requests viejas, sin
       parpadeo); presets de fecha, rango Desde/Hasta, día exacto y rango invertido;
       inputs a la derecha en escritorio y debajo en mobile; orden por fecha/monto;

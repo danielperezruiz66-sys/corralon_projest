@@ -20,7 +20,7 @@ Arquitectura desacoplada:
 - API en `http://localhost:8000`, Vite en `http://localhost:5173`.
 - `.env` en la raíz (no se commitea); plantilla en `.env.example`.
 
-Estado: backend Fase 1+2 completo (35 viewsets, 153 tests); frontend con
+Estado: backend Fase 1+2 completo (35 viewsets, 159 tests); frontend con
 Dashboard, Ventas, Compras, Clientes, Inventario y Proveedores. Faltan Caja,
 Empleados, Perfil y Actividad. Facturación ARCA bloqueada.
 
@@ -34,7 +34,7 @@ backend/
     ├── services/      # stock, caja, ventas, compras, pagos, proveedores
     ├── management/commands/  # seed_data, cancelar_ventas_vencidas
     ├── migrations/    # 0001–0014
-    ├── tests/         # 153 tests
+    ├── tests/         # 159 tests
     ├── admin.py  apps.py  backends.py  exceptions.py  permissions.py
     └── serializers.py  urls.py  views.py
 frontend/src/
@@ -249,8 +249,8 @@ cd backend
 ../venv/Scripts/python.exe manage.py check                 # 0 issues
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 153 tests
-../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 50] [--compras 20]
+../venv/Scripts/python.exe manage.py test app              # 159 tests
+../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 
 cd ../frontend
@@ -260,9 +260,11 @@ npm run build
 
 Antes de cerrar un cambio: check, makemigrations --check, migrate, tests, lint y
 build. Si se tocaron modelos, generar la migración; no editar migraciones a mano.
-El seed es determinista (`random.seed(42)`), crea `admin`/`admin1234` y empleados
-demo con `test1234`. La tarea de Windows `Corralon\CancelarVentasVencidas` corre
-el barrido cada 10 minutos (`scripts/programar_cancelacion.bat`).
+El seed es determinista (`random.seed(42)`), crea las sucursales Salta Capital y
+Campo Quijano, `admin`/`admin1234`, 8 empleados demo (4 por sucursal con roles
+AD/CA/VE/ED) con `test1234` y 6 meses de compras y ventas. La tarea de Windows
+`Corralon\CancelarVentasVencidas` corre el barrido cada 10 minutos
+(`scripts/programar_cancelacion.bat`).
 
 ## 9. Convenciones
 
