@@ -42,15 +42,24 @@ class StockApiTests(BaseCorralonTestCase):
         self.assertEqual(negativo.data['count'], 1)
         self.assertEqual(negativo.data['results'][0]['id'], self.stock.id)
 
+    def _detalle_stock(self, stock=None):
+        stock = stock or self.stock
+        return DetalleStock.objects.filter(stock=stock).order_by('id').first()
+
     def test_ajuste_suma_y_resta_stock(self):
         self.autenticar(self.user_deposito)
+        detalle = self._detalle_stock()
 
         suma = self.client.post(
             f'/api/stocks/{self.stock.id}/ajustar/',
             {
-                'cantidad': '120.000',
-                'deposito': self.deposito.id,
                 'motivo': 'Conteo de inventario',
+                'ingresos': [
+                    {
+                        'deposito': self.deposito.id,
+                        'cantidad': '20.000',
+                    }
+                ],
             },
             format='json',
         )
@@ -65,48 +74,92 @@ class StockApiTests(BaseCorralonTestCase):
             ).exists()
         )
 
+        # Reduce el lote original (100 -> 30), total queda 30 + 20 (nuevo lote) = 50.
         resta = self.client.post(
             f'/api/stocks/{self.stock.id}/ajustar/',
             {
-                'cantidad': '50.000',
                 'motivo': 'Merma',
+                'reducciones': [
+                    {
+                        'detalle': detalle.id,
+                        'cantidad_nueva': '30.000',
+                    }
+                ],
             },
             format='json',
         )
         self.assertEqual(resta.status_code, 200)
         self.stock.refresh_from_db()
+        detalle.refresh_from_db()
+        self.assertEqual(detalle.cantidad, Decimal('30.000'))
         self.assertEqual(self.stock.cantidad, Decimal('50.000'))
         self.assertTrue(
             MovimientoStock.objects.filter(
                 stock=self.stock,
                 tipo=MovimientoStock.TipoMovimiento.AJUSTE,
                 cantidad=Decimal('-70.000'),
+                detalle_stock=detalle,
             ).exists()
         )
 
-    def test_ajuste_no_supera_el_limite_negativo(self):
+    def test_ajuste_rechaza_reduccion_mayor_al_lote(self):
         self.autenticar(self.user_deposito)
+        detalle = self._detalle_stock()
 
         respuesta = self.client.post(
             f'/api/stocks/{self.stock.id}/ajustar/',
             {
-                'cantidad': '-20.000',
                 'motivo': 'Error de carga',
+                'reducciones': [
+                    {
+                        'detalle': detalle.id,
+                        'cantidad_nueva': '150.000',
+                    }
+                ],
             },
             format='json',
         )
 
         self.assertEqual(respuesta.status_code, 400)
-        self.assertIn('limite negativo', respuesta.data['detail'])
+        self.stock.refresh_from_db()
+        detalle.refresh_from_db()
+        self.assertEqual(self.stock.cantidad, Decimal('100.000'))
+        self.assertEqual(detalle.cantidad, Decimal('100.000'))
+
+    def test_ajuste_rechaza_cantidad_negativa_en_lote(self):
+        self.autenticar(self.user_deposito)
+        detalle = self._detalle_stock()
+
+        respuesta = self.client.post(
+            f'/api/stocks/{self.stock.id}/ajustar/',
+            {
+                'motivo': 'Error de carga',
+                'reducciones': [
+                    {
+                        'detalle': detalle.id,
+                        'cantidad_nueva': '-1.000',
+                    }
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.cantidad, Decimal('100.000'))
 
     def test_vendedor_no_puede_ajustar_stock(self):
         self.autenticar(self.user_vendedor)
+        detalle = self._detalle_stock()
 
         respuesta = self.client.post(
             f'/api/stocks/{self.stock.id}/ajustar/',
-            {'cantidad': '90.000', 'motivo': 'Prueba'},
+            {
+                'motivo': 'Prueba',
+                'reducciones': [
+                    {'detalle': detalle.id, 'cantidad_nueva': '90.000'}
+                ],
+            },
             format='json',
         )
 

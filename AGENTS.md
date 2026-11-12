@@ -5,7 +5,7 @@
 > Al cerrar una sesión: actualizar este archivo si cambió el estado y reescribir
 > `DIA_SIGUIENTE.md` solo con lo pendiente (lo terminado se borra).
 
-**Última actualización:** 2026-11-11
+**Última actualización:** 2026-11-12
 
 ## 1. Proyecto y stack
 
@@ -20,8 +20,8 @@ Arquitectura desacoplada:
 - API en `http://localhost:8000`, Vite en `http://localhost:5173`.
 - `.env` en la raíz (no se commitea); plantilla en `.env.example`.
 
-Estado: backend Fase 1+2 completo (35 viewsets, 159 tests); frontend con
-Dashboard, Ventas, Compras, Clientes, Inventario y Proveedores. Faltan Caja,
+Estado: backend Fase 1+2 completo (35 viewsets, suite en `app.tests`); frontend
+con Dashboard, Ventas, Compras, Clientes, Inventario y Proveedores. Faltan Caja,
 Empleados, Perfil y Actividad. Facturación ARCA bloqueada.
 
 ## 2. Estructura y arquitectura
@@ -33,8 +33,8 @@ backend/
     ├── models.py      # 35 modelos por secciones (# ==== DOMINIO ====)
     ├── services/      # stock, caja, ventas, compras, pagos, proveedores
     ├── management/commands/  # seed_data, cancelar_ventas_vencidas
-    ├── migrations/    # 0001–0014
-    ├── tests/         # 159 tests
+    ├── migrations/    # 0001–0020
+    ├── tests/         # suite en app.tests
     ├── admin.py  apps.py  backends.py  exceptions.py  permissions.py
     └── serializers.py  urls.py  views.py
 frontend/src/
@@ -75,18 +75,29 @@ Reglas:
 - Las cantidades de stock son `DecimalField(12,3)`; los importes,
   `DecimalField(10,2)`.
 - `DetalleStock` es la fuente de verdad. `Stock.cantidad` = suma de detalles.
-  Solo `services/stock.py` escribe detalles y recalcula el total.
+  Solo `services/stock.py` (y escritura limitada de campos editables) modifica
+  detalles y recalcula el total.
+- Lotes: `DetalleStock.lote` es `LOT-{NNNNNN}` autogenerado por el sistema
+  (único, no editable). Los ingresos (carga, recepción de compra, ingreso por
+  ajuste) crean nuevos lotes. `DetalleStock` tiene `observaciones` (nota
+  automática de procedencia en transferencias, inborrable).
 - `MovimientoStock` es el libro: `VE` venta, `CA` cancelación, `CO` compra,
   `AJ` ajuste, `TR` transferencia.
 - Stock negativo: piso `Stock.cant_negativa_max` (default `-10`). El faltante se
-  guarda como `DetalleStock` negativo sin lote en el depósito predeterminado.
-- Carga masiva por sucursal: suma cantidades en un depósito de la sucursal, exige
-  lote (vencimiento opcional), producto activo en la sucursal y registra
-  movimientos `AJ` con referencia `carga-stock: <motivo>`.
+  registra como detalle negativo según el flujo que lo genere.
+- Carga masiva por sucursal: suma cantidades en un depósito de la sucursal
+  (vencimiento opcional), producto activo en la sucursal y registra movimientos
+  `AJ` con referencia `carga-stock: <motivo>` creando lotes nuevos.
+- Ajuste de stock: detallado por lote (`POST /api/stocks/{id}/ajustar/`).
+  `reducciones` fijan la **cantidad resultante** de lotes existentes
+  (`0 ≤ nueva ≤ actual`, sin aumentar lotes ni FEFO implícito) e `ingresos`
+  crean lotes nuevos en un depósito de la sucursal. Registra `AJ` por detalle.
 - `Deposito.es_predeterminado`: uno por sucursal. `Sucursal.es_central`: única
   por empresa; recibe las compras si no se elige depósito.
-- `TransferenciaStock`: descuenta el origen y queda `ET`; al recibir ingresa en
-  destino (`RE`); al cancelar vuelve al origen (`CA`).
+- `TransferenciaStock`: se crea por `detalle_origen` (lote origen), descuenta el
+  origen y queda `ET`; al recibir crea un **nuevo lote** en destino (`RE`) con
+  `fecha_venc` copiada y observación automática de procedencia (inborrable) +
+  motivo; al cancelar devuelve la cantidad al detalle origen (`CA`).
 - `Venta.EstadoVenta`: `PE` Pendiente, `CO` Confirmada, `AN` Anulada. **No
   existe Parcial.** Nace pendiente y descuenta stock; acepta pagos parciales sin
   cambiar de estado; se confirma con el saldo en cero. Tras 30 min sin pagos
@@ -111,12 +122,15 @@ Reglas:
 - `Compra.estado_entrega`: `PE` Pendiente, `EC` En camino, `RE` Recibida. Es
   independiente del estado de pago (`PE`/`PC`/`PA`/`AN`). Registrar o marcar en
   camino no mueve stock; `recibir_compra` repone el depósito elegido (o el
-  central por defecto) y la deja `RECIBIDA`. `fecha_estimada_llegada` es
-  obligatoria en `EC` y no puede ser anterior a `fecha_compra` (se valida en
-  `Compra.clean()`, en los serializers y en los servicios). Anular solo si no
-  está recibida y no tiene pagos, con `motivo_cancelacion` obligatorio. Cada
-  detalle exige costo > 0, no usa el precio de venta y el producto debe tener un
-  `ProductoXProveedor` activo del proveedor de la compra.
+  central por defecto) con lote generado y la deja `RECIBIDA`.
+  `fecha_estimada_llegada` es obligatoria en `EC` y no puede ser anterior a
+  `fecha_compra` (se valida en `Compra.clean()`, en los serializers y en los
+  servicios). Anular solo si no está recibida y no tiene pagos, con
+  `motivo_cancelacion` obligatorio. Cada detalle exige costo > 0, no usa el
+  precio de venta y el producto debe tener un `ProductoXProveedor` activo del
+  proveedor de la compra. **Permisos:** crear/solicitar `AD/GE/ED` (ED registra
+  en `PE` sin fecha estimada); gestión `en-camino`, `recibir`, `pagar` y `anular`
+  solo `AD/GE`.
 - `SeccionCaja`: `monto_teorico` calculado por el sistema, `monto_final` contado.
   `DetalleCierreCaja` guarda `monto_sistema` vs `monto_real` por método.
   `MetodoPago.es_efectivo` suma el `monto_inicial` al teórico.
@@ -135,7 +149,7 @@ entrada y delegan; no escriben directamente.
 
 | Módulo | Funciones |
 |---|---|
-| `stock.py` | `obtener_stock`, `consumir_stock`, `reponer_stock`, `restaurar_stock`, `recalcular_stock`, `deposito_predeterminado`, `ajustar_stock`, `cargar_stock_sucursal`, `crear_transferencia`, `recibir_transferencia`, `cancelar_transferencia` |
+| `stock.py` | `obtener_stock`, `consumir_stock`, `reponer_stock`, `restaurar_stock`, `recalcular_stock`, `deposito_predeterminado`, `ajustar_stock_detallado`, `ajustar_stock` (legado), `cargar_stock_sucursal`, `crear_transferencia`, `recibir_transferencia`, `cancelar_transferencia` |
 | `caja.py` | `abrir_seccion`, `calcular_teorico`, `cerrar_seccion`, `auditar_seccion` |
 | `ventas.py` | `crear_venta`, `confirmar_venta`, `cancelar_venta`, `cancelar_ventas_vencidas` |
 | `compras.py` | `registrar_compra`, `anular_compra`, `marcar_en_camino`, `recibir_compra` |
@@ -149,10 +163,14 @@ anulados ni métodos inactivos; `proveedores.asociar_productos` crea/actualiza
 costos en bloque y valida costo < precio de venta. `registrar_pagos_*` guarda
 varios métodos en una misma transacción.
 
-`Stock`, `DetalleStock`, `MovimientoStock`, `DetalleVenta`, `Factura` y
-`DetalleCompra` son de solo lectura. `Venta`, `Compra`, `SeccionCaja` y los pagos
-se escriben solo mediante acciones que llaman a los servicios (sin
-`PUT`/`PATCH`/`DELETE`).
+`Stock`, `MovimientoStock`, `DetalleVenta`, `Factura` y `DetalleCompra` son de
+solo lectura. `DetalleStock` solo permite edición limitada por API
+(`PATCH`/`PUT`, `AD/GE/ED`) de `fecha_venc` y `observaciones` (la nota
+automática de origen no se puede eliminar); `lote`, `cantidad`, `stock` y
+`depósito` no se editan. `Venta`, `Compra`, `SeccionCaja` y los pagos se
+escriben solo mediante acciones que llaman a los servicios (sin
+`PUT`/`PATCH`/`DELETE` general, salvo configuraciones específicas como mínimos
+de stock).
 
 ## 5. API y permisos
 
@@ -168,11 +186,16 @@ se escriben solo mediante acciones que llaman a los servicios (sin
 - Escrituras clave:
   - `POST /api/ventas/`, `/{id}/confirmar/`, `/{id}/cobrar/`, `/{id}/cancelar/`
   - `PATCH /api/clientes/{id}/estado/`
-  - `PATCH /api/stocks/{id}/` y `POST /api/stocks/{id}/ajustar/`
-  - `POST /api/stocks/carga-masiva/` (suma stock por sucursal, lote obligatorio)
-  - `POST /api/transferencias-stock/`, `/{id}/recibir/`, `/{id}/cancelar/`
+  - `PATCH /api/stocks/{id}/` (mínimos) y `POST /api/stocks/{id}/ajustar/`
+    (ajuste detallado: `motivo`, `reducciones[{detalle, cantidad_nueva}]`,
+    `ingresos[{deposito, cantidad, fecha_venc?}]`; reduce lotes existentes e
+    ingresa lotes nuevos)
+  - `PATCH /api/detalles-stock/{id}/` (`fecha_venc`, `observaciones`; `AD/GE/ED`)
+  - `POST /api/stocks/carga-masiva/` (suma stock por sucursal con lote generado)
+  - `POST /api/transferencias-stock/` (por `detalle_origen`), `/{id}/recibir/`,
+    `/{id}/cancelar/`
   - `POST /api/compras/`, `/{id}/pagar/`, `/{id}/anular/`, `/{id}/en-camino/`,
-    `/{id}/recibir/`
+    `/{id}/recibir/` (gestión `en-camino/recibir/pagar/anular` solo `AD/GE`)
   - `POST /api/secciones-caja/`, `/{id}/cerrar/`, `/{id}/auditar/`
   - `POST /api/metodos-pago-ventas/` y `/api/metodos-pago-compras/`
 - Permisos: lectura para autenticados; escritura por rol. `is_superuser` y `AD`
@@ -206,6 +229,11 @@ se escriben solo mediante acciones que llaman a los servicios (sin
   selects de categoría, marca, unidad y proveedor tienen un atajo `+` que abre
   el formulario de alta sin perder los datos del producto. Al crear, recibir o
   cancelar una transferencia, la lista pasa al estado nuevo y resalta la fila.
+  Stock: carga con lotes autogenerados; ajuste detallado por lote (cantidad
+  resultante 0..actual para reducir, ingresos separados crean lotes nuevos);
+  detalle de stock permite editar `fecha_venc`/observaciones del lote (nota de
+  origen inborrable) y muestra lote origen/destino en transferencias. Atajo
+  "Comprar" en productos (`AD/GE`); orden por nombre/recientes/antiguos.
 - Selects de entidades con `CampoSelectorBuscable`: búsqueda local o remota,
   navegación por teclado y atajo opcional de alta. Se usa en venta (cliente),
   compra (proveedor), producto (proveedor y catálogos), costo de proveedor

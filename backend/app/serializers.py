@@ -875,39 +875,127 @@ class StockConfigSerializer(serializers.ModelSerializer):
         return value
 
 
-class AjusteStockSerializer(serializers.Serializer):
+class AjusteStockReduccionSerializer(serializers.Serializer):
+    detalle = serializers.PrimaryKeyRelatedField(
+        queryset=DetalleStock.objects.select_related('stock', 'deposito'),
+    )
+    cantidad_nueva = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        min_value=Decimal('0.000'),
+    )
+
+
+class AjusteStockIngresoSerializer(serializers.Serializer):
+    deposito = serializers.PrimaryKeyRelatedField(
+        queryset=Deposito.objects.select_related('sucursal'),
+    )
     cantidad = serializers.DecimalField(
         max_digits=12,
         decimal_places=3,
     )
-    deposito = serializers.PrimaryKeyRelatedField(
-        queryset=Deposito.objects.all(),
-        required=False,
-        allow_null=True,
-    )
+    fecha_venc = serializers.DateField(required=False, allow_null=True)
+
+
+class AjusteStockSerializer(serializers.Serializer):
+    """Ajuste detallado de stock por lote.
+
+    - `reducciones`: fija la cantidad resultante de lotes existentes
+      (0 <= cantidad_nueva <= cantidad actual del lote).
+    - `ingresos`: crea nuevos lotes en depósitos de la sucursal.
+    """
+
     motivo = serializers.CharField(max_length=90, min_length=3)
+    reducciones = AjusteStockReduccionSerializer(many=True, required=False)
+    ingresos = AjusteStockIngresoSerializer(many=True, required=False)
 
     def validate(self, attrs):
         stock = self.context.get('stock')
-        deposito = attrs.get('deposito')
-        if stock is not None:
-            nombre_unidad = str(getattr(stock.producto, 'unidad', '') or '')
-            error_cantidad = validar_cantidad_por_unidad(
-                attrs.get('cantidad'),
-                nombre_unidad,
-                etiqueta='La cantidad',
-                permitir_no_positiva=True,
+        reducciones = attrs.get('reducciones') or []
+        ingresos = attrs.get('ingresos') or []
+
+        if not reducciones and not ingresos:
+            raise serializers.ValidationError(
+                'Indicá al menos una reducción por lote o un ingreso de stock.'
             )
-            if error_cantidad:
-                raise serializers.ValidationError({'cantidad': error_cantidad})
-            if deposito is not None and deposito.sucursal_id != stock.sucursal_id:
+
+        if stock is None:
+            return attrs
+
+        nombre_unidad = str(getattr(stock.producto, 'unidad', '') or '')
+        vistos_detalles = set()
+
+        for item in reducciones:
+            detalle = item['detalle']
+            cantidad_nueva = item['cantidad_nueva']
+
+            if detalle.pk in vistos_detalles:
                 raise serializers.ValidationError(
                     {
-                        'deposito': (
-                            'El depósito debe pertenecer a la sucursal del stock.'
+                        'reducciones': (
+                            f'El lote "{detalle.lote}" está repetido en el ajuste.'
                         )
                     }
                 )
+            vistos_detalles.add(detalle.pk)
+
+            if detalle.stock_id != stock.id:
+                raise serializers.ValidationError(
+                    {
+                        'reducciones': (
+                            f'El lote "{detalle.lote}" no pertenece a este stock.'
+                        )
+                    }
+                )
+            if detalle.deposito.sucursal_id != stock.sucursal_id:
+                raise serializers.ValidationError(
+                    {
+                        'reducciones': (
+                            f'El lote "{detalle.lote}" no pertenece a la sucursal del stock.'
+                        )
+                    }
+                )
+
+            error_cantidad = validar_cantidad_por_unidad(
+                cantidad_nueva,
+                nombre_unidad,
+                etiqueta='La cantidad del lote',
+                permitir_no_positiva=True,
+            )
+            if error_cantidad:
+                raise serializers.ValidationError(
+                    {'reducciones': error_cantidad}
+                )
+            if cantidad_nueva > detalle.cantidad:
+                raise serializers.ValidationError(
+                    {
+                        'reducciones': (
+                            f'La cantidad nueva del lote "{detalle.lote}" no puede ser '
+                            f'mayor a su stock actual ({detalle.cantidad}).'
+                        )
+                    }
+                )
+
+        for item in ingresos:
+            deposito = item['deposito']
+            cantidad = item['cantidad']
+
+            error_cantidad = validar_cantidad_por_unidad(
+                cantidad,
+                nombre_unidad,
+                etiqueta='La cantidad a ingresar',
+            )
+            if error_cantidad:
+                raise serializers.ValidationError({'ingresos': error_cantidad})
+            if deposito.sucursal_id != stock.sucursal_id:
+                raise serializers.ValidationError(
+                    {
+                        'ingresos': (
+                            'El depósito de ingreso debe pertenecer a la sucursal del stock.'
+                        )
+                    }
+                )
+
         return attrs
 
 

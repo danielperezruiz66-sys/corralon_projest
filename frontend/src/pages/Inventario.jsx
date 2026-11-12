@@ -1791,20 +1791,6 @@ export default function Inventario() {
         />
       )}
 
-      {detalleLoteEditando && (
-        <FormularioDetalleStock
-          detalle={detalleLoteEditando}
-          onCerrar={() => setDetalleLoteEditando(null)}
-          onGuardado={async () => {
-            setDetalleLoteEditando(null)
-            if (detalleStock) {
-              await abrirDetalleStock(detalleStock)
-            }
-            refrescarListado()
-          }}
-        />
-      )}
-
       {detalleProducto && (
         <div className="comercial-modal-fondo" role="dialog" aria-modal="true">
           <div className="comercial-modal inventario-modal-ancho">
@@ -2194,6 +2180,20 @@ export default function Inventario() {
             </div>
           </div>
         </div>
+      )}
+
+      {detalleLoteEditando && (
+        <FormularioDetalleStock
+          detalle={detalleLoteEditando}
+          onCerrar={() => setDetalleLoteEditando(null)}
+          onGuardado={async () => {
+            setDetalleLoteEditando(null)
+            if (detalleStock) {
+              await abrirDetalleStock(detalleStock)
+            }
+            refrescarListado()
+          }}
+        />
       )}
     </>
   )

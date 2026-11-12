@@ -957,10 +957,10 @@ class StockViewSet(
             context={**self.get_serializer_context(), 'stock': stock_obj},
         )
         entrada.is_valid(raise_exception=True)
-        stock = stock_service.ajustar_stock(
+        stock = stock_service.ajustar_stock_detallado(
             stock_obj,
-            entrada.validated_data['cantidad'],
-            entrada.validated_data.get('deposito'),
+            entrada.validated_data.get('reducciones') or [],
+            entrada.validated_data.get('ingresos') or [],
             entrada.validated_data['motivo'],
         )
         salida = serializers.StockSerializer(

@@ -153,12 +153,147 @@ def consumir_stock(stock, cantidad, referencia='', venta=None):
 
 
 @transaction.atomic
+def ajustar_stock_detallado(stock, reducciones, ingresos, motivo):
+    """Ajusta stock por lote: reduce lotes existentes y/o crea nuevos ingresos.
+
+    - `reducciones`: lista de dicts {detalle: DetalleStock|id, cantidad_nueva: Decimal|str}
+      con 0 <= cantidad_nueva <= cantidad actual del detalle (solo quita, no agrega).
+    - `ingresos`: lista de dicts {deposito: Deposito|id, cantidad: Decimal|str, fecha_venc?: date}
+      que crean nuevos lotes (código LOT automático).
+    """
+    stock = Stock.objects.select_for_update().select_related(
+        'producto__unidad',
+        'sucursal',
+    ).get(pk=stock.pk)
+
+    reducciones = list(reducciones or [])
+    ingresos = list(ingresos or [])
+    if not reducciones and not ingresos:
+        raise ValueError('Indicá al menos una reducción por lote o un ingreso de stock.')
+
+    motivo = (motivo or '').strip()
+    if len(motivo) < 3:
+        raise ValueError('El motivo del ajuste debe tener al menos 3 caracteres.')
+
+    nombre_unidad = str(getattr(stock.producto, 'unidad', '') or '')
+    from ..utils import validar_cantidad_por_unidad
+
+    referencia = f'ajuste: {motivo}'
+    cambios = Decimal('0.000')
+
+    # Reducciones sobre lotes existentes (cantidad_nueva = cantidad resultante del lote).
+    vistos = set()
+    for item in reducciones:
+        detalle_ref = item.get('detalle')
+        detalle_id = detalle_ref.pk if hasattr(detalle_ref, 'pk') else detalle_ref
+        if detalle_id in vistos:
+            raise ValueError('Hay lotes repetidos en el ajuste.')
+        vistos.add(detalle_id)
+
+        detalle = (
+            DetalleStock.objects.select_for_update()
+            .select_related('deposito')
+            .get(pk=detalle_id)
+        )
+        if detalle.stock_id != stock.id:
+            raise ValueError(f'El lote "{detalle.lote}" no pertenece a este stock.')
+        if detalle.deposito.sucursal_id != stock.sucursal_id:
+            raise ValueError(
+                f'El lote "{detalle.lote}" no pertenece a la sucursal del stock.'
+            )
+
+        cantidad_nueva = _decimal(item.get('cantidad_nueva'))
+        error_cantidad = validar_cantidad_por_unidad(
+            cantidad_nueva,
+            nombre_unidad,
+            etiqueta='La cantidad del lote',
+            permitir_no_positiva=True,
+        )
+        if error_cantidad:
+            raise ValueError(error_cantidad)
+        if cantidad_nueva > detalle.cantidad:
+            raise ValueError(
+                f'La cantidad nueva del lote "{detalle.lote}" no puede ser mayor '
+                f'a su stock actual ({detalle.cantidad}).'
+            )
+        if cantidad_nueva < 0:
+            raise ValueError('La cantidad del lote no puede ser negativa.')
+
+        diferencia = cantidad_nueva - detalle.cantidad
+        if diferencia == 0:
+            continue
+        if diferencia > 0:
+            raise ValueError(
+                f'No se puede aumentar la cantidad del lote "{detalle.lote}" en este ajuste; '
+                'usá un ingreso para agregar stock con un lote nuevo.'
+            )
+
+        detalle.cantidad = cantidad_nueva
+        detalle.save(update_fields=['cantidad'])
+        MovimientoStock.objects.create(
+            stock=stock,
+            detalle_stock=detalle,
+            tipo=MovimientoStock.TipoMovimiento.AJUSTE,
+            cantidad=diferencia,
+            referencia=referencia,
+        )
+        cambios += diferencia
+
+    # Ingresos: siempre crean un nuevo lote (LOT automático).
+    for item in ingresos:
+        deposito_ref = item.get('deposito')
+        deposito_id = (
+            deposito_ref.pk if hasattr(deposito_ref, 'pk') else deposito_ref
+        )
+        deposito = Deposito.objects.select_for_update().get(pk=deposito_id)
+        if deposito.sucursal_id != stock.sucursal_id:
+            raise ValueError(
+                'El depósito de ingreso debe pertenecer a la sucursal del stock.'
+            )
+
+        cantidad = _decimal(item.get('cantidad'))
+        error_cantidad = validar_cantidad_por_unidad(
+            cantidad,
+            nombre_unidad,
+            etiqueta='La cantidad a ingresar',
+        )
+        if error_cantidad:
+            raise ValueError(error_cantidad)
+
+        detalle = DetalleStock.objects.create(
+            stock=stock,
+            deposito=deposito,
+            cantidad=cantidad,
+            fecha_venc=item.get('fecha_venc'),
+        )
+        MovimientoStock.objects.create(
+            stock=stock,
+            detalle_stock=detalle,
+            tipo=MovimientoStock.TipoMovimiento.AJUSTE,
+            cantidad=cantidad,
+            referencia=referencia,
+        )
+        cambios += cantidad
+
+    if cambios == 0:
+        return stock
+
+    total = recalcular_stock(stock)
+    if total < stock.cant_negativa_max:
+        raise ValueError(
+            f'La cantidad no puede ser menor al limite negativo '
+            f'({stock.cant_negativa_max}).'
+        )
+    return Stock.objects.select_related('producto__unidad', 'sucursal').get(pk=stock.pk)
+
+
+# Compatibilidad temporal: ajuste por total (legado).
+@transaction.atomic
 def ajustar_stock(stock, cantidad_nueva, deposito=None, motivo=''):
-    """Fija el stock en una cantidad y registra el ajuste en el libro."""
+    """[Legado] Fija el stock en una cantidad total. Preferir ajustar_stock_detallado."""
     stock = Stock.objects.select_for_update().select_related('producto__unidad').get(pk=stock.pk)
     cantidad_nueva = _decimal(cantidad_nueva)
     nombre_unidad = str(getattr(stock.producto, 'unidad', '') or '')
-    from ..utils import validar_cantidad_por_unidad
     error_cantidad = validar_cantidad_por_unidad(
         cantidad_nueva,
         nombre_unidad,
@@ -183,13 +318,10 @@ def ajustar_stock(stock, cantidad_nueva, deposito=None, motivo=''):
     if diferencia > 0:
         deposito = deposito or deposito_predeterminado(stock.sucursal)
         if deposito.sucursal_id != stock.sucursal_id:
-            raise ValueError(
-                'El deposito debe pertenecer a la sucursal del stock.'
-            )
+            raise ValueError('El deposito debe pertenecer a la sucursal del stock.')
         detalle = DetalleStock.objects.create(
             stock=stock,
             deposito=deposito,
-            lote=None,
             cantidad=diferencia,
         )
         MovimientoStock.objects.create(
@@ -220,21 +352,6 @@ def ajustar_stock(stock, cantidad_nueva, deposito=None, motivo=''):
                 referencia=referencia,
             )
             restante -= tomar
-
-        if restante > 0:
-            detalle = DetalleStock.objects.create(
-                stock=stock,
-                deposito=deposito_predeterminado(stock.sucursal),
-                lote=None,
-                cantidad=-restante,
-            )
-            MovimientoStock.objects.create(
-                stock=stock,
-                detalle_stock=detalle,
-                tipo=MovimientoStock.TipoMovimiento.AJUSTE,
-                cantidad=-restante,
-                referencia=referencia,
-            )
 
     recalcular_stock(stock)
     return stock

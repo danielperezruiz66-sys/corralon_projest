@@ -1,12 +1,19 @@
 # Pendientes
 
-> Solo lo pendiente al cerrar la sesión anterior. Lo terminado o descartado se
-> borra. Contexto del proyecto: `AGENTS.md`.
+> Solo lo pendiente. Lo terminado se borra. Contexto: `AGENTS.md`.
 
-**Cerrado el:** 2026-11-11
+**Cerrado el:** 2026-11-12
 
-**Empezar por:** probar en navegador Ventas, Compras, Clientes, Inventario y
-Proveedores; si todo está bien, empezar un módulo nuevo.
+**Hecho hoy (mini):** lotes `LOT-` autogenerados y transferencias por lote con
+trazabilidad (nuevo lote destino, vencimiento/nota origen inborrable); edición
+limitada de lote (`fecha_venc`/observaciones); ajuste de stock rediseñado por
+lote (cantidad resultante 0..actual) + ingresos con lote nuevo; fixes UI (modal
+editar lote) y mejoras Inventario/Compras. Commit previo en `main` (`88d9284`);
+cambios posteriores quedan sin commitear.
+
+**Empezar por:** QA manual (Inventario/stock/lotes/ajuste/transferencias,
+Compras/Ventas/Clientes/Proveedores); si está bien, commitear y seguir con módulo
+**Caja**.
 
 ## 1. QA en navegador
 
@@ -39,24 +46,19 @@ Proveedores; si todo está bien, empezar un módulo nuevo.
       no aparezca en el alta de venta; ficha con resumen de ventas, saldo,
       WhatsApp, email y nueva venta; alta sin documento/tipo/contacto rechazada;
       CSV con y sin filtros.
-- [ ] **Inventario:** crear/editar producto con sucursales, precio y costo (precio
-      no menor al costo); configurar mínimo y ajustar stock con lotes y
-      movimientos; filtros de stock por alerta y movimientos por fecha, producto,
-      sucursal y tipo; transferencia entre depósitos de la misma sucursal y entre
-      sucursales, confirmar una y cancelar otra; crear/editar depósitos y
-      catálogos; no eliminar un depósito con stock. En el alta de producto,
-      exigir proveedor y costo; probar los atajos `+` de categoría, marca,
-      unidad y proveedor sin perder los datos cargados. En transferencias,
-      buscar producto por código/nombre y depósito por nombre/sucursal. En
-      ajuste de stock, buscar depósito; en los filtros de inventario y en el
-      selector de productos, buscar categoría, marca y unidad. Al crear, recibir
-      o cancelar una transferencia, verificar que la lista cambie al estado
-      nuevo y resalte la fila.
-- [ ] **Carga de stock:** en Inventario → Stock, probar “Cargar stock”:
-      elegir sucursal y depósito, agregar varios productos, exigir lote,
-      vencimiento opcional, cantidades mayores a cero y verificar que suma al
-      stock y genera movimientos `AJ`. Probar con producto no activo en la
-      sucursal y con depósito de otra sucursal.
+- [ ] **Inventario (stock/lotes/ajuste/transferencias):** lotes `LOT-`
+      autogenerados (sin lote manual) en carga, recepción y ajustes/ingresos.
+      Ajuste detallado: reducir por lote con **cantidad resultante** (0..actual)
+      y agregar cantidad como ingreso en depósito → **nuevo lote**; verificar
+      totales/movimientos `AJ` por detalle. Editar lote: `fecha_venc` y
+      observaciones (nota automática de origen inborrable). Transferencias por
+      `detalle_origen`: en tránsito descuenta origen; al recibir crea nuevo lote
+      destino (copia vencimiento, observación procedencia + motivo); al cancelar
+      devuelve al origen; ver lote origen/destino y fila resaltada al
+      crear/recibir/cancelar. Atajo "Comprar" (AD/GE), orden productos
+      (nombre/recientes/antiguos), configurar mínimos, filtros/alertas,
+      depósitos/catálogos y atajos `+` sin perder datos. Probar casos inválidos
+      (depósito otra sucursal, producto no activo).
 - [ ] **Validaciones:** en Cliente, probar DNI con letras, CUIT incompleto,
       email/teléfono inválidos; en Proveedor, CUIT con letras; en Producto,
       código inválido, precio/costo; en Compra/Venta, cantidades, precios y
