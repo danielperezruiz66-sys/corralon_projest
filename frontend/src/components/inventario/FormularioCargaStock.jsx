@@ -8,7 +8,11 @@ import {
   IconX,
 } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
-import { validarNumero, validarTexto } from '../../utils/validaciones'
+import {
+  unidadPermiteDecimales,
+  validarCantidadPorUnidad,
+  validarTexto,
+} from '../../utils/validaciones'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 import MensajeError from '../common/MensajeError.jsx'
 
@@ -20,7 +24,6 @@ function nuevaFila() {
     id: siguienteFila,
     producto: '',
     productoObjeto: null,
-    lote: '',
     fechaVenc: '',
     cantidad: '',
   }
@@ -146,18 +149,12 @@ export default function FormularioCargaStock({
       } else {
         usados.add(fila.producto)
       }
-      const errorLote = validarTexto(fila.lote, 'El lote', {
-        min: 1,
-        max: 30,
-      })
-      if (errorLote) {
-        erroresFila.lote = errorLote
-      }
-      const errorCantidad = validarNumero(fila.cantidad, {
-        etiqueta: 'La cantidad',
-        mayorQueCero: true,
-        decimales: 3,
-      })
+      const unidadFila = fila.productoObjeto?.unidad_detalle || ''
+      const errorCantidad = validarCantidadPorUnidad(
+        fila.cantidad,
+        unidadFila,
+        'La cantidad',
+      )
       if (errorCantidad) {
         erroresFila.cantidad = errorCantidad
       }
@@ -205,7 +202,6 @@ export default function FormularioCargaStock({
           items: filas.map((fila) => ({
             producto: Number(fila.producto),
             cantidad: Number(fila.cantidad).toFixed(3),
-            lote: fila.lote.trim(),
             fecha_venc: fila.fechaVenc || null,
           })),
         }),
@@ -289,8 +285,8 @@ export default function FormularioCargaStock({
         </div>
 
         <p className="comercial-nota">
-          La carga suma cantidad al stock existente. El lote es obligatorio;
-          la fecha de vencimiento es opcional.
+          La carga suma cantidad al stock existente. El lote se genera
+          automáticamente; la fecha de vencimiento es opcional.
         </p>
 
         <form onSubmit={guardar} noValidate>
@@ -368,23 +364,6 @@ export default function FormularioCargaStock({
                     <MensajeError>{erroresFila.producto}</MensajeError>
                   </div>
                   <label className="campo-comercial">
-                    <span>Lote *</span>
-                    <input
-                      type="text"
-                      className={erroresFila.lote ? 'input-error' : ''}
-                      value={fila.lote}
-                      maxLength={30}
-                      onChange={(evento) =>
-                        actualizarFila(
-                          fila.id,
-                          'lote',
-                          evento.target.value,
-                        )
-                      }
-                    />
-                    <MensajeError>{erroresFila.lote}</MensajeError>
-                  </label>
-                  <label className="campo-comercial">
                     <span>Vencimiento</span>
                     <input
                       type="date"
@@ -409,8 +388,8 @@ export default function FormularioCargaStock({
                       className={
                         erroresFila.cantidad ? 'input-error' : ''
                       }
-                      min="0.001"
-                      step="0.001"
+                      min={unidadPermiteDecimales(fila.productoObjeto?.unidad_detalle) ? '0.001' : '1'}
+                      step={unidadPermiteDecimales(fila.productoObjeto?.unidad_detalle) ? '0.001' : '1'}
                       value={fila.cantidad}
                       onChange={(evento) =>
                         actualizarFila(

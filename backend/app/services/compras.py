@@ -20,6 +20,7 @@ from ..models import (
     SeccionCaja,
     Sucursal,
 )
+from ..utils import validar_cantidad_por_unidad
 from . import stock as stock_service
 
 
@@ -88,6 +89,15 @@ def registrar_compra(
         cantidad = _decimal(item['cantidad'])
         if cantidad <= 0:
             raise ValueError('La cantidad comprada debe ser mayor que cero.')
+
+        nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+        error_cantidad = validar_cantidad_por_unidad(
+            cantidad,
+            nombre_unidad,
+            etiqueta='La cantidad comprada',
+        )
+        if error_cantidad:
+            raise ValueError(error_cantidad)
 
         precio = item.get('precio')
         if precio is None:

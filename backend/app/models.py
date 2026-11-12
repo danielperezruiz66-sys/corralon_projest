@@ -541,8 +541,6 @@ class Deposito(models.Model):
         Sucursal,
         on_delete=models.PROTECT,
         related_name='depositos',
-        null=True,
-        blank=True,
         help_text='Sucursal a la que pertenece el deposito.',
     )
     nombre = models.CharField(max_length=50)
@@ -620,10 +618,15 @@ class DetalleStock(models.Model):
         on_delete=models.PROTECT,
         related_name='detalles_stock',
     )
-    lote = models.CharField(max_length=30, null=True, blank=True)
+    lote = models.CharField(max_length=30, unique=True)
     cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     fecha_ingreso = models.DateTimeField(auto_now_add=True)
     fecha_venc = models.DateField(null=True, blank=True)
+    observaciones = models.TextField(
+        blank=True,
+        default='',
+        help_text='Observaciones del lote. La nota automática de origen es inborrable.',
+    )
 
     history = HistoricalRecords()
 
@@ -633,8 +636,23 @@ class DetalleStock(models.Model):
         verbose_name = 'Detalle de Stock'
         verbose_name_plural = 'Detalles de Stock'
 
+    @staticmethod
+    def codigo_lote(pk):
+        return f'LOT-{int(pk):06d}'
+
+    def save(self, *args, **kwargs):
+        import uuid
+
+        es_nuevo = self.pk is None
+        if es_nuevo and not self.lote:
+            self.lote = f'TMP-{uuid.uuid4().hex[:20]}'
+        super().save(*args, **kwargs)
+        if es_nuevo and str(self.lote).startswith('TMP-'):
+            self.lote = self.codigo_lote(self.pk)
+            super().save(update_fields=['lote'])
+
     def __str__(self):
-        return f'Detalle {self.pk} - {self.stock}'
+        return f'{self.lote} - {self.stock}'
 
 
 # =============================================================================
@@ -1132,14 +1150,27 @@ class TransferenciaStock(models.Model):
         on_delete=models.PROTECT,
         related_name='transferencias_destino',
     )
+    detalle_origen = models.ForeignKey(
+        'DetalleStock',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transferencias_origen',
+        help_text='Detalle/lote de origen desde el que se transfirió.',
+    )
     cantidad = models.DecimalField(max_digits=12, decimal_places=3)
-    lote = models.CharField(max_length=30, null=True, blank=True)
+    lote = models.CharField(
+        max_length=30,
+        null=True,
+        blank=True,
+        help_text='Código de lote de origen (trazabilidad).',
+    )
     estado = models.CharField(
         max_length=2,
         choices=EstadoTransferencia.choices,
         default=EstadoTransferencia.EN_TRANSITO,
     )
-    motivo = models.CharField(max_length=200, blank=True)
+    motivo = models.TextField(blank=True, default='')
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_recepcion = models.DateTimeField(null=True, blank=True)
     fecha_cancelacion = models.DateTimeField(null=True, blank=True)

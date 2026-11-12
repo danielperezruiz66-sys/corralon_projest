@@ -14,6 +14,7 @@ import {
   IconPencil,
   IconPlus,
   IconSearch,
+  IconShoppingCart,
   IconTag,
   IconTrash,
   IconX,
@@ -23,10 +24,12 @@ import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import CampoSelectorBuscable from '../components/common/CampoSelectorBuscable.jsx'
 import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
+import FormularioCompra from '../components/comercial/FormularioCompra.jsx'
 import FormularioAjusteStock from '../components/inventario/FormularioAjusteStock.jsx'
 import FormularioCargaStock from '../components/inventario/FormularioCargaStock.jsx'
 import FormularioCatalogo from '../components/inventario/FormularioCatalogo.jsx'
 import FormularioDeposito from '../components/inventario/FormularioDeposito.jsx'
+import FormularioDetalleStock from '../components/inventario/FormularioDetalleStock.jsx'
 import FormularioProducto from '../components/inventario/FormularioProducto.jsx'
 import FormularioStock from '../components/inventario/FormularioStock.jsx'
 import FormularioTransferencia from '../components/inventario/FormularioTransferencia.jsx'
@@ -80,6 +83,7 @@ export default function Inventario() {
   const { sucursalActiva } = useSucursal()
   const puedeProducto = puedeEscribir(['GE'])
   const puedeStock = puedeEscribir(['GE', 'ED'])
+  const puedeComprar = puedeEscribir(['AD', 'GE'])
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState(() => searchParams.get('tab') || 'productos')
   const [texto, setTexto] = useState(() => searchParams.get('search') || '')
@@ -89,6 +93,7 @@ export default function Inventario() {
   const [categoria, setCategoria] = useState('')
   const [marca, setMarca] = useState('')
   const [unidad, setUnidad] = useState('')
+  const [orden, setOrden] = useState('')
   const [alerta, setAlerta] = useState(
     () => searchParams.get('alerta') || '',
   )
@@ -133,10 +138,12 @@ export default function Inventario() {
   const [depositoTransferencia, setDepositoTransferencia] = useState('')
   const [transferenciaDestacada, setTransferenciaDestacada] = useState(null)
   const destacadoTimer = useRef(null)
+  const [compraInicial, setCompraInicial] = useState(null)
   const [detalleProducto, setDetalleProducto] = useState(null)
   const [detalleProductoData, setDetalleProductoData] = useState(null)
   const [detalleStock, setDetalleStock] = useState(null)
   const [detalleStockData, setDetalleStockData] = useState(null)
+  const [detalleLoteEditando, setDetalleLoteEditando] = useState(null)
 
   const busqueda = useDebounce(texto.trim(), 350)
   const buscando = texto.trim() !== busqueda || actualizando
@@ -251,6 +258,7 @@ export default function Inventario() {
       if (categoria) parametros.set('categoria', categoria)
       if (marca) parametros.set('marca', marca)
       if (unidad) parametros.set('unidad', unidad)
+      if (orden) parametros.set('ordering', orden)
     } else if (tab === 'stock') {
       ruta = '/stocks/'
       if (alerta) parametros.set('alerta', alerta)
@@ -304,6 +312,7 @@ export default function Inventario() {
     categoria,
     marca,
     unidad,
+    orden,
     alerta,
     producto,
     tipo,
@@ -358,6 +367,7 @@ export default function Inventario() {
     setCategoria('')
     setMarca('')
     setUnidad('')
+    setOrden('')
     setAlerta('')
     setProducto('')
     filtroScrolleado.current = ''
@@ -644,6 +654,74 @@ export default function Inventario() {
     refrescarListado()
   }
 
+  async function comprarProducto(producto) {
+    try {
+      const asociaciones = await pedirTodas(
+        `/productos-proveedores/?producto=${producto.id}&estado=true`,
+      )
+      if (asociaciones.length === 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Sin proveedor',
+          text: 'Asociá un proveedor activo con costo a este producto para poder comprarlo.',
+          confirmButtonColor: '#4a9da8',
+        })
+        return
+      }
+      let asociacion = asociaciones[0]
+      if (asociaciones.length > 1) {
+        const opciones = {}
+        asociaciones.forEach((item) => {
+          const costo = Number(item.precio_lista || 0).toLocaleString('es-AR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })
+          opciones[item.proveedor] =
+            `${item.proveedor_detalle} · Costo $ ${costo}`
+        })
+        const resultado = await Swal.fire({
+          title: 'Elegí el proveedor',
+          input: 'select',
+          inputOptions: opciones,
+          inputValue: String(asociacion.proveedor),
+          showCancelButton: true,
+          confirmButtonText: 'Continuar',
+          cancelButtonText: 'Cancelar',
+          confirmButtonColor: '#4a9da8',
+        })
+        if (!resultado.isConfirmed) {
+          return
+        }
+        asociacion =
+          asociaciones.find(
+            (item) => String(item.proveedor) === String(resultado.value),
+          ) || asociacion
+      }
+      setCompraInicial({
+        proveedor: asociacion.proveedor,
+        proveedorDetalle: {
+          id: asociacion.proveedor,
+          razon_social: asociacion.proveedor_detalle,
+          nombre: asociacion.proveedor_detalle,
+        },
+        productoId: producto.id,
+      })
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo iniciar la compra',
+        text: e.message,
+        confirmButtonColor: '#4a9da8',
+      })
+    }
+  }
+
+  function compraGuardada() {
+    setCompraInicial(null)
+    setTab('productos')
+    refrescarListado()
+  }
+
   async function recibirTransferencia(transferencia) {
     const resultado = await Swal.fire({
       title: '¿Confirmar recepción?',
@@ -744,6 +822,7 @@ export default function Inventario() {
         if (categoria) parametros.set('categoria', categoria)
         if (marca) parametros.set('marca', marca)
         if (unidad) parametros.set('unidad', unidad)
+        if (orden) parametros.set('ordering', orden)
         const todos = await pedirTodas(`/productos/?${parametros}`)
         encabezados = [
           'Código',
@@ -815,9 +894,11 @@ export default function Inventario() {
           'Depósito destino',
           'Sucursal destino',
           'Cantidad',
-          'Lote',
+          'Lote origen',
+          'Lote destino',
           'Estado',
           'Fecha',
+          'Observaciones destino',
           'Motivo',
         ]
         filas = todos.map((item) => [
@@ -827,9 +908,11 @@ export default function Inventario() {
           item.deposito_destino_detalle,
           item.sucursal_destino_detalle,
           cantidadCsv(item.cantidad),
-          item.lote || '',
+          item.lote || item.lote_origen || '',
+          item.lote_destino || '',
           item.estado_detalle,
           formatearFechaHora(item.fecha_creacion),
+          item.observaciones_destino || '',
           item.motivo || '',
         ])
       } else if (tab === 'depositos') {
@@ -1017,6 +1100,19 @@ export default function Inventario() {
               textoOpcion={(item) => item.unidades}
               placeholder="Todas"
             />
+            <label className="campo-comercial">
+              <span>Orden</span>
+              <select
+                value={orden}
+                onChange={(evento) =>
+                  cambiarFiltro(setOrden, evento.target.value)
+                }
+              >
+                <option value="">Por nombre</option>
+                <option value="-id">Más recientes</option>
+                <option value="id">Más antiguos</option>
+              </select>
+            </label>
           </section>
         )}
 
@@ -1186,6 +1282,16 @@ export default function Inventario() {
                             >
                               <IconEye size={17} />
                             </button>
+                            {puedeComprar && (
+                              <button
+                                type="button"
+                                className="boton-icono"
+                                onClick={() => comprarProducto(item)}
+                                title="Comprar producto"
+                              >
+                                <IconShoppingCart size={17} />
+                              </button>
+                            )}
                             {puedeProducto && (
                               <button
                                 type="button"
@@ -1361,6 +1467,8 @@ export default function Inventario() {
                       <th>Origen</th>
                       <th>Destino</th>
                       <th className="numero">Cantidad</th>
+                      <th>Lote origen</th>
+                      <th>Lote destino</th>
                       <th>Estado</th>
                       <th>Fecha</th>
                       <th>Acciones</th>
@@ -1369,14 +1477,14 @@ export default function Inventario() {
                   <tbody>
                     {cargando && (
                       <tr>
-                        <td colSpan="7" className="comercial-vacio">
+                        <td colSpan="9" className="comercial-vacio">
                           Cargando transferencias…
                         </td>
                       </tr>
                     )}
                     {!cargando && datos.results.length === 0 && (
                       <tr>
-                        <td colSpan="7" className="comercial-vacio">
+                        <td colSpan="9" className="comercial-vacio">
                           No se encontraron transferencias.
                         </td>
                       </tr>
@@ -1392,7 +1500,6 @@ export default function Inventario() {
                       >
                         <td>
                           <strong>{item.producto_detalle}</strong>
-                          {item.lote && <small>Lote {item.lote}</small>}
                         </td>
                         <td>
                           {item.deposito_origen_detalle}
@@ -1404,6 +1511,15 @@ export default function Inventario() {
                         </td>
                         <td className="numero">
                           {formatearNumero(item.cantidad)}
+                        </td>
+                        <td>{item.lote || item.lote_origen || '—'}</td>
+                        <td className="texto-chico">
+                          {item.lote_destino || (item.estado === 'ET' ? 'Pendiente' : '—')}
+                          {item.observaciones_destino ? (
+                            <small title={item.observaciones_destino}>
+                              {item.observaciones_destino}
+                            </small>
+                          ) : null}
                         </td>
                         <td>
                           <span
@@ -1664,6 +1780,31 @@ export default function Inventario() {
         />
       )}
 
+      {compraInicial && (
+        <FormularioCompra
+          sucursalActiva={sucursalActiva}
+          proveedorInicialId={compraInicial.proveedor}
+          proveedorInicialDetalle={compraInicial.proveedorDetalle}
+          productoInicialId={compraInicial.productoId}
+          onCerrar={() => setCompraInicial(null)}
+          onGuardado={compraGuardada}
+        />
+      )}
+
+      {detalleLoteEditando && (
+        <FormularioDetalleStock
+          detalle={detalleLoteEditando}
+          onCerrar={() => setDetalleLoteEditando(null)}
+          onGuardado={async () => {
+            setDetalleLoteEditando(null)
+            if (detalleStock) {
+              await abrirDetalleStock(detalleStock)
+            }
+            refrescarListado()
+          }}
+        />
+      )}
+
       {detalleProducto && (
         <div className="comercial-modal-fondo" role="dialog" aria-modal="true">
           <div className="comercial-modal inventario-modal-ancho">
@@ -1919,6 +2060,8 @@ export default function Inventario() {
                         <th className="numero">Cantidad</th>
                         <th>Ingreso</th>
                         <th>Vencimiento</th>
+                        <th>Observaciones</th>
+                        <th>Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1931,11 +2074,26 @@ export default function Inventario() {
                           </td>
                           <td>{formatearFechaHora(item.fecha_ingreso)}</td>
                           <td>{item.fecha_venc || '—'}</td>
+                          <td className="texto-chico" title={item.observaciones || ''}>
+                            {item.observaciones || '—'}
+                          </td>
+                          <td>
+                            {puedeStock && (
+                              <button
+                                type="button"
+                                className="boton-icono"
+                                title="Editar lote"
+                                onClick={() => setDetalleLoteEditando(item)}
+                              >
+                                <IconPencil size={16} />
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       ))}
                       {(detalleStockData?.lotes || []).length === 0 && (
                         <tr>
-                          <td colSpan="5" className="comercial-vacio">
+                          <td colSpan="7" className="comercial-vacio">
                             Sin lotes registrados.
                           </td>
                         </tr>

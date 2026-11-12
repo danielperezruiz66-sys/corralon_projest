@@ -10,7 +10,11 @@ import {
 import { pedirTodas } from '../../api/catalogos'
 import { pedir } from '../../api/client'
 import { formatearMoneda } from '../../utils/formato'
-import { validarFecha } from '../../utils/validaciones'
+import {
+  unidadPermiteDecimales,
+  validarCantidadPorUnidad,
+  validarFecha,
+} from '../../utils/validaciones'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 import MensajeError from '../common/MensajeError.jsx'
 import FormularioProductosProveedor from '../proveedores/FormularioProductosProveedor.jsx'
@@ -26,13 +30,25 @@ function fechaHoyLocal() {
   ].join('-')
 }
 
-export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuardado }) {
+export default function FormularioCompra({
+  sucursalActiva = '',
+  proveedorInicialId = '',
+  proveedorInicialDetalle = null,
+  productoInicialId = '',
+  puedeGestionar = true,
+  onCerrar,
+  onGuardado,
+}) {
   const [secciones, setSecciones] = useState([])
   const [sucursales, setSucursales] = useState([])
   const [productosProveedorData, setProductosProveedorData] = useState([])
   const [seccion, setSeccion] = useState('')
-  const [proveedor, setProveedor] = useState('')
-  const [proveedorSeleccionado, setProveedorSeleccionado] = useState(null)
+  const [proveedor, setProveedor] = useState(
+    proveedorInicialId ? String(proveedorInicialId) : '',
+  )
+  const [proveedorSeleccionado, setProveedorSeleccionado] = useState(
+    proveedorInicialDetalle,
+  )
   const [estadoEntrega, setEstadoEntrega] = useState('PE')
   const [fechaLlegada, setFechaLlegada] = useState('')
   const [items, setItems] = useState([])
@@ -48,6 +64,7 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
   const [error, setError] = useState('')
   const [errores, setErrores] = useState({})
   const solicitudProveedor = useRef(0)
+  const productoInicialAplicado = useRef(false)
 
   const buscarProveedores = useCallback(async (texto) => {
     const respuesta = await pedir(
@@ -79,6 +96,9 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
         if (disponibles.length > 0) {
           setSeccion(String(disponibles[0].id))
         }
+        if (proveedorInicialId) {
+          cargarProductosProveedor(proveedorInicialId, { mostrarError: true })
+        }
       })
       .catch((e) => {
         if (vigente) {
@@ -94,7 +114,35 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
     return () => {
       vigente = false
     }
-  }, [sucursalActiva])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sucursalActiva, proveedorInicialId])
+
+  useEffect(() => {
+    if (
+      productoInicialAplicado.current ||
+      !productoInicialId ||
+      !proveedor ||
+      String(proveedor) !== String(proveedorInicialId) ||
+      cargandoProveedor ||
+      productosProveedorData.length === 0
+    ) {
+      return
+    }
+    const producto = productosProveedorData.find(
+      (item) => String(item.id) === String(productoInicialId),
+    )
+    if (producto) {
+      agregarProducto(producto)
+      productoInicialAplicado.current = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    productoInicialId,
+    proveedor,
+    proveedorInicialId,
+    cargandoProveedor,
+    productosProveedorData,
+  ])
 
   const seccionActual = secciones.find(
     (item) => String(item.id) === seccion,
@@ -104,7 +152,7 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
   const productosDelProveedor = productosProveedorData
   const proveedorActual = proveedorSeleccionado
   const total = items.reduce(
-    (acumulado, item) => acumulado + item.cantidad * item.precio,
+    (acumulado, item) => acumulado + Number(item.cantidad || 0) * Number(item.precio || 0),
     0,
   )
 
@@ -135,6 +183,62 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
       vigente = false
     }
   }, [sucursalActual])
+
+  async function cargarProductosProveedor(id, opciones = {}) {
+    const proveedorId = String(id || '')
+    const { mostrarError = true } = opciones
+    if (!proveedorId) {
+      setCostos({})
+      setProductosProveedor([])
+      setProductosProveedorData([])
+      return false
+    }
+
+    const solicitud = solicitudProveedor.current + 1
+    solicitudProveedor.current = solicitud
+    setCargandoProveedor(true)
+    try {
+      const datos = await pedirTodas(
+        `/productos-proveedores/?proveedor=${proveedorId}&estado=true`,
+      )
+      if (solicitud !== solicitudProveedor.current) {
+        return true
+      }
+      const mapa = {}
+      const lista = []
+      datos.forEach((item) => {
+        mapa[item.producto] = Number(item.precio_lista)
+        lista.push({
+          id: item.producto,
+          codigo: item.producto_codigo,
+          nombre: item.producto_nombre,
+          categoria: item.producto_categoria,
+          categoria_detalle: item.producto_categoria_detalle,
+          marca_detalle: item.producto_marca_detalle,
+          unidad_detalle: item.producto_unidad_detalle,
+          precio_unidad: item.producto_precio_unidad,
+        })
+      })
+      setCostos(mapa)
+      setProductosProveedor(lista.map((producto) => producto.id))
+      setProductosProveedorData(lista)
+      return true
+    } catch (e) {
+      if (solicitud === solicitudProveedor.current && mostrarError) {
+        Swal.fire({
+          icon: 'error',
+          title: 'No se pudieron cargar los productos',
+          text: e.message,
+          confirmButtonColor: '#4a9da8',
+        })
+      }
+      return false
+    } finally {
+      if (solicitud === solicitudProveedor.current) {
+        setCargandoProveedor(false)
+      }
+    }
+  }
 
   async function cambiarProveedor(nuevoProveedor, opcion = null) {
     const siguiente = String(nuevoProveedor || '')
@@ -168,56 +272,13 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
     setProductosProveedor([])
     setProductosProveedorData([])
     setError('')
+    setCargandoProveedor(Boolean(siguiente))
 
     if (!siguiente) {
-      setCargandoProveedor(false)
       return true
     }
 
-    setCargandoProveedor(true)
-    try {
-      const datos = await pedirTodas(
-        `/productos-proveedores/?proveedor=${siguiente}&estado=true`,
-      )
-      if (solicitud !== solicitudProveedor.current) {
-        return true
-      }
-      const mapa = {}
-      const lista = []
-      datos.forEach((item) => {
-        mapa[item.producto] = Number(item.precio_lista)
-        lista.push({
-          id: item.producto,
-          codigo: item.producto_codigo,
-          nombre: item.producto_nombre,
-          categoria: item.producto_categoria,
-          categoria_detalle: item.producto_categoria_detalle,
-          marca_detalle: item.producto_marca_detalle,
-          unidad_detalle: item.producto_unidad_detalle,
-          precio_unidad: item.producto_precio_unidad,
-        })
-      })
-      setCostos(mapa)
-      setProductosProveedor(lista.map((producto) => producto.id))
-      setProductosProveedorData(lista)
-    } catch (e) {
-      if (solicitud === solicitudProveedor.current) {
-        setCostos({})
-        setProductosProveedor([])
-        setProductosProveedorData([])
-        Swal.fire({
-          icon: 'error',
-          title: 'No se pudieron cargar los productos',
-          text: e.message,
-          confirmButtonColor: '#4a9da8',
-        })
-      }
-    } finally {
-      if (solicitud === solicitudProveedor.current) {
-        setCargandoProveedor(false)
-      }
-    }
-    return true
+    return cargarProductosProveedor(siguiente)
   }
 
   function proveedorCreado(nuevo) {
@@ -269,6 +330,22 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
   }
 
   function actualizarItem(indice, campo, valor) {
+    if (campo === 'cantidad') {
+      setItems((previos) =>
+        previos.map((item, posicion) =>
+          posicion === indice ? { ...item, cantidad: valor } : item,
+        ),
+      )
+      setErrores((previos) => {
+        if (!previos.items || typeof previos.items !== 'object') {
+          return previos
+        }
+        const itemsErrores = { ...previos.items }
+        delete itemsErrores[`cantidad-${indice}`]
+        return { ...previos, items: itemsErrores }
+      })
+      return
+    }
     const numero = valor === '' ? 0 : Number(valor)
     setItems((previos) =>
       previos.map((item, posicion) =>
@@ -293,9 +370,12 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
     }
     const nuevos = {}
     items.forEach((item, indice) => {
-      if (!(Number(item.cantidad) > 0)) {
-        nuevos[`cantidad-${indice}`] =
-          'Ingresá una cantidad mayor a cero.'
+      const errorCantidad = validarCantidadPorUnidad(
+        item.cantidad,
+        item.producto?.unidad_detalle,
+      )
+      if (errorCantidad) {
+        nuevos[`cantidad-${indice}`] = errorCantidad
       }
       if (!(Number(item.precio) > 0)) {
         nuevos[`precio-${indice}`] = 'Ingresá un costo mayor a cero.'
@@ -313,17 +393,19 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
     if (!proveedor) {
       nuevos.proveedor = 'Seleccioná un proveedor activo.'
     }
-    if (estadoEntrega === 'EC') {
-      if (!fechaLlegada) {
+    const entregaFinal = puedeGestionar ? estadoEntrega : 'PE'
+    const fechaLlegadaFinal = puedeGestionar ? fechaLlegada : ''
+    if (entregaFinal === 'EC') {
+      if (!fechaLlegadaFinal) {
         nuevos.fechaLlegada = 'Indicá la fecha estimada de llegada.'
       } else {
         const errorFecha = validarFecha(
-          fechaLlegada,
+          fechaLlegadaFinal,
           'La fecha estimada',
         )
         if (errorFecha) {
           nuevos.fechaLlegada = errorFecha
-        } else if (fechaLlegada < fechaMinima) {
+        } else if (fechaLlegadaFinal < fechaMinima) {
           nuevos.fechaLlegada =
             'La fecha estimada no puede ser anterior a la compra.'
         }
@@ -344,8 +426,8 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
         body: JSON.stringify({
           seccion_caja: Number(seccion),
           proveedor: Number(proveedor),
-          estado_entrega: estadoEntrega,
-          fecha_estimada_llegada: fechaLlegada || null,
+          estado_entrega: entregaFinal,
+          fecha_estimada_llegada: fechaLlegadaFinal || null,
           items: items.map((item) => ({
             producto: item.producto.id,
             cantidad: item.cantidad,
@@ -355,9 +437,10 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
       })
       Swal.fire({
         icon: 'success',
-        title: 'Compra registrada',
-        text:
-          estadoEntrega === 'EC'
+        title: puedeGestionar ? 'Compra registrada' : 'Compra solicitada',
+        text: !puedeGestionar
+          ? 'Quedó pendiente para que la gestione un encargado o administrador. Todavía no repuso stock.'
+          : entregaFinal === 'EC'
             ? 'Quedó en camino. El stock se repone cuando la recibas.'
             : 'Quedó pendiente de recepción y todavía no repuso stock.',
         timer: 2200,
@@ -421,8 +504,9 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
         ) : (
           <>
             <p className="comercial-nota">
-              La compra se registra sin reponer stock. El stock entra cuando la
-              recibís desde el listado.
+              {puedeGestionar
+                ? 'La compra se registra sin reponer stock. El stock entra cuando la recibís desde el listado.'
+                : 'La compra se solicita sin reponer stock. Queda pendiente para que la gestione un encargado o administrador.'}
             </p>
 
             <div className="comercial-grid">
@@ -463,34 +547,45 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
                 mensajeError={errores.proveedor}
               />
 
-              <label className="campo-comercial">
-                <span>Entrega</span>
-                <select
-                  value={estadoEntrega}
-                  onChange={(evento) => {
-                    setEstadoEntrega(evento.target.value)
-                    if (evento.target.value !== 'EC') {
-                      setFechaLlegada('')
-                    }
-                  }}
-                >
-                  <option value="PE">Pendiente de recepción</option>
-                  <option value="EC">En camino</option>
-                </select>
-              </label>
+              {puedeGestionar ? (
+                <>
+                  <label className="campo-comercial">
+                    <span>Entrega</span>
+                    <select
+                      value={estadoEntrega}
+                      onChange={(evento) => {
+                        setEstadoEntrega(evento.target.value)
+                        if (evento.target.value !== 'EC') {
+                          setFechaLlegada('')
+                        }
+                      }}
+                    >
+                      <option value="PE">Pendiente de recepción</option>
+                      <option value="EC">En camino</option>
+                    </select>
+                  </label>
 
-              {estadoEntrega === 'EC' && (
-                <label className="campo-comercial">
-                  <span>Llegada estimada *</span>
-                  <input
-                    type="date"
-                    className={errores.fechaLlegada ? 'input-error' : ''}
-                    value={fechaLlegada}
-                    min={fechaMinima}
-                    onChange={(evento) => setFechaLlegada(evento.target.value)}
-                  />
-                  <MensajeError>{errores.fechaLlegada}</MensajeError>
-                </label>
+                  {estadoEntrega === 'EC' && (
+                    <label className="campo-comercial">
+                      <span>Llegada estimada *</span>
+                      <input
+                        type="date"
+                        className={errores.fechaLlegada ? 'input-error' : ''}
+                        value={fechaLlegada}
+                        min={fechaMinima}
+                        onChange={(evento) =>
+                          setFechaLlegada(evento.target.value)
+                        }
+                      />
+                      <MensajeError>{errores.fechaLlegada}</MensajeError>
+                    </label>
+                  )}
+                </>
+              ) : (
+                <p className="comercial-nota">
+                  La compra quedará solicitada como pendiente. El encargado o
+                  administrador definirá la entrega y la fecha estimada.
+                </p>
               )}
             </div>
 
@@ -589,8 +684,8 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
                               ? 'input-error'
                               : ''
                           }`}
-                          min="0.001"
-                          step="0.001"
+                          min={unidadPermiteDecimales(item.producto?.unidad_detalle) ? '0.001' : '1'}
+                          step={unidadPermiteDecimales(item.producto?.unidad_detalle) ? '0.001' : '1'}
                           value={item.cantidad}
                           onChange={(evento) =>
                             actualizarItem(
@@ -624,7 +719,7 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
                         </MensajeError>
                       </td>
                       <td className="numero">
-                        {formatearMoneda(item.cantidad * item.precio)}
+                        {formatearMoneda(Number(item.cantidad) * Number(item.precio))}
                       </td>
                       <td className="numero">
                         <button
@@ -667,10 +762,12 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
                 {guardando ? (
                   <>
                     <IconLoader2 className="icono-girando" size={18} />
-                    Registrando…
+                    {puedeGestionar ? 'Registrando…' : 'Solicitando…'}
                   </>
-                ) : (
+                ) : puedeGestionar ? (
                   'Registrar compra'
+                ) : (
+                  'Solicitar compra'
                 )}
               </button>
             </div>
@@ -692,16 +789,25 @@ export default function FormularioCompra({ sucursalActiva = '', onCerrar, onGuar
         <FormularioProductosProveedor
           proveedor={proveedorActual}
           onCerrar={() => setProductosProveedorAbierto(false)}
-          onGuardado={() => {
+          onGuardado={async () => {
             setProductosProveedorAbierto(false)
-            cargarProductosProveedor(proveedor)
-            Swal.fire({
-              icon: 'success',
-              title: 'Productos asociados',
-              text: 'Ya están disponibles para cargar en la compra.',
-              timer: 1800,
-              showConfirmButton: false,
-            })
+            const recargado = await cargarProductosProveedor(proveedor)
+            if (recargado) {
+              Swal.fire({
+                icon: 'success',
+                title: 'Productos asociados',
+                text: 'Ya están disponibles para cargar en la compra.',
+                timer: 1800,
+                showConfirmButton: false,
+              })
+            } else {
+              Swal.fire({
+                icon: 'warning',
+                title: 'Productos guardados',
+                text: 'La asociación se guardó, pero no se pudo actualizar la lista. Volvé a seleccionar el proveedor para recargar.',
+                confirmButtonColor: '#4a9da8',
+              })
+            }
           }}
         />
       )}

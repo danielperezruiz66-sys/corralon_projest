@@ -168,3 +168,92 @@ export function validarTexto(valor, etiqueta, { min = 2, max = 200 } = {}) {
   }
   return ''
 }
+
+export function validarIngresosBrutos(valor) {
+  const texto = limpiar(valor)
+  if (!texto) {
+    return ''
+  }
+  if (texto.length > 30) {
+    return 'Ingresos brutos no puede superar 30 caracteres.'
+  }
+  return /^[0-9./-]+$/.test(texto)
+    ? ''
+    : 'Ingresos brutos solo puede contener números y los separadores . / -'
+}
+
+export function validarNombreConsumidor(valor) {
+  const texto = limpiar(valor)
+  if (!texto) {
+    return ''
+  }
+  return validarNombre(texto, 'El nombre del consumidor final')
+}
+
+export function unidadPermiteDecimales(nombreUnidad) {
+  const texto = String(nombreUnidad ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  if (!texto) {
+    return false
+  }
+  const tokens = texto.split(/[^a-z0-9³²]+/).filter(Boolean)
+  const decimales = new Set([
+    'm',
+    'mt',
+    'mts',
+    'metro',
+    'metros',
+    'm2',
+    'm²',
+    'm3',
+    'm³',
+    'cm',
+    'mm',
+    'km',
+    'l',
+    'lt',
+    'lts',
+    'litro',
+    'litros',
+    'ml',
+    'kg',
+    'kilo',
+    'kilos',
+    'kilogramo',
+    'kilogramos',
+    'g',
+    'gr',
+    'grs',
+    'gramo',
+    'gramos',
+    'mg',
+    'ton',
+    'tn',
+    'tonelada',
+    'toneladas',
+  ])
+  return tokens.some((token) => decimales.has(token))
+}
+
+export function validarCantidadPorUnidad(valor, unidad, etiqueta = 'La cantidad') {
+  const permiteDecimales = unidadPermiteDecimales(unidad)
+  const decimales = permiteDecimales ? 3 : 0
+  const error = validarNumero(valor, {
+    etiqueta,
+    mayorQueCero: true,
+    decimales,
+  })
+  if (error) {
+    return error
+  }
+  if (!permiteDecimales) {
+    const numero = Number(String(valor).replace(',', '.'))
+    if (!Number.isInteger(numero)) {
+      return `${etiqueta} debe ser un número entero para esta unidad.`
+    }
+  }
+  return ''
+}

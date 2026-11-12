@@ -154,13 +154,11 @@ class StockApiTests(BaseCorralonTestCase):
                 {
                     'producto': self.producto.id,
                     'cantidad': '5.000',
-                    'lote': 'LOTE-1',
                     'fecha_venc': '2027-12-31',
                 },
                 {
                     'producto': self.producto_poco_stock.id,
                     'cantidad': '3.000',
-                    'lote': 'LOTE-2',
                 },
             ],
         }
@@ -181,13 +179,12 @@ class StockApiTests(BaseCorralonTestCase):
         self.stock_poco.refresh_from_db()
         self.assertEqual(self.stock.cantidad, Decimal('105.000'))
         self.assertEqual(self.stock_poco.cantidad, Decimal('8.000'))
-        self.assertTrue(
-            DetalleStock.objects.filter(
-                stock=self.stock,
-                lote='LOTE-1',
-                cantidad=Decimal('5.000'),
-            ).exists()
-        )
+        detalle = DetalleStock.objects.filter(
+            stock=self.stock,
+            cantidad=Decimal('5.000'),
+        ).first()
+        self.assertIsNotNone(detalle)
+        self.assertTrue(detalle.lote.startswith('LOT-'))
         self.assertTrue(
             MovimientoStock.objects.filter(
                 stock=self.stock,
@@ -218,20 +215,6 @@ class StockApiTests(BaseCorralonTestCase):
 
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('deposito', respuesta.data)
-
-    def test_carga_masiva_exige_lote(self):
-        self.autenticar(self.user_deposito)
-        datos = self._payload_carga()
-        datos['items'][0].pop('lote')
-
-        respuesta = self.client.post(
-            '/api/stocks/carga-masiva/',
-            datos,
-            format='json',
-        )
-
-        self.assertEqual(respuesta.status_code, 400)
-        self.assertIn('lote', respuesta.data['items'][0])
 
     def test_carga_masiva_rechaza_producto_no_activo_en_sucursal(self):
         self.autenticar(self.user_deposito)

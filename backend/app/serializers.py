@@ -56,6 +56,11 @@ from .models import (
     Usuario,
     Venta,
 )
+from .utils import (
+    validar_cantidad_por_unidad,
+    validar_ingresos_brutos,
+    validar_nombre_consumidor,
+)
 
 
 # =============================================================================
@@ -528,6 +533,32 @@ class ProductoSerializer(serializers.ModelSerializer):
                     )
                 }
             )
+        if self.instance is not None and sucursales is not None:
+            seleccionadas = {sucursal.id for sucursal in sucursales}
+            activas_actuales = set(
+                self.instance.sucursales_asociadas.filter(
+                    estado=True,
+                ).values_list('sucursal_id', flat=True)
+            )
+            a_desactivar = activas_actuales - seleccionadas
+            if a_desactivar:
+                con_stock = Stock.objects.filter(
+                    producto=self.instance,
+                    sucursal_id__in=a_desactivar,
+                ).exclude(cantidad=0)
+                if con_stock.exists():
+                    nombres = ', '.join(
+                        str(stock.sucursal) for stock in con_stock[:3]
+                    )
+                    raise serializers.ValidationError(
+                        {
+                            'sucursales': (
+                                'No podés quitar el producto de sucursales con '
+                                f'stock registrado ({nombres}). Dejá el stock '
+                                'en cero antes de desactivarlo.'
+                            )
+                        }
+                    )
 
         precio = attrs.get('precio_unidad')
         proveedor = attrs.get('proveedor')
@@ -702,11 +733,15 @@ class ProductoXSucursalSerializer(serializers.ModelSerializer):
             'estado',
             getattr(self.instance, 'estado', True),
         )
+        producto = attrs.get(
+            'producto',
+            getattr(self.instance, 'producto', None),
+        )
+        sucursal = attrs.get(
+            'sucursal',
+            getattr(self.instance, 'sucursal', None),
+        )
         if not estado:
-            producto = attrs.get(
-                'producto',
-                getattr(self.instance, 'producto', None),
-            )
             if producto is not None:
                 otras = ProductoXSucursal.objects.filter(
                     producto=producto,
@@ -720,6 +755,21 @@ class ProductoXSucursalSerializer(serializers.ModelSerializer):
                             'estado': (
                                 'El producto debe tener al menos una sucursal '
                                 'activa.'
+                            )
+                        }
+                    )
+            if producto is not None and sucursal is not None:
+                stock = Stock.objects.filter(
+                    producto=producto,
+                    sucursal=sucursal,
+                ).first()
+                if stock is not None and stock.cantidad != 0:
+                    raise serializers.ValidationError(
+                        {
+                            'estado': (
+                                'No podés desactivar el producto en esta '
+                                'sucursal porque tiene stock registrado. '
+                                'Dejá el stock en cero antes de desactivarlo.'
                             )
                         }
                     )
@@ -750,12 +800,12 @@ class DepositoSerializer(serializers.ModelSerializer):
             getattr(self.instance, 'es_predeterminado', False),
         )
         sucursal = attrs.get('sucursal', getattr(self.instance, 'sucursal', None))
+        if sucursal is None:
+            raise serializers.ValidationError(
+                {'sucursal': 'El depósito debe pertenecer a una sucursal.'}
+            )
 
         if es_predeterminado:
-            if sucursal is None:
-                raise serializers.ValidationError(
-                    {'sucursal': 'Un deposito predeterminado debe tener sucursal.'}
-                )
             existentes = Deposito.objects.filter(
                 sucursal=sucursal,
                 es_predeterminado=True,
@@ -775,6 +825,10 @@ class DepositoSerializer(serializers.ModelSerializer):
 
 class StockSerializer(serializers.ModelSerializer):
     producto_detalle = serializers.StringRelatedField(source='producto', read_only=True)
+    producto_unidad_detalle = serializers.StringRelatedField(
+        source='producto.unidad',
+        read_only=True,
+    )
     sucursal_detalle = serializers.StringRelatedField(source='sucursal', read_only=True)
     alerta = serializers.SerializerMethodField()
 
@@ -784,6 +838,7 @@ class StockSerializer(serializers.ModelSerializer):
             'id',
             'producto',
             'producto_detalle',
+            'producto_unidad_detalle',
             'sucursal',
             'sucursal_detalle',
             'cantidad',
@@ -832,6 +887,29 @@ class AjusteStockSerializer(serializers.Serializer):
     )
     motivo = serializers.CharField(max_length=90, min_length=3)
 
+    def validate(self, attrs):
+        stock = self.context.get('stock')
+        deposito = attrs.get('deposito')
+        if stock is not None:
+            nombre_unidad = str(getattr(stock.producto, 'unidad', '') or '')
+            error_cantidad = validar_cantidad_por_unidad(
+                attrs.get('cantidad'),
+                nombre_unidad,
+                etiqueta='La cantidad',
+                permitir_no_positiva=True,
+            )
+            if error_cantidad:
+                raise serializers.ValidationError({'cantidad': error_cantidad})
+            if deposito is not None and deposito.sucursal_id != stock.sucursal_id:
+                raise serializers.ValidationError(
+                    {
+                        'deposito': (
+                            'El depósito debe pertenecer a la sucursal del stock.'
+                        )
+                    }
+                )
+        return attrs
+
 
 class CargaStockItemSerializer(serializers.Serializer):
     producto = serializers.PrimaryKeyRelatedField(
@@ -842,7 +920,6 @@ class CargaStockItemSerializer(serializers.Serializer):
         decimal_places=3,
         min_value=Decimal('0.001'),
     )
-    lote = serializers.CharField(max_length=30, allow_blank=False)
     fecha_venc = serializers.DateField(
         required=False,
         allow_null=True,
@@ -873,6 +950,19 @@ class CargaStockSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {'items': 'No repitas el mismo producto en la carga.'}
             )
+        for indice, item in enumerate(attrs.get('items') or [], start=1):
+            producto = item.get('producto')
+            cantidad = item.get('cantidad')
+            if producto is None or cantidad is None:
+                continue
+            nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+            error_cantidad = validar_cantidad_por_unidad(
+                cantidad,
+                nombre_unidad,
+                etiqueta=f'La cantidad del ítem {indice}',
+            )
+            if error_cantidad:
+                raise serializers.ValidationError({'items': error_cantidad})
         return attrs
 
 
@@ -892,8 +982,54 @@ class DetalleStockSerializer(serializers.ModelSerializer):
             'cantidad',
             'fecha_ingreso',
             'fecha_venc',
+            'observaciones',
         ]
-        read_only_fields = ['fecha_ingreso']
+        read_only_fields = [
+            'id',
+            'stock',
+            'stock_detalle',
+            'deposito',
+            'deposito_detalle',
+            'lote',
+            'cantidad',
+            'fecha_ingreso',
+        ]
+
+
+def _nota_automatica_detalle(observaciones):
+    texto = str(observaciones or '')
+    if not texto.startswith('Transferido de '):
+        return ''
+    # La nota automática es la primera línea generada por el sistema.
+    return texto.split('\n', 1)[0].strip()
+
+
+class DetalleStockUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DetalleStock
+        fields = ['fecha_venc', 'observaciones']
+        extra_kwargs = {
+            'fecha_venc': {'required': False, 'allow_null': True},
+            'observaciones': {'required': False, 'allow_blank': True},
+        }
+
+    def validate(self, attrs):
+        if self.instance is None:
+            return attrs
+        nueva_obs = attrs.get('observaciones')
+        if nueva_obs is not None:
+            automatica = _nota_automatica_detalle(self.instance.observaciones)
+            if automatica:
+                texto = str(nueva_obs or '').strip()
+                if not texto.startswith(automatica):
+                    raise serializers.ValidationError(
+                        {
+                            'observaciones': (
+                                'La nota automática de origen no se puede modificar ni eliminar.'
+                            )
+                        }
+                    )
+        return attrs
 
 
 class TransferenciaStockSerializer(serializers.ModelSerializer):
@@ -921,6 +1057,13 @@ class TransferenciaStockSerializer(serializers.ModelSerializer):
         source='get_estado_display',
         read_only=True,
     )
+    lote_origen = serializers.CharField(source='lote', read_only=True)
+    detalle_origen_detalle = serializers.StringRelatedField(
+        source='detalle_origen',
+        read_only=True,
+    )
+    lote_destino = serializers.SerializerMethodField()
+    observaciones_destino = serializers.SerializerMethodField()
 
     class Meta:
         model = TransferenciaStock
@@ -935,8 +1078,13 @@ class TransferenciaStockSerializer(serializers.ModelSerializer):
             'deposito_destino',
             'deposito_destino_detalle',
             'sucursal_destino_detalle',
+            'detalle_origen',
+            'detalle_origen_detalle',
             'cantidad',
             'lote',
+            'lote_origen',
+            'lote_destino',
+            'observaciones_destino',
             'estado',
             'estado_detalle',
             'motivo',
@@ -945,18 +1093,53 @@ class TransferenciaStockSerializer(serializers.ModelSerializer):
             'fecha_cancelacion',
         ]
         read_only_fields = [
+            'producto',
             'stock_origen',
+            'deposito_origen',
+            'detalle_origen',
+            'lote',
             'estado',
             'fecha_creacion',
             'fecha_recepcion',
             'fecha_cancelacion',
         ]
 
+    def _detalle_destino(self, obj):
+        if obj.estado != TransferenciaStock.EstadoTransferencia.RECIBIDA:
+            return None
+        if hasattr(obj, '_detalle_destino_cache'):
+            return obj._detalle_destino_cache
+        movimiento = (
+            MovimientoStock.objects.select_related('detalle_stock')
+            .filter(
+                referencia=f'transferencia:{obj.id}',
+                tipo=MovimientoStock.TipoMovimiento.TRANSFERENCIA,
+                cantidad__gt=0,
+                detalle_stock__deposito_id=obj.deposito_destino_id,
+            )
+            .order_by('-id')
+            .first()
+        )
+        obj._detalle_destino_cache = (
+            movimiento.detalle_stock if movimiento else None
+        )
+        return obj._detalle_destino_cache
+
+    def get_lote_destino(self, obj):
+        detalle = self._detalle_destino(obj)
+        return detalle.lote if detalle else None
+
+    def get_observaciones_destino(self, obj):
+        detalle = self._detalle_destino(obj)
+        return detalle.observaciones if detalle else ''
+
 
 class TransferenciaStockCreateSerializer(serializers.Serializer):
-    producto = serializers.PrimaryKeyRelatedField(queryset=Producto.objects.all())
-    deposito_origen = serializers.PrimaryKeyRelatedField(
-        queryset=Deposito.objects.all(),
+    detalle_origen = serializers.PrimaryKeyRelatedField(
+        queryset=DetalleStock.objects.select_related(
+            'stock__producto__unidad',
+            'deposito__sucursal',
+        ),
     )
     deposito_destino = serializers.PrimaryKeyRelatedField(
         queryset=Deposito.objects.all(),
@@ -966,23 +1149,43 @@ class TransferenciaStockCreateSerializer(serializers.Serializer):
         decimal_places=3,
         min_value=Decimal('0.001'),
     )
-    lote = serializers.CharField(
-        max_length=30,
-        required=False,
-        allow_blank=True,
-        allow_null=True,
-    )
     motivo = serializers.CharField(
-        max_length=200,
+        max_length=500,
         required=False,
         allow_blank=True,
     )
 
     def validate(self, attrs):
-        if attrs['deposito_origen'].pk == attrs['deposito_destino'].pk:
+        detalle = attrs['detalle_origen']
+        deposito_destino = attrs['deposito_destino']
+        cantidad = attrs['cantidad']
+
+        if detalle.cantidad <= 0:
+            raise serializers.ValidationError(
+                {'detalle_origen': 'El lote de origen no tiene stock disponible.'}
+            )
+        if detalle.deposito_id == deposito_destino.id:
             raise serializers.ValidationError(
                 'El deposito de origen y destino deben ser distintos.'
             )
+        if cantidad > detalle.cantidad:
+            raise serializers.ValidationError(
+                {
+                    'cantidad': (
+                        'La cantidad supera el disponible del lote '
+                        f'({detalle.cantidad}).'
+                    )
+                }
+            )
+        producto = detalle.stock.producto
+        nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+        error_cantidad = validar_cantidad_por_unidad(
+            cantidad,
+            nombre_unidad,
+            etiqueta='La cantidad a transferir',
+        )
+        if error_cantidad:
+            raise serializers.ValidationError({'cantidad': error_cantidad})
         return attrs
 
 
@@ -1400,6 +1603,11 @@ class ClienteSerializer(serializers.ModelSerializer):
                 'paréntesis (mínimo 6 números).'
             )
 
+        ingresos = valor('ingresos_brutos')
+        error_ingresos = validar_ingresos_brutos(ingresos)
+        if error_ingresos:
+            errores['ingresos_brutos'] = error_ingresos
+
         if self.instance is None and not condicion_iva:
             attrs['condicion_iva'] = Cliente.CondicionIVA.CONSUMIDOR_FINAL
         elif not condicion_iva:
@@ -1505,15 +1713,36 @@ class VentaCreateSerializer(serializers.Serializer):
     items = VentaItemSerializer(many=True, allow_empty=False)
 
     def validate(self, attrs):
+        errores = {}
         if attrs.get('cliente') and attrs.get('cliente_venta'):
-            raise serializers.ValidationError(
-                {
-                    'cliente_venta': (
-                        'El nombre libre es solo para consumidor final. '
-                        'Quitalo o elegi un cliente registrado.'
-                    )
-                }
+            errores['cliente_venta'] = (
+                'El nombre libre es solo para consumidor final. '
+                'Quitalo o elegi un cliente registrado.'
             )
+        elif not attrs.get('cliente') and attrs.get('cliente_venta'):
+            error_consumidor = validar_nombre_consumidor(attrs.get('cliente_venta'))
+            if error_consumidor:
+                errores['cliente_venta'] = error_consumidor
+            else:
+                attrs['cliente_venta'] = str(attrs.get('cliente_venta')).strip()
+
+        for indice, item in enumerate(attrs.get('items') or [], start=1):
+            producto = item.get('producto')
+            cantidad = item.get('cantidad')
+            if producto is None or cantidad is None:
+                continue
+            nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+            error_cantidad = validar_cantidad_por_unidad(
+                cantidad,
+                nombre_unidad,
+                etiqueta=f'La cantidad del ítem {indice}',
+            )
+            if error_cantidad:
+                errores['items'] = error_cantidad
+                break
+
+        if errores:
+            raise serializers.ValidationError(errores)
         return attrs
 
 
@@ -1539,6 +1768,18 @@ class PagoVentaItemSerializer(serializers.Serializer):
 class CobroVentaSerializer(serializers.Serializer):
     pagos = PagoVentaItemSerializer(many=True, allow_empty=False)
     confirmar = serializers.BooleanField(required=False, default=False)
+
+
+class VentaCancelarSerializer(serializers.Serializer):
+    motivo = serializers.CharField(max_length=200, min_length=3)
+
+    def validate_motivo(self, value):
+        texto = str(value or '').strip()
+        if len(texto) < 3:
+            raise serializers.ValidationError(
+                'El motivo debe tener al menos 3 caracteres.'
+            )
+        return texto
 
 
 # =============================================================================
@@ -1689,6 +1930,20 @@ class CompraCreateSerializer(serializers.Serializer):
                         )
                     }
                 )
+
+        for indice, item in enumerate(items, start=1):
+            producto = item.get('producto')
+            cantidad = item.get('cantidad')
+            if producto is None or cantidad is None:
+                continue
+            nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+            error_cantidad = validar_cantidad_por_unidad(
+                cantidad,
+                nombre_unidad,
+                etiqueta=f'La cantidad del ítem {indice}',
+            )
+            if error_cantidad:
+                raise serializers.ValidationError({'items': error_cantidad})
         return attrs
 
 

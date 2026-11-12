@@ -32,6 +32,7 @@ class CompraApiTests(BaseCorralonTestCase):
         creada = self.crear_compra(cantidad='10.000')
         compra_id = creada.data['id']
 
+        self.autenticar(self.user_gerente)
         respuesta = self.client.post(f'/api/compras/{compra_id}/recibir/')
 
         self.assertEqual(respuesta.status_code, 200)
@@ -50,6 +51,7 @@ class CompraApiTests(BaseCorralonTestCase):
         creada = self.crear_compra(cantidad='10.000')
         compra_id = creada.data['id']
 
+        self.autenticar(self.user_gerente)
         respuesta = self.client.post(f'/api/compras/{compra_id}/recibir/')
 
         self.assertEqual(respuesta.status_code, 200)
@@ -69,6 +71,7 @@ class CompraApiTests(BaseCorralonTestCase):
         )
         creada = self.crear_compra(cantidad='5.000')
 
+        self.autenticar(self.user_gerente)
         respuesta = self.client.post(
             f'/api/compras/{creada.data["id"]}/recibir/',
             {'deposito': deposito_destino.id},
@@ -97,6 +100,7 @@ class CompraApiTests(BaseCorralonTestCase):
         )
         creada = self.crear_compra(cantidad='5.000')
 
+        self.autenticar(self.user_gerente)
         respuesta = self.client.post(
             f'/api/compras/{creada.data["id"]}/recibir/',
         )
@@ -113,6 +117,7 @@ class CompraApiTests(BaseCorralonTestCase):
 
     def test_compra_en_camino_no_toca_stock(self):
         respuesta = self.crear_compra(
+            user=self.user_gerente,
             estado_entrega='EC',
             fecha_estimada_llegada=FECHA_FUTURA,
         )
@@ -139,6 +144,7 @@ class CompraApiTests(BaseCorralonTestCase):
         compra_id = creada.data['id']
         ayer = (timezone.localdate() - timedelta(days=1)).isoformat()
 
+        self.autenticar(self.user_gerente)
         respuesta = self.client.post(
             f'/api/compras/{compra_id}/en-camino/',
             {'fecha_estimada_llegada': ayer},
@@ -184,6 +190,7 @@ class CompraApiTests(BaseCorralonTestCase):
         creada = self.crear_compra()
         compra_id = creada.data['id']
 
+        self.autenticar(self.user_gerente)
         respuesta = self.client.post(
             f'/api/compras/{compra_id}/en-camino/',
             {'fecha_estimada_llegada': FECHA_FUTURA},
@@ -200,6 +207,7 @@ class CompraApiTests(BaseCorralonTestCase):
     def test_no_marca_en_camino_una_compra_recibida(self):
         creada = self.crear_compra()
         compra_id = creada.data['id']
+        self.autenticar(self.user_gerente)
         self.client.post(f'/api/compras/{compra_id}/recibir/')
 
         respuesta = self.client.post(f'/api/compras/{compra_id}/en-camino/')
@@ -209,6 +217,7 @@ class CompraApiTests(BaseCorralonTestCase):
 
     def test_filtra_compras_por_estado_de_entrega(self):
         self.crear_compra(
+            user=self.user_gerente,
             estado_entrega='EC',
             fecha_estimada_llegada=FECHA_FUTURA,
         )
@@ -235,6 +244,7 @@ class CompraApiTests(BaseCorralonTestCase):
     def test_recibir_dos_veces_devuelve_400(self):
         creada = self.crear_compra()
         compra_id = creada.data['id']
+        self.autenticar(self.user_gerente)
         self.client.post(f'/api/compras/{compra_id}/recibir/')
 
         respuesta = self.client.post(f'/api/compras/{compra_id}/recibir/')
@@ -267,12 +277,14 @@ class CompraApiTests(BaseCorralonTestCase):
         respuesta = self.client.get('/api/compras/', {'por_recibir': '1'})
         self.assertEqual(respuesta.data['count'], 1)
 
+        self.autenticar(self.user_gerente)
         self.client.post(f"/api/compras/{creada.data['id']}/recibir/")
         respuesta = self.client.get('/api/compras/', {'por_recibir': '1'})
         self.assertEqual(respuesta.data['count'], 0)
 
     def test_por_recibir_excluye_compras_anuladas(self):
         creada = self.crear_compra()
+        self.autenticar(self.user_gerente)
         self.client.post(
             f"/api/compras/{creada.data['id']}/anular/",
             {'motivo': 'Compra de prueba'},
@@ -314,6 +326,7 @@ class CompraApiTests(BaseCorralonTestCase):
         creada = self.crear_compra()
         compra_id = creada.data['id']
 
+        self.autenticar(self.user_gerente)
         respuesta = self.client.post(f'/api/compras/{compra_id}/en-camino/')
 
         self.assertEqual(respuesta.status_code, 400)
@@ -332,6 +345,7 @@ class CompraApiTests(BaseCorralonTestCase):
         creada = self.crear_compra()
         compra_id = creada.data['id']
 
+        self.autenticar(self.user_gerente)
         respuesta = self.client.post(
             f'/api/compras/{compra_id}/anular/',
             {'motivo': 'Compra de prueba'},
@@ -350,6 +364,7 @@ class CompraApiTests(BaseCorralonTestCase):
     def test_anular_compra_exige_motivo(self):
         creada = self.crear_compra()
 
+        self.autenticar(self.user_gerente)
         sin_motivo = self.client.post(
             f"/api/compras/{creada.data['id']}/anular/",
             {},
@@ -369,6 +384,7 @@ class CompraApiTests(BaseCorralonTestCase):
     def test_no_anula_compra_recibida(self):
         creada = self.crear_compra()
         compra_id = creada.data['id']
+        self.autenticar(self.user_gerente)
         self.client.post(f'/api/compras/{compra_id}/recibir/')
 
         respuesta = self.client.post(
@@ -383,6 +399,7 @@ class CompraApiTests(BaseCorralonTestCase):
     def test_no_anula_compra_con_pagos(self):
         creada = self.crear_compra()
         compra_id = creada.data['id']
+        self.autenticar(self.user_gerente)
         self.client.post(
             f'/api/compras/{compra_id}/pagar/',
             {
@@ -408,6 +425,7 @@ class CompraApiTests(BaseCorralonTestCase):
     def test_filtra_compras_anuladas(self):
         creada = self.crear_compra()
         self.crear_compra()
+        self.autenticar(self.user_gerente)
         self.client.post(
             f"/api/compras/{creada.data['id']}/anular/",
             {'motivo': 'Compra de prueba'},
@@ -421,6 +439,7 @@ class CompraApiTests(BaseCorralonTestCase):
     def test_no_recibe_compra_anulada(self):
         creada = self.crear_compra()
         compra_id = creada.data['id']
+        self.autenticar(self.user_gerente)
         self.client.post(
             f'/api/compras/{compra_id}/anular/',
             {'motivo': 'Compra de prueba'},

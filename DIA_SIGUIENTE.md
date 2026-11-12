@@ -113,5 +113,9 @@ Proveedores; si todo está bien, empezar un módulo nuevo.
 
 ## 6. Operación
 
-- [ ] Verificar la tarea `Corralon\CancelarVentasVencidas` en un arranque sin
-      sesión iniciada (registrarla con cuenta de servicio si hiciera falta).
+- [ ] **Barrido de ventas vencidas (manual):** no se ejecuta automáticamente. Las
+      ventas pendientes sin pago que superan los 30 min se marcan como vencidas
+      (alerta) pero no se anulan ni liberan stock; deben anularse manualmente.
+      El comando `python manage.py cancelar_ventas_vencidas` queda disponible
+      para uso manual si se decide correrlo. No programar la tarea
+      `Corralon\CancelarVentasVencidas` en el servidor.

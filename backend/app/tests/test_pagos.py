@@ -205,7 +205,11 @@ class PagoVentaTests(BaseCorralonTestCase):
 
     def test_no_permite_pagar_una_venta_anulada(self):
         venta = self.crear_venta(cantidad='1.000')
-        self.client.post(f'/api/ventas/{venta.data["id"]}/cancelar/')
+        self.client.post(
+            f'/api/ventas/{venta.data["id"]}/cancelar/',
+            {'motivo': 'prueba'},
+            format='json',
+        )
 
         respuesta = self._pagar(venta.data['id'], '10.00')
 
@@ -259,6 +263,7 @@ class PagoCompraTests(BaseCorralonTestCase):
         compra = self.crear_compra(cantidad='10.000')
         compra_id = compra.data['id']
 
+        self.autenticar(self.user_gerente)
         respuesta = self._pagar(
             compra_id,
             [
@@ -282,6 +287,7 @@ class PagoCompraTests(BaseCorralonTestCase):
         compra = self.crear_compra(cantidad='10.000')
         compra_id = compra.data['id']
 
+        self.autenticar(self.user_gerente)
         respuesta = self._pagar(
             compra_id,
             [
@@ -298,6 +304,7 @@ class PagoCompraTests(BaseCorralonTestCase):
         compra = self.crear_compra(cantidad='10.000')
         compra_id = compra.data['id']
 
+        self.autenticar(self.user_gerente)
         respuesta = self._pagar(
             compra_id,
             [
@@ -321,6 +328,7 @@ class PagoCompraTests(BaseCorralonTestCase):
             estado=False,
         )
 
+        self.autenticar(self.user_gerente)
         respuesta = self._pagar(
             compra_id,
             [
@@ -340,6 +348,7 @@ class PagoCompraTests(BaseCorralonTestCase):
         compra_id = compra.data['id']
         Compra.objects.filter(pk=compra_id).update(estado='AN')
 
+        self.autenticar(self.user_gerente)
         respuesta = self._pagar(
             compra_id,
             [{'metodo_pago': self.efectivo.id, 'monto_pagado': '100.00'}],
@@ -351,6 +360,7 @@ class PagoCompraTests(BaseCorralonTestCase):
     def test_no_permite_pagar_una_compra_ya_pagada(self):
         compra = self.crear_compra(cantidad='10.000')
         compra_id = compra.data['id']
+        self.autenticar(self.user_gerente)
         self._pagar(
             compra_id,
             [{'metodo_pago': self.efectivo.id, 'monto_pagado': '1000.00'}],

@@ -162,7 +162,11 @@ class ClienteApiTests(BaseCorralonTestCase):
 
     def test_resumen_ignora_ventas_anuladas(self):
         venta = self.crear_venta(cantidad='1.000')
-        self.client.post(f'/api/ventas/{venta.data["id"]}/cancelar/')
+        self.client.post(
+            f'/api/ventas/{venta.data["id"]}/cancelar/',
+            {'motivo': 'prueba'},
+            format='json',
+        )
 
         respuesta = self.client.get(
             f'/api/clientes/{self.cliente.id}/resumen/',

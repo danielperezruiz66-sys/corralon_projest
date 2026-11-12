@@ -55,6 +55,7 @@ class DashboardApiTests(BaseCorralonTestCase):
     def test_dashboard_incluye_compras_por_recibir(self):
         fecha_llegada = (timezone.localdate() + timedelta(days=7)).isoformat()
         self.crear_compra(
+            user=self.user_gerente,
             estado_entrega='EC',
             fecha_estimada_llegada=fecha_llegada,
         )

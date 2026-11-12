@@ -591,11 +591,24 @@ export default function Ventas() {
   async function cancelarVenta(venta) {
     const resultado = await Swal.fire({
       title: `¿Anular venta #${venta.id}?`,
-      text: 'Se restaura el stock de los productos.',
+      text: 'Se restaura el stock de los productos. El motivo es obligatorio.',
       icon: 'warning',
       input: 'text',
-      inputLabel: 'Motivo (opcional)',
+      inputLabel: 'Motivo *',
       inputPlaceholder: 'Ej. el cliente desistió',
+      inputAttributes: {
+        maxlength: 200,
+        required: 'required',
+      },
+      inputValidator: (valor) => {
+        if (!valor || !valor.trim()) {
+          return 'Indicá el motivo de la anulación.'
+        }
+        if (valor.trim().length < 3) {
+          return 'El motivo debe tener al menos 3 caracteres.'
+        }
+        return undefined
+      },
       showCancelButton: true,
       confirmButtonColor: '#b91c1c',
       cancelButtonColor: '#6c757d',
@@ -609,7 +622,7 @@ export default function Ventas() {
     try {
       await pedir(`/ventas/${venta.id}/cancelar/`, {
         method: 'POST',
-        body: JSON.stringify({ motivo: resultado.value || '' }),
+        body: JSON.stringify({ motivo: resultado.value.trim() }),
       })
       Swal.fire({
         icon: 'success',
@@ -710,38 +723,28 @@ export default function Ventas() {
             <button
               key={opcion.id || 'todas'}
               type="button"
-              className={estado === opcion.id ? 'activo' : ''}
+              className={estado === opcion.id && !alerta ? 'activo' : ''}
               onClick={() => cambiarEstado(opcion.id)}
               title={opcion.ayuda}
             >
               {opcion.etiqueta}
             </button>
           ))}
+          <button
+            type="button"
+            className={alerta === 'vencida' ? 'activo' : ''}
+            onClick={() => {
+              const activa = alerta === 'vencida'
+              setAlerta(activa ? '' : 'vencida')
+              setEstado('')
+              setPagina(1)
+              setError('')
+              setActualizando(true)
+            }}
+          >
+            Vencidas
+          </button>
         </section>
-
-        {alerta && (
-          <div className="filtro-origen">
-            <span>
-              Filtro del dashboard:{' '}
-              <strong>
-                {alerta === 'por_vencer'
-                  ? 'ventas por vencer'
-                  : 'ventas vencidas sin barrido'}
-              </strong>
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setAlerta('')
-                setPagina(1)
-                setActualizando(true)
-              }}
-            >
-              <IconX size={15} />
-              Quitar filtro
-            </button>
-          </div>
-        )}
 
         <FiltrosFecha
           valores={fechas}

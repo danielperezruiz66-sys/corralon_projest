@@ -207,8 +207,9 @@ class PermisoEscrituraTests(BaseCorralonTestCase):
         admin = self.client.get('/api/usuarios/')
         self.assertEqual(admin.status_code, 200)
 
-    def test_compras_las_paga_y_anula_el_encargado_de_deposito(self):
+    def test_compras_las_crea_pero_no_las_gestiona_el_encargado_de_deposito(self):
         compra = self.crear_compra(user=self.user_deposito)
+        self.assertEqual(compra.status_code, 201)
         compra_id = compra.data['id']
 
         self.autenticar(self.user_deposito)
@@ -224,7 +225,7 @@ class PermisoEscrituraTests(BaseCorralonTestCase):
             },
             format='json',
         )
-        self.assertEqual(pago.status_code, 200)
+        self.assertEqual(pago.status_code, 403)
 
         otra = self.crear_compra(user=self.user_deposito)
         self.autenticar(self.user_deposito)
@@ -233,7 +234,7 @@ class PermisoEscrituraTests(BaseCorralonTestCase):
             {'motivo': 'Compra de prueba'},
             format='json',
         )
-        self.assertEqual(anular.status_code, 200)
+        self.assertEqual(anular.status_code, 403)
 
     def test_el_vendedor_no_paga_ni_anula_compras(self):
         compra = self.crear_compra(user=self.user_deposito)

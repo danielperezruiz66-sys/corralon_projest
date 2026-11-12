@@ -214,7 +214,11 @@ class VentaApiTests(BaseCorralonTestCase):
             format='json',
         )
 
-        respuesta = self.client.post(f'/api/ventas/{venta_id}/cancelar/')
+        respuesta = self.client.post(
+            f'/api/ventas/{venta_id}/cancelar/',
+            {'motivo': 'prueba'},
+            format='json',
+        )
 
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('pagos', respuesta.data['detail'])

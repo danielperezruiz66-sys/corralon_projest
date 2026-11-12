@@ -26,15 +26,25 @@ class TransferenciaStockTests(BaseCorralonTestCase):
             nombre='Sucursal Secundaria',
         )
 
+    def _detalle_origen(self):
+        return DetalleStock.objects.get(
+            stock=self.stock,
+            deposito=self.deposito,
+            cantidad__gt=0,
+        )
+
     def test_transferencia_en_transito_y_recepcion(self):
         anexo = self._deposito_secundario()
+        detalle_origen = self._detalle_origen()
+        detalle_origen.fecha_venc = '2027-12-31'
+        detalle_origen.save(update_fields=['fecha_venc'])
+        lote_origen = detalle_origen.lote
         self.autenticar(self.user_deposito)
 
         creada = self.client.post(
             '/api/transferencias-stock/',
             {
-                'producto': self.producto.id,
-                'deposito_origen': self.deposito.id,
+                'detalle_origen': detalle_origen.id,
                 'deposito_destino': anexo.id,
                 'cantidad': '30.000',
                 'motivo': 'Reposicion interna',
@@ -44,6 +54,9 @@ class TransferenciaStockTests(BaseCorralonTestCase):
 
         self.assertEqual(creada.status_code, 201)
         self.assertEqual(creada.data['estado'], 'ET')
+        self.assertEqual(creada.data['lote'], lote_origen)
+        self.assertIn('Reposicion interna', creada.data['motivo'])
+        self.assertIn(lote_origen, creada.data['motivo'])
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.cantidad, Decimal('70.000'))
         self.assertFalse(
@@ -61,13 +74,16 @@ class TransferenciaStockTests(BaseCorralonTestCase):
         self.assertEqual(recibida.data['estado'], 'RE')
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.cantidad, Decimal('100.000'))
-        self.assertTrue(
-            DetalleStock.objects.filter(
-                stock=self.stock,
-                deposito=anexo,
-                cantidad=Decimal('30.000'),
-            ).exists()
+        detalle_destino = DetalleStock.objects.get(
+            stock=self.stock,
+            deposito=anexo,
+            cantidad=Decimal('30.000'),
         )
+        self.assertNotEqual(detalle_destino.lote, lote_origen)
+        self.assertTrue(detalle_destino.lote.startswith('LOT-'))
+        self.assertEqual(str(detalle_destino.fecha_venc), '2027-12-31')
+        self.assertIn('Transferido de', detalle_destino.observaciones)
+        self.assertIn(lote_origen, detalle_destino.observaciones)
 
     def test_transferencia_entre_sucursales(self):
         sucursal_destino = self._sucursal_secundaria()
@@ -76,15 +92,16 @@ class TransferenciaStockTests(BaseCorralonTestCase):
             nombre='Deposito Destino',
             es_predeterminado=True,
         )
+        detalle_origen = self._detalle_origen()
         self.autenticar(self.user_deposito)
 
         creada = self.client.post(
             '/api/transferencias-stock/',
             {
-                'producto': self.producto.id,
-                'deposito_origen': self.deposito.id,
+                'detalle_origen': detalle_origen.id,
                 'deposito_destino': deposito_destino.id,
                 'cantidad': '20.000',
+                'motivo': 'Envio',
             },
             format='json',
         )
@@ -105,14 +122,15 @@ class TransferenciaStockTests(BaseCorralonTestCase):
 
     def test_cancelar_transferencia_restaura_origen(self):
         anexo = self._deposito_secundario()
+        detalle_origen = self._detalle_origen()
         self.autenticar(self.user_deposito)
         creada = self.client.post(
             '/api/transferencias-stock/',
             {
-                'producto': self.producto.id,
-                'deposito_origen': self.deposito.id,
+                'detalle_origen': detalle_origen.id,
                 'deposito_destino': anexo.id,
                 'cantidad': '15.000',
+                'motivo': 'Prueba',
             },
             format='json',
         )
@@ -125,6 +143,8 @@ class TransferenciaStockTests(BaseCorralonTestCase):
         self.assertEqual(cancelada.data['estado'], 'CA')
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.cantidad, Decimal('100.000'))
+        detalle_origen.refresh_from_db()
+        self.assertEqual(detalle_origen.cantidad, Decimal('100.000'))
         self.assertEqual(
             TransferenciaStock.objects.get(pk=creada.data['id']).estado,
             'CA',
@@ -132,18 +152,19 @@ class TransferenciaStockTests(BaseCorralonTestCase):
 
     def test_transferencia_sin_stock_suficiente(self):
         anexo = self._deposito_secundario()
+        detalle_origen = self._detalle_origen()
         self.autenticar(self.user_deposito)
 
         respuesta = self.client.post(
             '/api/transferencias-stock/',
             {
-                'producto': self.producto.id,
-                'deposito_origen': self.deposito.id,
+                'detalle_origen': detalle_origen.id,
                 'deposito_destino': anexo.id,
                 'cantidad': '200.000',
+                'motivo': 'Prueba',
             },
             format='json',
         )
 
         self.assertEqual(respuesta.status_code, 400)
-        self.assertIn('suficiente', respuesta.data['detail'])
+        self.assertIn('cantidad', respuesta.data)

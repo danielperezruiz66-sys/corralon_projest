@@ -89,9 +89,10 @@ Reglas:
   destino (`RE`); al cancelar vuelve al origen (`CA`).
 - `Venta.EstadoVenta`: `PE` Pendiente, `CO` Confirmada, `AN` Anulada. **No
   existe Parcial.** Nace pendiente y descuenta stock; acepta pagos parciales sin
-  cambiar de estado; se confirma con el saldo en cero. Sin pagos y tras 30 min
-  (`VENTAS_MINUTOS_PARA_CONFIRMAR`) se auto-anula y restaura stock. Una venta
-  pendiente con pagos no se auto-cancela ni se puede anular.
+  cambiar de estado; se confirma con el saldo en cero. Tras 30 min sin pagos
+  (`VENTAS_MINUTOS_PARA_CONFIRMAR`) se considera vencida y se muestra como alerta;
+  **no se anula automáticamente** (barrido manual): el stock sigue reservado
+  hasta anulación manual. Una venta pendiente con pagos no se puede anular.
 - `Venta.cliente_venta`: nombre libre opcional para consumidor final.
 - `Cliente`: `estado` activo/inactivo, `tipo_documento`, `condicion_iva` (`RI`,
   `MT`, `CF`, `EX`, `NC`), `ingresos_brutos`, `notas`. Al crear exige identidad,
@@ -262,9 +263,10 @@ Antes de cerrar un cambio: check, makemigrations --check, migrate, tests, lint y
 build. Si se tocaron modelos, generar la migración; no editar migraciones a mano.
 El seed es determinista (`random.seed(42)`), crea las sucursales Salta Capital y
 Campo Quijano, `admin`/`admin1234`, 8 empleados demo (4 por sucursal con roles
-AD/CA/VE/ED) con `test1234` y 6 meses de compras y ventas. La tarea de Windows
-`Corralon\CancelarVentasVencidas` corre el barrido cada 10 minutos
-(`scripts/programar_cancelacion.bat`).
+AD/CA/VE/ED) con `test1234` y 6 meses de compras y ventas. El barrido de ventas
+vencidas es manual (no automático); el comando `cancelar_ventas_vencidas` puede
+ejecutarse manualmente si se requiere. No programar la tarea
+`Corralon\CancelarVentasVencidas`.
 
 ## 9. Convenciones
 

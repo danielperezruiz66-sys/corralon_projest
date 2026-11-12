@@ -19,6 +19,7 @@ from django.db.models import Max, Sum
 from django.utils import timezone
 
 from ..models import Cliente, DetalleVenta, Producto, SeccionCaja, Venta
+from ..utils import validar_cantidad_por_unidad, validar_nombre_consumidor
 from . import stock as stock_service
 
 MINUTOS_PARA_CONFIRMAR = 30
@@ -53,6 +54,10 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
         if not cliente.estado:
             raise ValueError('El cliente esta inactivo.')
         cliente_venta = None
+    elif cliente_venta:
+        error_consumidor = validar_nombre_consumidor(cliente_venta)
+        if error_consumidor:
+            raise ValueError(error_consumidor)
 
     seccion_caja = (
         SeccionCaja.objects.select_for_update()
@@ -79,6 +84,15 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
         cantidad = _decimal(item['cantidad'])
         if cantidad <= 0:
             raise ValueError('La cantidad vendida debe ser mayor que cero.')
+
+        nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+        error_cantidad = validar_cantidad_por_unidad(
+            cantidad,
+            nombre_unidad,
+            etiqueta='La cantidad vendida',
+        )
+        if error_cantidad:
+            raise ValueError(error_cantidad)
 
         precio = item.get('precio')
         precio = producto.precio_unidad if precio is None else _decimal(precio)
@@ -144,6 +158,10 @@ def confirmar_venta(venta):
 
 @transaction.atomic
 def cancelar_venta(venta, motivo=''):
+    motivo = (motivo or '').strip()
+    if len(motivo) < 3:
+        raise ValueError('Indicá el motivo de la anulación (mínimo 3 caracteres).')
+
     venta = Venta.objects.select_for_update().get(pk=venta.pk)
     if venta.estado == Venta.EstadoVenta.ANULADA:
         return venta
@@ -154,8 +172,7 @@ def cancelar_venta(venta, motivo=''):
         venta,
         referencia=f'cancelacion:venta:{venta.id}',
     )
-    if motivo:
-        venta._history_change_reason = motivo
+    venta._history_change_reason = motivo
     venta.estado = Venta.EstadoVenta.ANULADA
     venta.save(update_fields=['estado'])
     return venta

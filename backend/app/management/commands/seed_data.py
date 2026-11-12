@@ -1064,10 +1064,6 @@ class Command(BaseCommand):
                 detalle = DetalleStock.objects.create(
                     stock=stock,
                     deposito=deposito,
-                    lote=(
-                        f'{self.codigos_sucursal[stock.sucursal.nombre]}-'
-                        f'{stock.producto.codigo}-{indice + 1:02d}'
-                    ),
                     cantidad=cantidad,
                     fecha_venc=(
                         (
@@ -1453,7 +1449,6 @@ class Command(BaseCommand):
                 stock,
                 cantidad,
                 deposito,
-                lote=f'C{compra.pk}-{producto.pk}',
                 fecha_venc=(
                     (
                         fecha_recepcion

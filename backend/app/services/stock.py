@@ -155,8 +155,18 @@ def consumir_stock(stock, cantidad, referencia='', venta=None):
 @transaction.atomic
 def ajustar_stock(stock, cantidad_nueva, deposito=None, motivo=''):
     """Fija el stock en una cantidad y registra el ajuste en el libro."""
-    stock = Stock.objects.select_for_update().get(pk=stock.pk)
+    stock = Stock.objects.select_for_update().select_related('producto__unidad').get(pk=stock.pk)
     cantidad_nueva = _decimal(cantidad_nueva)
+    nombre_unidad = str(getattr(stock.producto, 'unidad', '') or '')
+    from ..utils import validar_cantidad_por_unidad
+    error_cantidad = validar_cantidad_por_unidad(
+        cantidad_nueva,
+        nombre_unidad,
+        etiqueta='La cantidad',
+        permitir_no_positiva=True,
+    )
+    if error_cantidad:
+        raise ValueError(error_cantidad)
     if cantidad_nueva < stock.cant_negativa_max:
         raise ValueError(
             f'La cantidad no puede ser menor al limite negativo '
@@ -265,18 +275,22 @@ def cargar_stock_sucursal(sucursal, deposito, items, motivo):
         if cantidad <= 0:
             raise ValueError('La cantidad debe ser mayor que cero.')
 
-        lote = (item.get('lote') or '').strip()
-        if not lote:
-            raise ValueError(
-                f'Indica el lote del producto "{producto}".'
-            )
+        nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+        from ..utils import validar_cantidad_por_unidad
+        error_cantidad = validar_cantidad_por_unidad(
+            cantidad,
+            nombre_unidad,
+            etiqueta='La cantidad',
+        )
+        if error_cantidad:
+            raise ValueError(error_cantidad)
 
         stock = obtener_stock(producto, sucursal)
         reponer_stock(
             stock,
             cantidad,
             deposito,
-            lote=lote,
+            lote=None,
             fecha_venc=item.get('fecha_venc'),
             referencia=f'carga-stock: {motivo}',
             tipo=MovimientoStock.TipoMovimiento.AJUSTE,
@@ -286,82 +300,128 @@ def cargar_stock_sucursal(sucursal, deposito, items, motivo):
     return stocks
 
 
+NOTA_ORIGEN_PREFIJO = 'Origen: '
+
+
+def _nota_origen_transferencia(transferencia):
+    detalle = transferencia.detalle_origen
+    lote = (
+        getattr(detalle, 'lote', None)
+        or transferencia.lote
+        or '—'
+    )
+    return (
+        f'Transferido de {transferencia.producto} (lote {lote}) '
+        f'desde {transferencia.deposito_origen}.'
+    )
+
+
+def _componer_motivo_transferencia(nota_origen, motivo_usuario=''):
+    motivo_usuario = (motivo_usuario or '').strip()
+    if motivo_usuario:
+        return f'{nota_origen}\nMotivo: {motivo_usuario}'
+    return nota_origen
+
+
 @transaction.atomic
 def crear_transferencia(
     producto,
     deposito_origen,
     deposito_destino,
     cantidad,
+    detalle_origen=None,
     lote=None,
     motivo='',
 ):
-    """Descuenta de un deposito y deja la mercaderia en transito."""
+    """Descuenta un detalle/lote de origen y deja la mercadería en tránsito."""
     cantidad = _decimal(cantidad)
     if cantidad <= 0:
         raise ValueError('La cantidad a transferir debe ser mayor que cero.')
+    nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+    from ..utils import validar_cantidad_por_unidad
+
+    error_cantidad = validar_cantidad_por_unidad(
+        cantidad,
+        nombre_unidad,
+        etiqueta='La cantidad a transferir',
+    )
+    if error_cantidad:
+        raise ValueError(error_cantidad)
     if deposito_origen.pk == deposito_destino.pk:
         raise ValueError('El deposito de origen y destino deben ser distintos.')
     if deposito_origen.sucursal_id is None or deposito_destino.sucursal_id is None:
         raise ValueError('Los depositos deben tener una sucursal asignada.')
 
     stock_origen = obtener_stock(producto, deposito_origen.sucursal)
-    detalles = stock_origen.detalles.select_for_update().filter(
-        deposito=deposito_origen,
-        cantidad__gt=0,
-    )
-    if lote:
-        detalles = detalles.filter(lote=lote)
-    disponible = (
-        detalles.aggregate(total=Sum('cantidad'))['total']
-        or Decimal('0.000')
-    )
-    if disponible < cantidad:
-        raise ValueError(
-            f'No hay stock suficiente en {deposito_origen}. '
-            f'Disponible: {disponible}.'
+
+    detalle = None
+    if detalle_origen is not None:
+        detalle = (
+            DetalleStock.objects.select_for_update()
+            .select_related('stock', 'deposito')
+            .get(pk=detalle_origen.pk)
         )
+        if detalle.stock_id != stock_origen.id:
+            raise ValueError('El lote seleccionado no pertenece al producto y sucursal de origen.')
+        if detalle.deposito_id != deposito_origen.id:
+            raise ValueError('El lote seleccionado no pertenece al depósito de origen.')
+    elif lote:
+        detalle = (
+            stock_origen.detalles.select_for_update()
+            .filter(deposito=deposito_origen, lote=lote, cantidad__gt=0)
+            .first()
+        )
+    if detalle is None:
+        raise ValueError('Seleccioná el lote de origen de la transferencia.')
+    if detalle.cantidad < cantidad:
+        raise ValueError(
+            f'No hay stock suficiente en el lote seleccionado. '
+            f'Disponible: {detalle.cantidad}.'
+        )
+
+    nota_origen = (
+        f'Transferido de {producto} (lote {detalle.lote}) '
+        f'desde {deposito_origen}.'
+    )
+    motivo_final = _componer_motivo_transferencia(nota_origen, motivo)
 
     transferencia = TransferenciaStock.objects.create(
         producto=producto,
         stock_origen=stock_origen,
         deposito_origen=deposito_origen,
         deposito_destino=deposito_destino,
+        detalle_origen=detalle,
         cantidad=cantidad,
-        lote=lote or None,
-        motivo=motivo,
+        lote=detalle.lote,
+        motivo=motivo_final,
         estado=TransferenciaStock.EstadoTransferencia.EN_TRANSITO,
     )
 
-    restante = cantidad
-    detalles = detalles.order_by(
-        F('fecha_venc').asc(nulls_last=True),
-        'fecha_ingreso',
-        'id',
+    detalle.cantidad -= cantidad
+    detalle.save(update_fields=['cantidad'])
+    MovimientoStock.objects.create(
+        stock=stock_origen,
+        detalle_stock=detalle,
+        tipo=MovimientoStock.TipoMovimiento.TRANSFERENCIA,
+        cantidad=-cantidad,
+        referencia=f'transferencia:{transferencia.id}',
     )
-    for detalle in detalles:
-        if restante <= 0:
-            break
-        tomar = min(detalle.cantidad, restante)
-        detalle.cantidad -= tomar
-        detalle.save(update_fields=['cantidad'])
-        MovimientoStock.objects.create(
-            stock=stock_origen,
-            detalle_stock=detalle,
-            tipo=MovimientoStock.TipoMovimiento.TRANSFERENCIA,
-            cantidad=-tomar,
-            referencia=f'transferencia:{transferencia.id}',
-        )
-        restante -= tomar
-
     recalcular_stock(stock_origen)
     return transferencia
 
 
 @transaction.atomic
 def recibir_transferencia(transferencia):
-    """Confirma la transferencia e ingresa la mercaderia en destino."""
-    transferencia = TransferenciaStock.objects.select_for_update().get(
-        pk=transferencia.pk,
+    """Confirma la transferencia e ingresa la mercadería en destino con nuevo lote."""
+    transferencia = (
+        TransferenciaStock.objects.select_for_update(of=('self',))
+        .select_related(
+            'producto',
+            'deposito_destino__sucursal',
+            'deposito_origen',
+            'detalle_origen',
+        )
+        .get(pk=transferencia.pk)
     )
     if (
         transferencia.estado
@@ -373,11 +433,17 @@ def recibir_transferencia(transferencia):
         transferencia.producto,
         transferencia.deposito_destino.sucursal,
     )
+    fecha_venc = None
+    if transferencia.detalle_origen_id:
+        origen = transferencia.detalle_origen
+        fecha_venc = getattr(origen, 'fecha_venc', None)
+    nota_origen = _nota_origen_transferencia(transferencia)
     detalle = DetalleStock.objects.create(
         stock=stock_destino,
         deposito=transferencia.deposito_destino,
-        lote=transferencia.lote,
         cantidad=transferencia.cantidad,
+        fecha_venc=fecha_venc,
+        observaciones=nota_origen,
     )
     MovimientoStock.objects.create(
         stock=stock_destino,
@@ -396,9 +462,11 @@ def recibir_transferencia(transferencia):
 
 @transaction.atomic
 def cancelar_transferencia(transferencia):
-    """Cancela una transferencia en transito y devuelve el stock al origen."""
-    transferencia = TransferenciaStock.objects.select_for_update().get(
-        pk=transferencia.pk,
+    """Cancela una transferencia en tránsito y devuelve el stock al origen."""
+    transferencia = (
+        TransferenciaStock.objects.select_for_update(of=('self',))
+        .select_related('detalle_origen', 'deposito_origen', 'stock_origen')
+        .get(pk=transferencia.pk)
     )
     if (
         transferencia.estado
@@ -409,15 +477,26 @@ def cancelar_transferencia(transferencia):
     stock_origen = Stock.objects.select_for_update().get(
         pk=transferencia.stock_origen_id,
     )
-    detalle = DetalleStock.objects.create(
-        stock=stock_origen,
-        deposito=transferencia.deposito_origen,
-        lote=transferencia.lote,
-        cantidad=transferencia.cantidad,
-    )
+    detalle_origen = None
+    if transferencia.detalle_origen_id:
+        detalle_origen = (
+            DetalleStock.objects.select_for_update()
+            .filter(pk=transferencia.detalle_origen_id)
+            .first()
+        )
+    if detalle_origen is not None:
+        detalle_origen.cantidad += transferencia.cantidad
+        detalle_origen.save(update_fields=['cantidad'])
+        detalle_mov = detalle_origen
+    else:
+        detalle_mov = DetalleStock.objects.create(
+            stock=stock_origen,
+            deposito=transferencia.deposito_origen,
+            cantidad=transferencia.cantidad,
+        )
     MovimientoStock.objects.create(
         stock=stock_origen,
-        detalle_stock=detalle,
+        detalle_stock=detalle_mov,
         tipo=MovimientoStock.TipoMovimiento.TRANSFERENCIA,
         cantidad=transferencia.cantidad,
         referencia=f'transferencia:{transferencia.id}',

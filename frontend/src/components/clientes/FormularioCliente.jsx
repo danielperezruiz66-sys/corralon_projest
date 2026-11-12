@@ -12,6 +12,7 @@ import {
   documentoNormalizado,
   validarDocumento,
   validarEmail,
+  validarIngresosBrutos,
   validarNombre,
   validarRazonSocial,
   validarTelefono,
@@ -253,9 +254,18 @@ export default function FormularioCliente({
               <span>Ingresos brutos</span>
               <input
                 type="text"
+                className={errors.ingresos_brutos ? 'input-error' : ''}
                 placeholder="Opcional"
-                {...register('ingresos_brutos')}
+                {...register('ingresos_brutos', {
+                  maxLength: {
+                    value: 30,
+                    message: 'Ingresos brutos no puede superar 30 caracteres.',
+                  },
+                  validate: (valor) =>
+                    validarIngresosBrutos(valor) || true,
+                })}
               />
+              <MensajeError>{errors.ingresos_brutos?.message}</MensajeError>
             </label>
 
             <label className="campo-formulario">

@@ -125,7 +125,8 @@ function fechaMinimaLlegada() {
 export default function Compras() {
   const { puedeEscribir } = useAuth()
   const { sucursalActiva } = useSucursal()
-  const puedePagar = puedeEscribir(['GE', 'ED'])
+  const puedeCrear = puedeEscribir(['AD', 'GE', 'ED'])
+  const puedeGestionar = puedeEscribir(['AD', 'GE'])
   const [searchParams, setSearchParams] = useSearchParams()
   const [datos, setDatos] = useState(PAGINA_VACIA)
   const [texto, setTexto] = useState(() => searchParams.get('search') || '')
@@ -736,14 +737,16 @@ export default function Compras() {
               <IconDownload size={18} />
               {exportando ? 'Exportando…' : 'Exportar CSV'}
             </button>
-            <button
-              type="button"
-              className="boton-comercial-primario"
-              onClick={() => setModalAbierto(true)}
-            >
-              <IconPlus size={18} />
-              Nueva compra
-            </button>
+            {puedeCrear && (
+              <button
+                type="button"
+                className="boton-comercial-primario"
+                onClick={() => setModalAbierto(true)}
+              >
+                <IconPlus size={18} />
+                Nueva compra
+              </button>
+            )}
           </div>
         </section>
 
@@ -915,7 +918,7 @@ export default function Compras() {
                           >
                             <IconEye size={17} />
                           </button>
-                          {puedePagar &&
+                          {puedeGestionar &&
                             compra.estado !== 'AN' &&
                             saldoCompra(compra) > 0 && (
                               <button
@@ -927,7 +930,8 @@ export default function Compras() {
                                 <IconCash size={17} />
                               </button>
                             )}
-                          {compra.estado !== 'AN' &&
+                          {puedeGestionar &&
+                            compra.estado !== 'AN' &&
                             !compra.recibida &&
                             compra.estado_entrega !== 'EC' && (
                               <button
@@ -939,16 +943,18 @@ export default function Compras() {
                                 <IconTruck size={17} />
                               </button>
                             )}
-                          {compra.estado !== 'AN' && !compra.recibida && (
-                            <button
-                              type="button"
-                              className="boton-icono boton-icono-exito"
-                              onClick={() => recibirCompra(compra)}
-                              title="Recibir compra"
-                            >
-                              <IconCheck size={17} />
-                            </button>
-                          )}
+                          {puedeGestionar &&
+                            compra.estado !== 'AN' &&
+                            !compra.recibida && (
+                              <button
+                                type="button"
+                                className="boton-icono boton-icono-exito"
+                                onClick={() => recibirCompra(compra)}
+                                title="Recibir compra"
+                              >
+                                <IconCheck size={17} />
+                              </button>
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -988,6 +994,7 @@ export default function Compras() {
         <FormularioCompra
           key={sucursalActiva || 'todas'}
           sucursalActiva={sucursalActiva}
+          puedeGestionar={puedeGestionar}
           onCerrar={() => setModalAbierto(false)}
           onGuardado={() => setRefresco((valor) => valor + 1)}
         />
@@ -1112,7 +1119,7 @@ export default function Compras() {
               >
                 Cerrar
               </button>
-              {puedePagar &&
+              {puedeGestionar &&
                 !detalle.recibida &&
                 detalle.estado !== 'AN' &&
                 totalPagado(detalle) === 0 && (
@@ -1125,7 +1132,7 @@ export default function Compras() {
                     Anular compra
                   </button>
                 )}
-              {puedePagar &&
+              {puedeGestionar &&
                 detalle.estado !== 'AN' &&
                 saldoCompra(detalle) > 0 && (
                   <button
@@ -1141,7 +1148,8 @@ export default function Compras() {
                     Registrar pago
                   </button>
                 )}
-              {detalle.estado !== 'AN' &&
+              {puedeGestionar &&
+                detalle.estado !== 'AN' &&
                 !detalle.recibida &&
                 detalle.estado_entrega !== 'EC' && (
                   <button
@@ -1157,7 +1165,9 @@ export default function Compras() {
                     Marcar en camino
                   </button>
                 )}
-              {detalle.estado !== 'AN' && !detalle.recibida && (
+              {puedeGestionar &&
+                detalle.estado !== 'AN' &&
+                !detalle.recibida && (
                 <button
                   type="button"
                   className="boton-comercial-primario"

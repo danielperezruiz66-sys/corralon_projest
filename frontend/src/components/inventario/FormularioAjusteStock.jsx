@@ -3,7 +3,11 @@ import Swal from 'sweetalert2'
 import { IconAdjustments, IconLoader2, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
 import { formatearNumero } from '../../utils/formato'
-import { validarNumero, validarTexto } from '../../utils/validaciones'
+import {
+  unidadPermiteDecimales,
+  validarCantidadPorUnidad,
+  validarTexto,
+} from '../../utils/validaciones'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 import MensajeError from '../common/MensajeError.jsx'
 
@@ -19,6 +23,8 @@ export default function FormularioAjusteStock({
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
 
+  const unidad = stock.producto_unidad_detalle || ''
+  const permiteDecimales = unidadPermiteDecimales(unidad)
   const actual = Number(stock.cantidad)
   const nueva = Number(cantidad)
   const diferencia = Number.isFinite(nueva) ? nueva - actual : 0
@@ -26,13 +32,31 @@ export default function FormularioAjusteStock({
   async function guardar(evento) {
     evento.preventDefault()
     const nuevos = {}
-    const errorCantidad = validarNumero(cantidad, {
-      etiqueta: 'La cantidad',
-      mayorQueCero: false,
-      decimales: 3,
-    })
-    if (errorCantidad) {
-      nuevos.cantidad = errorCantidad
+    const errorCantidad = validarCantidadPorUnidad(
+      cantidad,
+      unidad,
+      'La cantidad',
+    )
+    if (errorCantidad && !(cantidad !== '' && Number(cantidad) === 0 && permiteDecimales === permiteDecimales)) {
+      // permitir 0 solo si pasa regla? cantidad 0 puede ser válido para ajuste (dejar en 0) si entero permitido
+    }
+    if (!errorCantidad && !permiteDecimales && !Number.isInteger(Number(cantidad))) {
+      nuevos.cantidad = 'La cantidad debe ser un número entero para esta unidad.'
+    } else if (errorCantidad) {
+      // validarCantidadPorUnidad exige mayor que cero; pero ajuste permite 0 o valores según negocio, revalidar manualmente
+      const num = Number(String(cantidad).replace(',', '.'))
+      if (String(cantidad).trim() === '' || !Number.isFinite(num)) {
+        nuevos.cantidad = 'Ingresá la cantidad.'
+      } else if (num < 0) {
+        nuevos.cantidad = 'La cantidad no puede ser negativa.'
+      } else if (!permiteDecimales && !Number.isInteger(num)) {
+        nuevos.cantidad = 'La cantidad debe ser un número entero para esta unidad.'
+      } else if (permiteDecimales) {
+        const partes = String(cantidad).replace(',', '.').split('.')
+        if (partes[1] && partes[1].length > 3) {
+          nuevos.cantidad = 'La cantidad admite hasta 3 decimales.'
+        }
+      }
     }
     const errorMotivo = validarTexto(motivo, 'El motivo', {
       min: 3,
@@ -119,7 +143,8 @@ export default function FormularioAjusteStock({
             <input
               type="number"
               className={errores.cantidad ? 'input-error' : ''}
-              step="0.001"
+              min={permiteDecimales ? '0' : '0'}
+              step={permiteDecimales ? '0.001' : '1'}
               value={cantidad}
               onChange={(evento) => setCantidad(evento.target.value)}
             />

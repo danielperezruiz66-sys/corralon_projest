@@ -861,7 +861,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
     roles_escritura = GESTION
     filterset_fields = ['categoria', 'marca', 'unidad']
     search_fields = ['codigo', 'nombre', 'descripcion']
-    ordering_fields = ['nombre', 'codigo', 'precio_unidad']
+    ordering_fields = ['nombre', 'codigo', 'precio_unidad', 'id']
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -951,10 +951,14 @@ class StockViewSet(
 
     @action(detail=True, methods=['post'])
     def ajustar(self, request, pk=None):
-        entrada = self.get_serializer(data=request.data)
+        stock_obj = self.get_object()
+        entrada = self.get_serializer(
+            data=request.data,
+            context={**self.get_serializer_context(), 'stock': stock_obj},
+        )
         entrada.is_valid(raise_exception=True)
         stock = stock_service.ajustar_stock(
-            self.get_object(),
+            stock_obj,
             entrada.validated_data['cantidad'],
             entrada.validated_data.get('deposito'),
             entrada.validated_data['motivo'],
@@ -984,7 +988,12 @@ class StockViewSet(
         return Response(salida.data)
 
 
-class DetalleStockViewSet(viewsets.ReadOnlyModelViewSet):
+class DetalleStockViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
     queryset = DetalleStock.objects.select_related(
         'stock__producto',
         'stock__sucursal',
@@ -992,9 +1001,15 @@ class DetalleStockViewSet(viewsets.ReadOnlyModelViewSet):
     )
     serializer_class = serializers.DetalleStockSerializer
     permission_classes = [PermisoPorRol]
+    roles_escritura = (ADMIN, GERENTE, DEPOSITO)
     filterset_fields = ['stock', 'deposito']
     search_fields = ['lote', 'stock__producto__nombre', 'stock__producto__codigo']
     ordering_fields = ['fecha_ingreso', 'cantidad']
+
+    def get_serializer_class(self):
+        if self.action in ('update', 'partial_update'):
+            return serializers.DetalleStockUpdateSerializer
+        return super().get_serializer_class()
 
 
 class MovimientoStockViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1073,13 +1088,14 @@ class TransferenciaStockViewSet(
         entrada.is_valid(raise_exception=True)
         datos = entrada.validated_data
 
+        detalle = datos['detalle_origen']
         transferencia = stock_service.crear_transferencia(
-            datos['producto'],
-            datos['deposito_origen'],
+            detalle.stock.producto,
+            detalle.deposito,
             datos['deposito_destino'],
             datos['cantidad'],
-            datos.get('lote') or None,
-            datos.get('motivo') or '',
+            detalle_origen=detalle,
+            motivo=datos.get('motivo') or '',
         )
         salida = serializers.TransferenciaStockSerializer(
             transferencia,
@@ -1410,9 +1426,11 @@ class VentaViewSet(
 
     @action(detail=True, methods=['post'])
     def cancelar(self, request, pk=None):
+        entrada = serializers.VentaCancelarSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
         venta = ventas_service.cancelar_venta(
             self.get_object(),
-            motivo=request.data.get('motivo', ''),
+            motivo=entrada.validated_data['motivo'],
         )
         salida = serializers.VentaSerializer(
             venta,
@@ -1485,6 +1503,13 @@ class CompraViewSet(
     filterset_fields = ['seccion_caja', 'proveedor', 'estado', 'estado_entrega']
     ordering_fields = ['fecha_compra', 'monto_compra']
 
+    def get_permissions(self):
+        if self.action in ('en_camino', 'recibir', 'pagar', 'anular'):
+            self.roles_escritura = (ADMIN, GERENTE)
+        else:
+            self.roles_escritura = (ADMIN, GERENTE, DEPOSITO)
+        return super().get_permissions()
+
     def get_queryset(self):
         queryset = super().get_queryset()
         search = self.request.query_params.get('search', '').strip().lstrip('#')
@@ -1533,12 +1558,22 @@ class CompraViewSet(
         entrada.is_valid(raise_exception=True)
         datos = entrada.validated_data
 
+        roles = codigos_activos(request.user)
+        es_gestion_compra = request.user.is_superuser or bool(
+            roles & {ADMIN, GERENTE}
+        )
+        estado_entrega = datos.get('estado_entrega')
+        fecha_estimada = datos.get('fecha_estimada_llegada')
+        if not es_gestion_compra:
+            estado_entrega = Compra.EstadoEntrega.PENDIENTE
+            fecha_estimada = None
+
         compra = compras_service.registrar_compra(
             datos['seccion_caja'],
             datos['proveedor'],
             datos['items'],
-            datos.get('estado_entrega'),
-            datos.get('fecha_estimada_llegada'),
+            estado_entrega,
+            fecha_estimada,
         )
         salida = serializers.CompraSerializer(
             compra,

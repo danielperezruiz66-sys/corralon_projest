@@ -13,6 +13,11 @@ import { pedir } from '../../api/client'
 import FormularioCliente from '../clientes/FormularioCliente.jsx'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 import { formatearMoneda } from '../../utils/formato'
+import {
+  unidadPermiteDecimales,
+  validarCantidadPorUnidad,
+  validarNombreConsumidor,
+} from '../../utils/validaciones'
 import MensajeError from '../common/MensajeError.jsx'
 import SelectorProductos from './SelectorProductos'
 
@@ -112,7 +117,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   )
   const sucursalActual = seccionActual?.sucursal
   const total = items.reduce(
-    (acumulado, item) => acumulado + item.cantidad * item.precio,
+    (acumulado, item) => acumulado + Number(item.cantidad || 0) * Number(item.precio || 0),
     0,
   )
 
@@ -200,6 +205,22 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   }
 
   function actualizarItem(indice, campo, valor) {
+    if (campo === 'cantidad') {
+      setItems((previos) =>
+        previos.map((item, posicion) =>
+          posicion === indice ? { ...item, cantidad: valor } : item,
+        ),
+      )
+      setErrores((previos) => {
+        if (!previos.items || typeof previos.items !== 'object') {
+          return previos
+        }
+        const itemsErrores = { ...previos.items }
+        delete itemsErrores[`cantidad-${indice}`]
+        return { ...previos, items: itemsErrores }
+      })
+      return
+    }
     const numero = valor === '' ? 0 : Number(valor)
     setItems((previos) =>
       previos.map((item, posicion) =>
@@ -224,9 +245,12 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
     }
     const nuevos = {}
     items.forEach((item, indice) => {
-      if (!(Number(item.cantidad) > 0)) {
-        nuevos[`cantidad-${indice}`] =
-          'Ingresá una cantidad mayor a cero.'
+      const errorCantidad = validarCantidadPorUnidad(
+        item.cantidad,
+        item.producto?.unidad_detalle,
+      )
+      if (errorCantidad) {
+        nuevos[`cantidad-${indice}`] = errorCantidad
       }
       if (!(Number(item.precio) > 0)) {
         nuevos[`precio-${indice}`] = 'Ingresá un precio mayor a cero.'
@@ -237,8 +261,18 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   }
 
   async function registrarVenta() {
+    const nuevosErrores = {}
     if (!seccion) {
-      setErrores({ seccion: 'No hay una sección de caja abierta.' })
+      nuevosErrores.seccion = 'No hay una sección de caja abierta.'
+    }
+    if (!cliente) {
+      const errorConsumidor = validarNombreConsumidor(clienteVenta)
+      if (errorConsumidor) {
+        nuevosErrores.cliente_venta = errorConsumidor
+      }
+    }
+    if (Object.keys(nuevosErrores).length > 0) {
+      setErrores((previos) => ({ ...previos, ...nuevosErrores }))
       requestAnimationFrame(() => {
         document.querySelector('.input-error')?.focus()
       })
@@ -300,7 +334,23 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   }
 
   function generarPresupuesto() {
+    if (!cliente) {
+      const errorConsumidor = validarNombreConsumidor(clienteVenta)
+      if (errorConsumidor) {
+        setErrores((previos) => ({
+          ...previos,
+          cliente_venta: errorConsumidor,
+        }))
+        requestAnimationFrame(() => {
+          document.querySelector('.input-error')?.focus()
+        })
+        return
+      }
+    }
     if (!validarItems()) {
+      requestAnimationFrame(() => {
+        document.querySelector('.input-error')?.focus()
+      })
       return
     }
 
@@ -324,7 +374,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
             <td>${escaparHtml(item.producto.nombre)}</td>
             <td class="numero">${escaparHtml(item.cantidad)}</td>
             <td class="numero">${formatearMoneda(item.precio)}</td>
-            <td class="numero">${formatearMoneda(item.cantidad * item.precio)}</td>
+            <td class="numero">${formatearMoneda(Number(item.cantidad) * Number(item.precio))}</td>
           </tr>`,
       )
       .join('')
@@ -494,10 +544,20 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
                   <input
                     type="text"
                     maxLength={120}
+                    className={errores.cliente_venta ? 'input-error' : ''}
                     value={clienteVenta}
-                    onChange={(evento) => setClienteVenta(evento.target.value)}
+                    onChange={(evento) => {
+                      setClienteVenta(evento.target.value)
+                      if (errores.cliente_venta) {
+                        setErrores((previos) => ({
+                          ...previos,
+                          cliente_venta: '',
+                        }))
+                      }
+                    }}
                     placeholder="Ej. Juan Pérez"
                   />
+                  <MensajeError>{errores.cliente_venta}</MensajeError>
                 </label>
               )}
             </div>
@@ -546,8 +606,8 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
                               ? 'input-error'
                               : ''
                           }`}
-                          min="0.001"
-                          step="0.001"
+                          min={unidadPermiteDecimales(item.producto?.unidad_detalle) ? '0.001' : '1'}
+                          step={unidadPermiteDecimales(item.producto?.unidad_detalle) ? '0.001' : '1'}
                           value={item.cantidad}
                           onChange={(evento) =>
                             actualizarItem(
