@@ -61,7 +61,7 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
 
     seccion_caja = (
         SeccionCaja.objects.select_for_update()
-        .select_related('caja__sucursal')
+        .select_related('sucursal_caja__sucursal')
         .get(pk=seccion_caja.pk)
     )
     if seccion_caja.estado != SeccionCaja.EstadoSeccion.ABIERTA:
@@ -119,7 +119,7 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
 
         stock = stock_service.obtener_stock(
             producto,
-            seccion_caja.caja.sucursal,
+            seccion_caja.sucursal_caja.sucursal,
         )
         stock_service.consumir_stock(
             stock,

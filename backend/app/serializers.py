@@ -49,6 +49,7 @@ from .models import (
     SeccionCaja,
     Stock,
     Sucursal,
+    SucursalXCaja,
     SucursalXEmpleado,
     TransferenciaStock,
     Ubicacion,
@@ -278,12 +279,30 @@ class SucursalXEmpleadoSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 class CajaSerializer(serializers.ModelSerializer):
-    sucursal_detalle = serializers.StringRelatedField(source='sucursal', read_only=True)
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
 
     class Meta:
         model = Caja
-        fields = ['id', 'sucursal', 'sucursal_detalle', 'estado', 'estado_detalle']
+        fields = ['id', 'nombre', 'estado', 'estado_detalle']
+
+
+class SucursalXCajaSerializer(serializers.ModelSerializer):
+    sucursal_detalle = serializers.StringRelatedField(
+        source='sucursal',
+        read_only=True,
+    )
+    caja_detalle = serializers.StringRelatedField(source='caja', read_only=True)
+
+    class Meta:
+        model = SucursalXCaja
+        fields = [
+            'id',
+            'sucursal',
+            'sucursal_detalle',
+            'caja',
+            'caja_detalle',
+            'habilitada',
+        ]
 
 
 class DetalleCierreCajaSerializer(serializers.ModelSerializer):
@@ -311,10 +330,21 @@ class DetalleCierreCajaSerializer(serializers.ModelSerializer):
 
 
 class SeccionCajaSerializer(serializers.ModelSerializer):
-    caja_detalle = serializers.StringRelatedField(source='caja', read_only=True)
-    sucursal = serializers.IntegerField(source='caja.sucursal_id', read_only=True)
+    sucursal_caja = serializers.PrimaryKeyRelatedField(read_only=True)
+    caja = serializers.IntegerField(
+        source='sucursal_caja.caja_id',
+        read_only=True,
+    )
+    caja_detalle = serializers.StringRelatedField(
+        source='sucursal_caja.caja',
+        read_only=True,
+    )
+    sucursal = serializers.IntegerField(
+        source='sucursal_caja.sucursal_id',
+        read_only=True,
+    )
     sucursal_detalle = serializers.StringRelatedField(
-        source='caja.sucursal',
+        source='sucursal_caja.sucursal',
         read_only=True,
     )
     empleado_detalle = serializers.StringRelatedField(source='empleado', read_only=True)
@@ -325,6 +355,7 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
         model = SeccionCaja
         fields = [
             'id',
+            'sucursal_caja',
             'caja',
             'caja_detalle',
             'sucursal',
@@ -345,6 +376,7 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
 
 class AperturaCajaSerializer(serializers.Serializer):
     caja = serializers.PrimaryKeyRelatedField(queryset=Caja.objects.all())
+    sucursal = serializers.PrimaryKeyRelatedField(queryset=Sucursal.objects.all())
     monto_inicial = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,

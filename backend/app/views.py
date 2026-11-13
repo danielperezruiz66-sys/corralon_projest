@@ -61,6 +61,7 @@ from .models import (
     SeccionCaja,
     Stock,
     Sucursal,
+    SucursalXCaja,
     SucursalXEmpleado,
     TransferenciaStock,
     Ubicacion,
@@ -244,10 +245,10 @@ def dashboard(request):
                 {'detail': 'La sucursal indicada no existe.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        ventas = ventas.filter(seccion_caja__caja__sucursal=sucursal)
-        compras = compras.filter(seccion_caja__caja__sucursal=sucursal)
+        ventas = ventas.filter(seccion_caja__sucursal_caja__sucursal=sucursal)
+        compras = compras.filter(seccion_caja__sucursal_caja__sucursal=sucursal)
         stocks = stocks.filter(sucursal=sucursal)
-        secciones = secciones.filter(caja__sucursal=sucursal)
+        secciones = secciones.filter(sucursal_caja__sucursal=sucursal)
 
     def rango_actual_y_anterior():
         if periodo == 'hoy':
@@ -376,7 +377,11 @@ def dashboard(request):
     filtro_ventas = Q(ventas__estado__in=estados_venta_valida)
     cajas_abiertas = []
     for seccion in (
-        cajas_abiertas_qs.select_related('caja__sucursal', 'empleado')
+        cajas_abiertas_qs.select_related(
+            'sucursal_caja__caja',
+            'sucursal_caja__sucursal',
+            'empleado',
+        )
         .annotate(
             ventas_cantidad=Count('ventas', filter=filtro_ventas),
             ventas_monto=Sum('ventas__monto_venta', filter=filtro_ventas),
@@ -386,9 +391,9 @@ def dashboard(request):
         cajas_abiertas.append(
             {
                 'id': seccion.id,
-                'caja_id': seccion.caja_id,
-                'caja': f'Caja {seccion.caja_id}',
-                'sucursal': str(seccion.caja.sucursal),
+                'caja_id': seccion.sucursal_caja.caja_id,
+                'caja': str(seccion.sucursal_caja.caja),
+                'sucursal': str(seccion.sucursal_caja.sucursal),
                 'empleado': str(seccion.empleado),
                 'fecha_hora_apertura': seccion.fecha_hora_apertura.isoformat(),
                 'monto_inicial': str(seccion.monto_inicial),
@@ -411,7 +416,7 @@ def dashboard(request):
             'monto': str(venta.monto_venta),
             'seccion_caja': venta.seccion_caja_id,
             'seccion_caja_detalle': str(venta.seccion_caja),
-            'sucursal': str(venta.seccion_caja.caja.sucursal),
+            'sucursal': str(venta.seccion_caja.sucursal_caja.sucursal),
             'minutos_restantes': max(
                 0,
                 round(
@@ -422,7 +427,7 @@ def dashboard(request):
         }
         for venta in por_vencer_qs.select_related(
             'cliente',
-            'seccion_caja__caja__sucursal',
+            'seccion_caja__sucursal_caja__sucursal',
         )[:5]
     ]
 
@@ -723,31 +728,53 @@ class SucursalXEmpleadoViewSet(viewsets.ModelViewSet):
 # =============================================================================
 
 class CajaViewSet(viewsets.ModelViewSet):
-    queryset = Caja.objects.select_related('sucursal')
+    queryset = Caja.objects.all()
     serializer_class = serializers.CajaSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = GESTION
-    filterset_fields = ['sucursal', 'estado']
-    search_fields = ['sucursal__nombre']
-    ordering_fields = ['sucursal__nombre']
+    filterset_fields = ['estado']
+    search_fields = ['nombre']
+    ordering_fields = ['nombre', 'estado']
+
+
+class SucursalXCajaViewSet(viewsets.ModelViewSet):
+    queryset = SucursalXCaja.objects.select_related('sucursal', 'caja')
+    serializer_class = serializers.SucursalXCajaSerializer
+    permission_classes = [PermisoPorRol]
+    roles_escritura = GESTION
+    filterset_fields = ['sucursal', 'caja', 'habilitada']
+    search_fields = ['sucursal__nombre', 'caja__nombre']
+    ordering_fields = ['sucursal__nombre', 'caja__nombre']
 
 
 class SeccionCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
     queryset = SeccionCaja.objects.select_related(
-        'caja__sucursal', 'empleado'
-    ).prefetch_related('detalles_cierre__metodo_pago')
+        'sucursal_caja__caja',
+        'sucursal_caja__sucursal',
+        'empleado',
+    ).prefetch_related('detalles_cierre__metodo_pago').order_by(
+        '-fecha_hora_apertura'
+    )
     serializer_class = serializers.SeccionCajaSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, CAJERO)
-    filterset_fields = ['caja', 'empleado', 'estado']
-    search_fields = ['caja__sucursal__nombre', 'empleado__apellido', 'empleado__nombre']
+    filterset_fields = ['sucursal_caja', 'empleado', 'estado']
+    search_fields = [
+        'sucursal_caja__sucursal__nombre',
+        'sucursal_caja__caja__nombre',
+        'empleado__apellido',
+        'empleado__nombre',
+    ]
     ordering_fields = ['fecha_hora_apertura', 'monto_inicial']
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        caja = self.request.query_params.get('caja', '').strip()
+        if caja:
+            queryset = queryset.filter(sucursal_caja__caja_id=caja)
         sucursal = self.request.query_params.get('sucursal', '').strip()
         if sucursal:
-            queryset = queryset.filter(caja__sucursal_id=sucursal)
+            queryset = queryset.filter(sucursal_caja__sucursal_id=sucursal)
         return queryset
 
     def get_permissions(self):
@@ -782,6 +809,7 @@ class SeccionCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
 
         seccion = caja_service.abrir_seccion(
             datos['caja'],
+            datos['sucursal'],
             empleado,
             datos['monto_inicial'],
         )
@@ -815,6 +843,29 @@ class SeccionCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
             context=self.get_serializer_context(),
         )
         return Response(salida.data)
+
+    @action(detail=True, methods=['get'])
+    def teorico(self, request, pk=None):
+        """Teorico por metodo de pago para preparar el cierre."""
+        seccion = self.get_object()
+        if seccion.estado != SeccionCaja.EstadoSeccion.ABIERTA:
+            raise ValidationError(
+                {
+                    'detail': 'La seccion de caja no esta abierta.',
+                    'codigo': 'error_de_negocio',
+                }
+            )
+        return Response(
+            [
+                {
+                    'metodo_pago': item['metodo_pago'].id,
+                    'metodo_pago_detalle': str(item['metodo_pago']),
+                    'monto_sistema': str(item['monto_sistema']),
+                    'es_efectivo': item['metodo_pago'].es_efectivo,
+                }
+                for item in caja_service.calcular_teorico(seccion)
+            ]
+        )
 
 
 # =============================================================================
@@ -1309,7 +1360,7 @@ class VentaViewSet(
     viewsets.GenericViewSet,
 ):
     queryset = (
-        Venta.objects.select_related('seccion_caja__caja', 'cliente')
+        Venta.objects.select_related('seccion_caja__sucursal_caja', 'cliente')
         .prefetch_related('detalles__producto', 'pagos__metodo_pago')
     )
     serializer_class = serializers.VentaSerializer
@@ -1337,7 +1388,7 @@ class VentaViewSet(
         sucursal = self.request.query_params.get('sucursal', '').strip()
         if sucursal:
             queryset = queryset.filter(
-                seccion_caja__caja__sucursal_id=sucursal,
+                seccion_caja__sucursal_caja__sucursal_id=sucursal,
             )
 
         alerta = self.request.query_params.get('alerta', '').strip()
@@ -1494,7 +1545,7 @@ class CompraViewSet(
     viewsets.GenericViewSet,
 ):
     queryset = (
-        Compra.objects.select_related('seccion_caja__caja', 'proveedor')
+        Compra.objects.select_related('seccion_caja__sucursal_caja', 'proveedor')
         .prefetch_related('detalles__producto', 'pagos__metodo_pago')
     )
     serializer_class = serializers.CompraSerializer
@@ -1527,7 +1578,7 @@ class CompraViewSet(
         sucursal = self.request.query_params.get('sucursal', '').strip()
         if sucursal:
             queryset = queryset.filter(
-                seccion_caja__caja__sucursal_id=sucursal,
+                seccion_caja__sucursal_caja__sucursal_id=sucursal,
             )
 
         por_recibir = self.request.query_params.get('por_recibir')

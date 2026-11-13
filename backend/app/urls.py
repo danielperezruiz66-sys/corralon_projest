@@ -33,6 +33,11 @@ router.register(
 
 # CAJA
 router.register('cajas', views.CajaViewSet, basename='caja')
+router.register(
+    'sucursales-cajas',
+    views.SucursalXCajaViewSet,
+    basename='sucursal-caja',
+)
 router.register('secciones-caja', views.SeccionCajaViewSet, basename='seccion-caja')
 
 # CATALOGO

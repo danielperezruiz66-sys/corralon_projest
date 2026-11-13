@@ -3,6 +3,7 @@ import MenuDesplegable from './components/MenuDesplegable.jsx'
 import { useAuth } from './context/auth-context'
 import { modulosDelMenu } from './data/menuConfig.js'
 import CambiarContrasena from './pages/CambiarContrasena.jsx'
+import Caja from './pages/Caja.jsx'
 import Clientes from './pages/Clientes.jsx'
 import Compras from './pages/Compras.jsx'
 import EnDesarrollo from './pages/EnDesarrollo.jsx'
@@ -26,6 +27,9 @@ function ModuloProtegido({ modulo, children }) {
 function contenidoModulo(modulo) {
   if (modulo.mantenimiento) {
     return <Facturacion />
+  }
+  if (modulo.path === '/caja') {
+    return <Caja />
   }
   if (modulo.path === '/clientes') {
     return <Clientes />

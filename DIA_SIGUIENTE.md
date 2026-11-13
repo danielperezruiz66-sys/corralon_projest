@@ -4,21 +4,46 @@
 
 **Cerrado el:** 2026-11-12
 
-**Hecho hoy (mini):** lotes `LOT-` autogenerados y transferencias por lote con
-trazabilidad (nuevo lote destino, vencimiento/nota origen inborrable); edición
-limitada de lote (`fecha_venc`/observaciones); ajuste de stock rediseñado por
-lote (cantidad resultante 0..actual) + ingresos con lote nuevo; fixes UI (modal
-editar lote) y mejoras Inventario/Compras. Commit previo en `main` (`88d9284`);
-cambios posteriores quedan sin commitear.
+**Hecho hoy (mini):** ajuste de stock por lote, transferencias y fixes UI
+(commit `81712ae`). **Caja — módulo completo (Fases 1–5):** `Caja` física
+(`nombre` único, sin sucursal), `SucursalXCaja`, `SeccionCaja.sucursal_caja` +
+constraint 1 `AB` por asignación, migraciones `0021`/`0022`, `seed_data`,
+servicios y API (`cajas`, `sucursales-cajas`, `GET /secciones-caja/{id}/teorico/`),
+módulo `/caja` en React (encabezado con sucursal/caja/secciones abiertas, apertura,
+cierre con arqueo por método y diferencias, auditoría, historial y gestión de
+cajas/asignaciones solo `AD/GE`). Verificación automatizada: `check` y
+`makemigrations --check` sin novedades, `migrate` y `test app` **175/175**, seed
+determinista, constraint de `AB` única comprobado, lint (0 errores) y build.
+Plan: `refaccioncaja.md`.
 
-**Empezar por:** QA manual (Inventario/stock/lotes/ajuste/transferencias,
-Compras/Ventas/Clientes/Proveedores); si está bien, commitear y seguir con módulo
-**Caja**.
+**Empezar por:** **QA visual manual en navegador** del módulo Caja (checklist en
+la sección 0). Cuando esté OK: commit del módulo.
+
+## 0. Caja — QA manual pendiente (usuario)
+
+- [ ] Verificar que `/caja` abre para `AD/GE/CA` y no para `VE/ED` (menú/rutas).
+- [ ] Encabezado: sucursal elegida, cajas físicas y secciones abiertas visibles;
+      botón **Abrir seccion** solo con sucursal elegida; la misma caja física
+      abierta en Salta y en Quijano a la vez (válido).
+- [ ] Abrir: solo cajas habilitadas en la sucursal y sin `AB`; doble apertura en
+      la misma sucursal-caja bloqueada (400).
+- [ ] `CA` bloqueado al abrir en una sucursal no asignada; `AD/GE` pueden.
+- [ ] Cierre: arqueo por método con teórico correcto, montos reales, diferencias
+      en vivo, observaciones; **Efectivo** incluye el monto inicial; la sección
+      pasa a Cerrada y se ve en el historial con diferencias.
+- [ ] Auditoría: solo secciones `CE`, solo `AD/GE` → `AU`.
+- [ ] Historial: filtros por estado/búsqueda/URL, paginación y export CSV;
+      ancla `#cajas-abiertas` lleva al bloque correcto.
+- [ ] Gestión (`AD/GE`): alta/edición de cajas físicas y asignaciones;
+      habilitar/deshabilitar persiste.
+- [ ] Ventas/Compras siguen operando con la sección abierta; dashboard enlaza a
+      cajas abiertas (`#cajas-abiertas`).
 
 ## 1. QA en navegador
 
 - [ ] **Datos de prueba:** correr `seed_data --reset` y verificar 2 sucursales
-      (Salta Capital y Campo Quijano), 2 depósitos y 1 caja por sucursal, 4
+      (Salta Capital y Campo Quijano), 2 depósitos y 2 cajas físicas (Caja 1 y
+      Caja 2) habilitadas en ambas sucursales, 4
       empleados por sucursal (Administrador, Cajero, Vendedor y Encargado de
       depósito), 30 productos con categoría, marca, unidad, precio de venta,
       costo y stock, y compras/ventas de los últimos 6 meses.
@@ -92,7 +117,6 @@ Compras/Ventas/Clientes/Proveedores); si está bien, commitear y seguir con mód
 
 ## 2. Módulos frontend
 
-- [ ] Desarrollar **Caja** (apertura, cierre, auditoría e historial).
 - [ ] Desarrollar **Empleados**, **Perfil** y **Actividad**.
 - [ ] Reemplazar `EnDesarrollo` por las pantallas reales.
 

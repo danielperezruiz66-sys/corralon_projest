@@ -20,9 +20,10 @@ Arquitectura desacoplada:
 - API en `http://localhost:8000`, Vite en `http://localhost:5173`.
 - `.env` en la raíz (no se commitea); plantilla en `.env.example`.
 
-Estado: backend Fase 1+2 completo (35 viewsets, suite en `app.tests`); frontend
-con Dashboard, Ventas, Compras, Clientes, Inventario y Proveedores. Faltan Caja,
-Empleados, Perfil y Actividad. Facturación ARCA bloqueada.
+Estado: backend Fase 1+2 completo (36 viewsets, suite en `app.tests`); frontend
+con Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores y **Caja** (QA
+automatizada completa; falta el **QA visual manual** en navegador del módulo).
+Pendientes: Empleados, Perfil y Actividad. Facturación ARCA bloqueada.
 
 ## 2. Estructura y arquitectura
 
@@ -62,7 +63,7 @@ las que referencia):
 |---|---|
 | GEOGRAFIA | Pais, Provincia, Localidad, Ubicacion |
 | ORGANIZACION | Empresa, Sucursal, Usuario, Empleado, Rol, EmpleadoXRol, SucursalXEmpleado |
-| CAJA | Caja, SeccionCaja, DetalleCierreCaja |
+| CAJA | Caja, SucursalXCaja, SeccionCaja, DetalleCierreCaja |
 | CATALOGO | Categoria, Marca, Unidad, Producto, ProductoXSucursal |
 | STOCK | Deposito, Stock, DetalleStock, MovimientoStock, TransferenciaStock |
 | PROVEEDORES | Proveedor, ProveedorXSucursal, ProductoXProveedor |
@@ -131,7 +132,15 @@ Reglas:
   proveedor de la compra. **Permisos:** crear/solicitar `AD/GE/ED` (ED registra
   en `PE` sin fecha estimada); gestión `en-camino`, `recibir`, `pagar` y `anular`
   solo `AD/GE`.
-- `SeccionCaja`: `monto_teorico` calculado por el sistema, `monto_final` contado.
+- `Caja` es la caja física reutilizable: `nombre` único y `estado` (AC/IN/MT),
+  sin sucursal. `SucursalXCaja` (`sucursal`, `caja`, `habilitada`) la habilita en
+  varias sucursales; `UNIQUE(sucursal, caja)`. El conteo de dinero vive en
+  `SeccionCaja`. Plan del módulo: `refaccioncaja.md`.
+- `SeccionCaja`: sesión de una caja física en una sucursal. `sucursal_caja`
+  FK→`SucursalXCaja` (de ahí salen sucursal y caja; no hay FK directa a `Caja`).
+  Máximo **1 sección `AB` por `sucursal_caja`** (la misma caja física puede estar
+  abierta en Salta y en Quijano a la vez, una por sucursal). `monto_teorico`
+  calculado por el sistema, `monto_final` contado.
   `DetalleCierreCaja` guarda `monto_sistema` vs `monto_real` por método.
   `MetodoPago.es_efectivo` suma el `monto_inicial` al teórico.
 - `Rol.codigo`: `AD` Admin, `GE` Gerente, `CA` Cajero, `VE` Vendedor, `ED`
@@ -181,7 +190,7 @@ de stock).
 - Errores de negocio: `400 {"detail": "...", "codigo": "..."}` con `codigo` =
   `stock_insuficiente`, `error_de_negocio`, `validacion`, `no_encontrado` o
   `protegido`.
-- Routers: 35 viewsets en `app/urls.py` + `GET /api/perfil/` y
+- Routers: 36 viewsets en `app/urls.py` + `GET /api/perfil/` y
   `GET /api/dashboard/?periodo=hoy|7d|mes&sucursal=<id>`.
 - Escrituras clave:
   - `POST /api/ventas/`, `/{id}/confirmar/`, `/{id}/cobrar/`, `/{id}/cancelar/`
@@ -196,12 +205,19 @@ de stock).
     `/{id}/cancelar/`
   - `POST /api/compras/`, `/{id}/pagar/`, `/{id}/anular/`, `/{id}/en-camino/`,
     `/{id}/recibir/` (gestión `en-camino/recibir/pagar/anular` solo `AD/GE`)
-  - `POST /api/secciones-caja/`, `/{id}/cerrar/`, `/{id}/auditar/`
+  - `POST /api/secciones-caja/` (cuerpo `caja` + `sucursal` + `monto_inicial`),
+    `/{id}/cerrar/`, `/{id}/auditar/` (solo `AD/GE`) y
+    `GET /{id}/teorico/` (desglose previo al cierre por método de pago)
+  - `POST /api/cajas/` y `/api/sucursales-cajas/` (cajas físicas y sus
+    asignaciones a sucursales; gestión `AD/GE`)
   - `POST /api/metodos-pago-ventas/` y `/api/metodos-pago-compras/`
 - Permisos: lectura para autenticados; escritura por rol. `is_superuser` y `AD`
-  pueden todo. Caja: abrir/cerrar `AD/GE/CA`, auditar `AD/GE`. Ventas: crear
-  `AD/GE/CA/VE`; cobrar, confirmar y anular `AD/GE/CA` (el vendedor no).
-  Compras: `AD/GE/ED`. Pagos: `AD/GE/CA/ED`. Sin rol = solo lectura.
+  pueden todo. Caja: abrir/cerrar `AD/GE/CA`, auditar `AD/GE`. El `CA` solo abre
+  secciones en sucursales donde su empleado tiene `SucursalXEmpleado` activa;
+  `AD/GE` pueden en cualquiera. CRUD de cajas físicas y asignaciones solo
+  `AD/GE`. Ventas: crear `AD/GE/CA/VE`; cobrar, confirmar y anular `AD/GE/CA`
+  (el vendedor no). Compras: `AD/GE/ED`. Pagos: `AD/GE/CA/ED`. Sin rol = solo
+  lectura.
 - `Usuario` exige `IsAdminUser`, contraseña write-only con `set_password()`.
   `Producto` acepta `sucursales` write-only y sincroniza `ProductoXSucursal`.
 
@@ -217,8 +233,8 @@ de stock).
   catálogos son globales.
 - Tokens en `localStorage` (`corralon.acceso` / `corralon.refresco`). Ante un
   `401`, `pedir()` renueva y reintenta una vez; si falla, cierra sesión.
-- Módulos listos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores.
-  Pendientes: Caja, Empleados, Perfil y Actividad (`EnDesarrollo`).
+- Módulos listos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores,
+  Caja. Pendientes: Empleados, Perfil y Actividad (`EnDesarrollo`).
 - Convenciones UI: búsqueda en vivo con debounce, filtros persistidos en la URL,
   exportación CSV, presupuesto imprimible, cobro multi-método, recepción de
   compras con depósito, ajustes y transferencias de stock, costos por proveedor.

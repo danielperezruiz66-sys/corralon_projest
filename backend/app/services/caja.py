@@ -11,7 +11,7 @@ El detalle por metodo de pago queda en `DetalleCierreCaja` (`monto_sistema` vs
 
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -22,13 +22,35 @@ from ..models import (
     MetodoPago,
     MetodoPagoXCompra,
     MetodoPagoXVenta,
+    Rol,
     SeccionCaja,
+    SucursalXCaja,
+    SucursalXEmpleado,
     Venta,
 )
+
+ROLES_GESTION = {Rol.CodigoRol.ADMIN, Rol.CodigoRol.GERENTE}
 
 
 def _decimal(valor):
     return Decimal(str(valor))
+
+
+def _empleado_puede_operar_sucursal(empleado, sucursal):
+    """AD/GE operan en cualquier sucursal; el resto solo en las asignadas."""
+    roles = set(
+        empleado.roles_asignados.filter(
+            estado='AC',
+            rol__codigo__isnull=False,
+        ).values_list('rol__codigo', flat=True)
+    )
+    if roles & ROLES_GESTION:
+        return True
+    return SucursalXEmpleado.objects.filter(
+        empleado=empleado,
+        sucursal=sucursal,
+        estado=True,
+    ).exists()
 
 
 def calcular_teorico(seccion):
@@ -77,23 +99,54 @@ def calcular_teorico(seccion):
 
 
 @transaction.atomic
-def abrir_seccion(caja, empleado, monto_inicial):
-    caja = Caja.objects.select_for_update().get(pk=caja.pk)
-    if caja.estado != Caja.EstadoCaja.ACTIVA:
+def abrir_seccion(caja, sucursal, empleado, monto_inicial):
+    """Abre una seccion para una caja fisica en una sucursal.
+
+    Valida que la caja este asignada y habilitada en la sucursal, que este
+    activa, que el empleado pueda operar esa sucursal y que no exista otra
+    seccion abierta para la misma asignacion (misma caja en la misma sucursal).
+    """
+    monto_inicial = _decimal(monto_inicial)
+    if monto_inicial < 0:
+        raise ValueError('El monto inicial no puede ser negativo.')
+
+    caja_id = getattr(caja, 'pk', caja)
+    sucursal_id = getattr(sucursal, 'pk', sucursal)
+    asignacion = (
+        SucursalXCaja.objects.select_for_update()
+        .select_related('caja', 'sucursal')
+        .filter(caja_id=caja_id, sucursal_id=sucursal_id)
+        .first()
+    )
+    if asignacion is None:
+        raise ValueError('La caja no esta asignada a la sucursal.')
+    if not asignacion.habilitada:
+        raise ValueError('La caja no esta habilitada en la sucursal.')
+    if asignacion.caja.estado != Caja.EstadoCaja.ACTIVA:
         raise ValueError('La caja no esta activa.')
+    if not _empleado_puede_operar_sucursal(empleado, asignacion.sucursal):
+        raise ValueError(
+            'El empleado no esta asignado a la sucursal de la caja.'
+        )
     if SeccionCaja.objects.filter(
-        caja=caja,
+        sucursal_caja=asignacion,
         estado=SeccionCaja.EstadoSeccion.ABIERTA,
     ).exists():
-        raise ValueError('La caja ya tiene una seccion abierta.')
+        raise ValueError('La caja ya tiene una seccion abierta en esta sucursal.')
 
-    return SeccionCaja.objects.create(
-        caja=caja,
-        empleado=empleado,
-        fecha_hora_apertura=timezone.now(),
-        monto_inicial=_decimal(monto_inicial),
-        estado=SeccionCaja.EstadoSeccion.ABIERTA,
-    )
+    try:
+        with transaction.atomic():
+            return SeccionCaja.objects.create(
+                sucursal_caja=asignacion,
+                empleado=empleado,
+                fecha_hora_apertura=timezone.now(),
+                monto_inicial=monto_inicial,
+                estado=SeccionCaja.EstadoSeccion.ABIERTA,
+            )
+    except IntegrityError as exc:
+        raise ValueError(
+            'La caja ya tiene una seccion abierta en esta sucursal.'
+        ) from exc
 
 
 @transaction.atomic

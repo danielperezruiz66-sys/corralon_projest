@@ -39,6 +39,7 @@ from app.models import (
     SeccionCaja,
     Stock,
     Sucursal,
+    SucursalXCaja,
     SucursalXEmpleado,
     TransferenciaStock,
     Ubicacion,
@@ -54,6 +55,8 @@ PASSWORD_DEMO = 'test1234'
 PASSWORD_ADMIN = 'admin1234'
 DIAS_HISTORIAL = 180
 DIAS_STOCK_INICIAL = DIAS_HISTORIAL + 30
+
+CAJAS_FISICAS = ['Caja 1', 'Caja 2']
 
 METODOS_PAGO = [
     'Efectivo',
@@ -751,14 +754,14 @@ class Command(BaseCommand):
         ids['proveedor'] = self._proveedores()
         self._proveedores_x_sucursal(ids['proveedor'], ids['sucursal'])
         self._productos_x_proveedor(ids['producto'], ids['proveedor'])
-        ids['caja'] = self._cajas(ids['sucursal'])
+        ids['sucursal_caja'] = self._cajas(ids['sucursal'])
         ids['metodo'] = self._metodos_pago()
         ids['cliente'] = self._clientes()
         ids['stock_detalle'] = self._detalles_stock(
             ids['stock'],
             ids['deposito'],
         )
-        self._secciones(ids['caja'])
+        self._secciones(ids['sucursal_caja'])
 
         # Compras y ventas se ejecutan en orden cronologico para que el libro
         # de stock quede congruente con las fechas de los documentos.
@@ -775,7 +778,8 @@ class Command(BaseCommand):
             MetodoPagoXCompra, MetodoPagoXVenta, DetalleCompra, DetalleVenta,
             Factura, Compra, Venta, Cliente, MetodoPago,
             DetalleStock, Stock, ProductoXSucursal, ProductoXProveedor,
-            ProveedorXSucursal, Proveedor, Deposito, SeccionCaja, Caja,
+            ProveedorXSucursal, Proveedor, Deposito, SeccionCaja,
+            SucursalXCaja, Caja,
             Producto, Unidad, Marca, Categoria,
             SucursalXEmpleado, EmpleadoXRol, Empleado, Rol,
             Usuario, Sucursal, Empresa, Ubicacion, Localidad, Provincia, Pais,
@@ -1140,20 +1144,30 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------- cajas
     def _cajas(self, sucursales):
         cajas = []
-        for sucursal in sucursales:
+        for nombre in CAJAS_FISICAS:
             caja, _ = Caja.objects.update_or_create(
-                sucursal=sucursal,
+                nombre=nombre,
                 defaults={'estado': Caja.EstadoCaja.ACTIVA},
             )
             cajas.append(caja)
-        return cajas
 
-    def _secciones(self, cajas):
+        asignaciones = []
+        for sucursal in sucursales:
+            for caja in cajas:
+                asignacion, _ = SucursalXCaja.objects.update_or_create(
+                    sucursal=sucursal,
+                    caja=caja,
+                    defaults={'habilitada': True},
+                )
+                asignaciones.append(asignacion)
+        return asignaciones
+
+    def _secciones(self, asignaciones):
         ahora = timezone.now()
-        for caja in cajas:
-            cajero = self.empleados_por_sucursal[caja.sucursal.nombre]['CA']
+        for asignacion in asignaciones:
+            cajero = self.empleados_por_sucursal[asignacion.sucursal.nombre]['CA']
             seccion, _ = SeccionCaja.objects.get_or_create(
-                caja=caja,
+                sucursal_caja=asignacion,
                 estado=SeccionCaja.EstadoSeccion.ABIERTA,
                 defaults={
                     'empleado': cajero,
@@ -1161,15 +1175,15 @@ class Command(BaseCommand):
                     'monto_inicial': Decimal('25000.00'),
                 },
             )
-            self.secciones_abiertas[caja.id] = seccion
+            self.secciones_abiertas[asignacion.id] = seccion
         return list(self.secciones_abiertas.values())
 
-    def _seccion_para(self, caja, fecha):
+    def _seccion_para(self, asignacion, fecha):
         fecha_local = timezone.localtime(fecha)
         if fecha_local.date() == timezone.localdate():
-            return self.secciones_abiertas[caja.id]
+            return self.secciones_abiertas[asignacion.id]
 
-        clave = (caja.id, fecha_local.date())
+        clave = (asignacion.id, fecha_local.date())
         if clave in self.secciones_por_dia:
             return self.secciones_por_dia[clave]
 
@@ -1179,9 +1193,9 @@ class Command(BaseCommand):
         cierre = timezone.make_aware(
             datetime.combine(fecha_local.date(), time(18, 0))
         )
-        cajero = self.empleados_por_sucursal[caja.sucursal.nombre]['CA']
+        cajero = self.empleados_por_sucursal[asignacion.sucursal.nombre]['CA']
         seccion, _ = SeccionCaja.objects.get_or_create(
-            caja=caja,
+            sucursal_caja=asignacion,
             fecha_hora_apertura=apertura,
             defaults={
                 'empleado': cajero,
@@ -1234,7 +1248,7 @@ class Command(BaseCommand):
 
     # --------------------------------------------------------------- historial
     def _historial(self, ids, cantidad_compras, cantidad_ventas):
-        cajas = ids['caja']
+        asignaciones = ids['sucursal_caja']
         ahora = timezone.now()
         eventos = []
 
@@ -1243,13 +1257,13 @@ class Command(BaseCommand):
                 {
                     'tipo': 'compra',
                     'fecha': self._fecha_historial(indice, cantidad_compras),
-                    'caja': cajas[indice % len(cajas)],
+                    'asignacion': asignaciones[indice % len(asignaciones)],
                 }
             )
 
         pendientes = min(8, max(2, cantidad_ventas // 25))
         for indice in range(cantidad_ventas):
-            caja = cajas[indice % len(cajas)]
+            asignacion = asignaciones[indice % len(asignaciones)]
             if indice < pendientes:
                 fecha = ahora - timedelta(minutes=random.randint(2, 25))
                 estado = (
@@ -1268,7 +1282,7 @@ class Command(BaseCommand):
                 {
                     'tipo': 'venta',
                     'fecha': fecha,
-                    'caja': caja,
+                    'asignacion': asignacion,
                     'estado': estado,
                 }
             )
@@ -1276,12 +1290,12 @@ class Command(BaseCommand):
         eventos.sort(key=lambda evento: evento['fecha'])
         for evento in eventos:
             if evento['tipo'] == 'compra':
-                self._crear_compra(ids, evento['fecha'], evento['caja'])
+                self._crear_compra(ids, evento['fecha'], evento['asignacion'])
             else:
                 self._crear_venta(
                     ids,
                     evento['fecha'],
-                    evento['caja'],
+                    evento['asignacion'],
                     evento['estado'],
                 )
 
@@ -1310,10 +1324,10 @@ class Command(BaseCommand):
             return random.choice(consumidores)
         return random.choice(clientes)
 
-    def _crear_venta(self, ids, fecha, caja, estado_pago):
+    def _crear_venta(self, ids, fecha, asignacion, estado_pago):
         productos = ids['producto']
         metodos = ids['metodo']
-        seccion = self._seccion_para(caja, fecha)
+        seccion = self._seccion_para(asignacion, fecha)
         cliente = self._cliente_aleatorio(ids['cliente'])
         venta = Venta.objects.create(
             seccion_caja=seccion,
@@ -1332,7 +1346,7 @@ class Command(BaseCommand):
             cantidad = Decimal(
                 random.randint(datos['venta'][0], datos['venta'][1])
             )
-            stock = stock_service.obtener_stock(producto, caja.sucursal)
+            stock = stock_service.obtener_stock(producto, asignacion.sucursal)
             if stock.cantidad < cantidad:
                 continue
 
@@ -1398,7 +1412,7 @@ class Command(BaseCommand):
         maximo = max(base + 1, datos['stock'][1] // 2)
         return Decimal(random.randint(base, maximo))
 
-    def _crear_compra(self, ids, fecha, caja):
+    def _crear_compra(self, ids, fecha, asignacion):
         metodos = ids['metodo']
         proveedores = [
             proveedor
@@ -1410,11 +1424,11 @@ class Command(BaseCommand):
 
         proveedor = random.choice(proveedores)
         disponibles = self.productos_por_proveedor[proveedor.id]
-        seccion = self._seccion_para(caja, fecha)
+        seccion = self._seccion_para(asignacion, fecha)
         fecha_recepcion = fecha + timedelta(hours=random.randint(3, 10))
         if fecha_recepcion > timezone.now():
             fecha_recepcion = timezone.now() - timedelta(hours=1)
-        deposito = stock_service.deposito_predeterminado(caja.sucursal)
+        deposito = stock_service.deposito_predeterminado(asignacion.sucursal)
 
         compra = Compra.objects.create(
             seccion_caja=seccion,
@@ -1444,7 +1458,7 @@ class Command(BaseCommand):
                 subtotal=subtotal,
             )
 
-            stock = stock_service.obtener_stock(producto, caja.sucursal)
+            stock = stock_service.obtener_stock(producto, asignacion.sucursal)
             detalle_stock, movimiento = stock_service.reponer_stock(
                 stock,
                 cantidad,

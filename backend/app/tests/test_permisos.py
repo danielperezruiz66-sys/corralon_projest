@@ -193,7 +193,7 @@ class PermisoEscrituraTests(BaseCorralonTestCase):
         self.autenticar(self.user_vendedor)
         respuesta = self.client.post(
             '/api/secciones-caja/',
-            {'caja': self.caja.id, 'monto_inicial': '100.00'},
+            {'caja': self.caja.id, 'sucursal': self.sucursal.id, 'monto_inicial': '100.00'},
             format='json',
         )
         self.assertEqual(respuesta.status_code, 403)

@@ -26,6 +26,8 @@ from app.models import (
     SeccionCaja,
     Stock,
     Sucursal,
+    SucursalXCaja,
+    SucursalXEmpleado,
     Ubicacion,
     Unidad,
     Usuario,
@@ -67,7 +69,11 @@ class BaseCorralonTestCase(APITestCase):
             ubicacion=cls.ubicacion,
             nombre='Central',
         )
-        cls.caja = Caja.objects.create(sucursal=cls.sucursal)
+        cls.caja = Caja.objects.create(nombre='Caja 1')
+        cls.sucursal_caja = SucursalXCaja.objects.create(
+            sucursal=cls.sucursal,
+            caja=cls.caja,
+        )
         cls.deposito = Deposito.objects.create(
             sucursal=cls.sucursal,
             nombre='Deposito central',
@@ -155,7 +161,7 @@ class BaseCorralonTestCase(APITestCase):
         cls.tarjeta = MetodoPago.objects.create(metodo_pago='Tarjeta')
 
         cls.seccion = SeccionCaja.objects.create(
-            caja=cls.caja,
+            sucursal_caja=cls.sucursal_caja,
             empleado=cls.emp_cajero,
             fecha_hora_apertura=timezone.now(),
             monto_inicial=Decimal('1000.00'),
@@ -180,6 +186,11 @@ class BaseCorralonTestCase(APITestCase):
                 rol=cls.roles[codigo],
                 estado='AC',
             )
+        SucursalXEmpleado.objects.create(
+            sucursal=cls.sucursal,
+            empleado=empleado,
+            estado=True,
+        )
         return user, empleado
 
     def autenticar(self, user=None):

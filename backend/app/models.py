@@ -289,7 +289,7 @@ class SucursalXEmpleado(models.Model):
 
 
 # =============================================================================
-# CAJA — Caja, SeccionCaja
+# CAJA — Caja, SucursalXCaja, SeccionCaja
 # =============================================================================
 
 class Caja(models.Model):
@@ -298,10 +298,10 @@ class Caja(models.Model):
         INACTIVA = 'IN', 'Inactiva'
         MANTENIMIENTO = 'MT', 'En mantenimiento'
 
-    sucursal = models.ForeignKey(
-        Sucursal,
-        on_delete=models.PROTECT,
-        related_name='cajas',
+    nombre = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text='Identificador de la caja fisica (ej. Caja 1).',
     )
     estado = models.CharField(
         max_length=2,
@@ -311,11 +311,41 @@ class Caja(models.Model):
 
     class Meta:
         db_table = 'CAJAS'
+        ordering = ['nombre']
         verbose_name = 'Caja'
         verbose_name_plural = 'Cajas'
 
     def __str__(self):
-        return f'Caja {self.pk} - {self.sucursal}'
+        return self.nombre
+
+
+class SucursalXCaja(models.Model):
+    sucursal = models.ForeignKey(
+        Sucursal,
+        on_delete=models.PROTECT,
+        related_name='cajas_asignadas',
+    )
+    caja = models.ForeignKey(
+        Caja,
+        on_delete=models.PROTECT,
+        related_name='sucursales_asignadas',
+    )
+    habilitada = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'SUCURSALES_X_CAJAS'
+        ordering = ['sucursal__nombre', 'caja__nombre']
+        verbose_name = 'Sucursal por Caja'
+        verbose_name_plural = 'Sucursales por Cajas'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sucursal', 'caja'],
+                name='una_caja_por_sucursal',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.caja} - {self.sucursal}'
 
 
 class SeccionCaja(models.Model):
@@ -324,8 +354,8 @@ class SeccionCaja(models.Model):
         CERRADA = 'CE', 'Cerrada'
         AUDITADA = 'AU', 'Auditada'
 
-    caja = models.ForeignKey(
-        Caja,
+    sucursal_caja = models.ForeignKey(
+        SucursalXCaja,
         on_delete=models.PROTECT,
         related_name='secciones',
     )
@@ -367,9 +397,16 @@ class SeccionCaja(models.Model):
         db_table = 'SECCIONES_CAJA'
         verbose_name = 'Seccion de Caja'
         verbose_name_plural = 'Secciones de Caja'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sucursal_caja'],
+                condition=models.Q(estado='AB'),
+                name='una_seccion_abierta_por_caja_sucursal',
+            ),
+        ]
 
     def __str__(self):
-        return f'Seccion {self.pk} - {self.caja}'
+        return f'Seccion {self.pk} - {self.sucursal_caja}'
 
     def clean(self):
         from django.core.exceptions import ValidationError

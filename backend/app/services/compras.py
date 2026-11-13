@@ -45,7 +45,7 @@ def registrar_compra(
 
     seccion_caja = (
         SeccionCaja.objects.select_for_update()
-        .select_related('caja__sucursal')
+        .select_related('sucursal_caja__sucursal')
         .get(pk=seccion_caja.pk)
     )
     if seccion_caja.estado != SeccionCaja.EstadoSeccion.ABIERTA:
@@ -178,7 +178,7 @@ def recibir_compra(compra, deposito=None):
     """
     compra = (
         Compra.objects.select_for_update(of=('self',))
-        .select_related('seccion_caja__caja__sucursal', 'proveedor')
+        .select_related('seccion_caja__sucursal_caja__sucursal', 'proveedor')
         .get(pk=compra.pk)
     )
     if compra.fecha_recepcion is not None:
@@ -189,7 +189,7 @@ def recibir_compra(compra, deposito=None):
         raise ValueError('La compra no tiene proveedor.')
 
     if deposito is None:
-        sucursal_caja = compra.seccion_caja.caja.sucursal
+        sucursal_caja = compra.seccion_caja.sucursal_caja.sucursal
         central = Sucursal.objects.filter(
             es_central=True,
             empresa=sucursal_caja.empresa,

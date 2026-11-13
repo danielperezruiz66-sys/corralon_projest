@@ -13,6 +13,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from app.models import (
+    Caja,
     Compra,
     DetalleCompra,
     DetalleStock,
@@ -125,7 +126,7 @@ class SeedStockTests(TestCase):
         detalle = venta.detalles.first()
         stock = Stock.objects.get(
             producto=detalle.producto,
-            sucursal=venta.seccion_caja.caja.sucursal,
+            sucursal=venta.seccion_caja.sucursal_caja.sucursal,
         )
         cantidad_antes = stock.cantidad
 
@@ -170,14 +171,18 @@ class SeedStockTests(TestCase):
                 sucursal.nombre,
             )
 
-    def test_cada_sucursal_tiene_dos_depositos_y_una_caja(self):
+    def test_cada_sucursal_tiene_dos_depositos_y_dos_cajas(self):
         for sucursal in Sucursal.objects.all():
             self.assertEqual(sucursal.depositos.count(), 2)
             self.assertEqual(
                 sucursal.depositos.filter(es_predeterminado=True).count(),
                 1,
             )
-            self.assertEqual(sucursal.cajas.count(), 1)
+            self.assertEqual(sucursal.cajas_asignadas.count(), 2)
+        self.assertEqual(Caja.objects.count(), 2)
+        # La misma caja fisica esta habilitada en ambas sucursales.
+        for caja in Caja.objects.all():
+            self.assertEqual(caja.sucursales_asignadas.count(), 2)
 
     def test_cada_sucursal_tiene_cuatro_empleados_con_roles(self):
         for sucursal in Sucursal.objects.all():
@@ -253,12 +258,12 @@ class SeedStockTests(TestCase):
         for sucursal in Sucursal.objects.all():
             self.assertTrue(
                 Venta.objects.filter(
-                    seccion_caja__caja__sucursal=sucursal,
+                    seccion_caja__sucursal_caja__sucursal=sucursal,
                 ).exists()
             )
             self.assertTrue(
                 Compra.objects.filter(
-                    seccion_caja__caja__sucursal=sucursal,
+                    seccion_caja__sucursal_caja__sucursal=sucursal,
                 ).exists()
             )
 
