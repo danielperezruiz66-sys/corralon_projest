@@ -4,7 +4,6 @@ import Swal from 'sweetalert2'
 import {
   IconBuildingWarehouse,
   IconCash,
-  IconCheck,
   IconDownload,
   IconEye,
   IconLoader2,
@@ -287,8 +286,8 @@ export default function Caja() {
     Swal.fire({
       icon: 'success',
       title: 'Seccion abierta',
-      text: `${seccion.caja_detalle} · Sección #${seccion.id}`,
-      timer: 1500,
+      text: `${seccion.caja_detalle} · Sección #${seccion.id} · a nombre de ${seccion.empleado_detalle}`,
+      timer: 1800,
       showConfirmButton: false,
     })
     refrescar()
@@ -450,29 +449,7 @@ export default function Caja() {
 
       <div className="comercial inventario">
         {tab === 'listado' && (
-          <>
-            <section className="caja-contexto">
-              <span className="caja-chip">
-                <IconBuildingWarehouse size={16} />
-                <span>Sucursal</span>
-                <strong>{sucursalDetalle?.nombre ?? 'Todas'}</strong>
-              </span>
-              {abiertas.length === 0 ? (
-                <span className="caja-chip caja-chip-vacio">
-                  <IconCash size={16} />
-                  Ninguna seccion abierta
-                </span>
-              ) : (
-                abiertas.map((seccion) => (
-                  <span className="caja-chip" key={seccion.id}>
-                    <IconCash size={16} />
-                    <strong>{seccion.caja_detalle}</strong>
-                    Sección #{seccion.id} · {seccion.empleado_detalle}
-                  </span>
-                ))
-              )}
-            </section>
-
+          <>           
             <section
               id="cajas-abiertas"
               className="comercial-panel"
@@ -745,7 +722,11 @@ export default function Caja() {
                               type="button"
                               className="boton-icono"
                               onClick={() => setDetalleSeccion(item)}
-                              title="Ver detalle"
+                              title={
+                                puedeGestionar && item.estado === 'CE'
+                                  ? 'Ver detalle y auditar'
+                                  : 'Ver detalle'
+                              }
                             >
                               <IconEye size={17} />
                             </button>
@@ -757,16 +738,6 @@ export default function Caja() {
                                 title="Cerrar seccion"
                               >
                                 <IconCash size={17} />
-                              </button>
-                            )}
-                            {puedeGestionar && item.estado === 'CE' && (
-                              <button
-                                type="button"
-                                className="boton-icono"
-                                onClick={() => setDetalleSeccion(item)}
-                                title="Auditar"
-                              >
-                                <IconCheck size={17} />
                               </button>
                             )}
                           </div>

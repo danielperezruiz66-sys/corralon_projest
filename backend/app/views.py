@@ -26,7 +26,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
@@ -79,9 +79,11 @@ from .permissions import (
     VENDEDOR,
     codigos_activos,
     es_admin,
+    es_gestion,
 )
 from .services import caja as caja_service
 from .services import compras as compras_service
+from .services import empleados as empleados_service
 from .services import pagos as pagos_service
 from .services import proveedores as proveedores_service
 from .services import stock as stock_service
@@ -684,13 +686,79 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 
 
 class EmpleadoViewSet(viewsets.ModelViewSet):
-    queryset = Empleado.objects.select_related('usuario')
+    queryset = Empleado.objects.select_related(
+        'usuario',
+    ).prefetch_related(
+        'roles_asignados__rol',
+        'sucursales_asignadas__sucursal',
+    )
     serializer_class = serializers.EmpleadoSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = GESTION
     filterset_fields = ['estado', 'usuario']
     search_fields = ['legajo', 'dni', 'apellido', 'nombre']
     ordering_fields = ['apellido', 'nombre', 'legajo']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        sucursal = self.request.query_params.get('sucursal', '').strip()
+        if sucursal:
+            try:
+                sucursal_id = int(sucursal)
+            except (TypeError, ValueError):
+                raise ValidationError(
+                    {'sucursal': 'Indique el id de la sucursal.'}
+                ) from None
+            queryset = queryset.filter(
+                sucursales_asignadas__sucursal_id=sucursal_id,
+                sucursales_asignadas__estado=True,
+            ).distinct()
+        param = self.request.query_params.get('puede_operar_caja', '').strip()
+        if not param:
+            return queryset
+        try:
+            sucursal_id = int(param)
+        except (TypeError, ValueError):
+            raise ValidationError(
+                {'puede_operar_caja': 'Indique el id de la sucursal.'}
+            ) from None
+        return caja_service.empleados_que_pueden_abrir_caja(
+            queryset,
+            sucursal_id,
+        )
+
+    @action(detail=True, methods=['post'], url_path='cambiar-password')
+    def cambiar_password(self, request, pk=None):
+        """Restablece la contraseña del empleado (solo AD).
+
+        Invalida los refresh tokens del usuario, cerrando sus sesiones.
+        """
+        if not es_admin(request.user):
+            raise PermissionDenied(
+                'Solo un administrador puede cambiar la contraseña '
+                'de otro empleado.'
+            )
+        empleado = self.get_object()
+        entrada = serializers.CambiarPasswordSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        if not request.user.check_password(
+            entrada.validated_data['password_admin']
+        ):
+            raise ValidationError(
+                {'password_admin': 'Tu contraseña actual no es correcta.'}
+            )
+        empleados_service.cambiar_password(
+            empleado,
+            entrada.validated_data['password'],
+        )
+        return Response(
+            {
+                'detail': (
+                    f'La contraseña de {empleado} fue actualizada. '
+                    'Se cerraron sus sesiones activas.'
+                )
+            }
+        )
 
 
 class RolViewSet(viewsets.ModelViewSet):
@@ -795,29 +863,66 @@ class SeccionCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
         datos = entrada.validated_data
 
         empleado = datos.get('empleado')
-        if empleado is not None and not es_admin(request.user):
+        historial_motivo = None
+        if empleado is not None and not es_gestion(request.user):
             raise ValidationError(
                 {
                     'empleado': (
-                        'Solo un administrador puede abrir la caja a nombre '
-                        'de otro empleado.'
+                        'Solo un administrador o gerente puede abrir la caja '
+                        'a nombre de otro empleado.'
                     )
                 }
             )
         if empleado is None:
             empleado = _empleado_de(request.user)
+        else:
+            historial_motivo = f'Apertura a nombre de {empleado}'
 
         seccion = caja_service.abrir_seccion(
             datos['caja'],
             datos['sucursal'],
             empleado,
             datos['monto_inicial'],
+            historial_motivo=historial_motivo,
+            historial_usuario=request.user,
+            observaciones_apertura=datos.get('observaciones_apertura'),
         )
         salida = serializers.SeccionCajaSerializer(
             seccion,
             context=self.get_serializer_context(),
         )
         return Response(salida.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'])
+    def sugerencia(self, request):
+        """Monto sugerido para abrir: efectivo contado en el ultimo cierre."""
+        caja = request.query_params.get('caja', '').strip()
+        sucursal = request.query_params.get('sucursal', '').strip()
+        if not caja or not sucursal:
+            raise ValidationError(
+                {
+                    'detail': 'Indicá la caja y la sucursal.',
+                    'codigo': 'validacion',
+                }
+            )
+        try:
+            caja_id, sucursal_id = int(caja), int(sucursal)
+        except (TypeError, ValueError):
+            raise ValidationError(
+                {
+                    'detail': 'La caja y la sucursal deben ser ids.',
+                    'codigo': 'validacion',
+                }
+            ) from None
+        sugerencia = caja_service.sugerir_apertura(caja_id, sucursal_id)
+        return Response(
+            {
+                'monto_sugerido': str(sugerencia['monto_sugerido']),
+                'encontrado': sugerencia['encontrado'],
+                'seccion_id': sugerencia['seccion_id'],
+                'fecha_hora_cierre': sugerencia['fecha_hora_cierre'],
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def cerrar(self, request, pk=None):

@@ -3,6 +3,8 @@ import Swal from 'sweetalert2'
 import { IconCash, IconLoader2, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
 import { formatearMoneda } from '../../utils/formato'
+import MensajeError from '../common/MensajeError.jsx'
+import { validarNumero } from '../../utils/validaciones'
 
 function diferenciaDe(montos, fila) {
   const contado = montos[fila.metodo_pago]
@@ -23,6 +25,7 @@ export default function FormularioCierreSeccion({
   const [cargando, setCargando] = useState(true)
   const [errorCarga, setErrorCarga] = useState('')
   const [guardando, setGuardando] = useState(false)
+  const [errores, setErrores] = useState({})
 
   useEffect(() => {
     let vigente = true
@@ -33,7 +36,9 @@ export default function FormularioCierreSeccion({
         }
         setTeorico(datos)
         setMontos(
-          Object.fromEntries(datos.map((fila) => [fila.metodo_pago, ''])),
+          Object.fromEntries(
+            datos.map((fila) => [fila.metodo_pago, fila.monto_sistema]),
+          ),
         )
         setCargando(false)
       })
@@ -61,12 +66,31 @@ export default function FormularioCierreSeccion({
   const totalDiferencia = totalContado - totalSistema
 
   async function cerrar() {
+    const nuevos = {}
     const montosReales = {}
     teorico.forEach((fila) => {
       const valor = montos[fila.metodo_pago]
-      montosReales[String(fila.metodo_pago)] =
-        valor === '' || valor === undefined ? '0' : valor
+      const mensaje = validarNumero(valor, {
+        etiqueta: `El contado en ${fila.metodo_pago_detalle}`,
+        mayorQueCero: false,
+        decimales: 2,
+        maximo: 9999999999.99,
+      })
+      if (mensaje) {
+        nuevos[String(fila.metodo_pago)] = mensaje
+      } else {
+        montosReales[String(fila.metodo_pago)] =
+          valor === '' || valor === undefined ? '0' : valor
+      }
     })
+
+    if (Object.keys(nuevos).length > 0) {
+      setErrores(nuevos)
+      requestAnimationFrame(() => {
+        document.querySelector('.input-error')?.focus()
+      })
+      return
+    }
 
     const resultado = await Swal.fire({
       title: `¿Cerrar la seccion #${seccion.id}?`,
@@ -93,6 +117,13 @@ export default function FormularioCierreSeccion({
       })
       onGuardado?.(cerrada, true)
     } catch (e) {
+      if (e.campos) {
+        setErrores(e.campos)
+        requestAnimationFrame(() => {
+          document.querySelector('.input-error')?.focus()
+        })
+        return
+      }
       Swal.fire({
         icon: 'error',
         title: 'No se pudo cerrar la seccion',
@@ -187,18 +218,29 @@ export default function FormularioCierreSeccion({
                           inputMode="decimal"
                           min="0"
                           step="0.01"
-                          className="campo-comercial"
-                          style={{ minWidth: '7rem' }}
+                          className={
+                            errores[String(fila.metodo_pago)]
+                              ? 'caja-cierre-input input-error'
+                              : 'caja-cierre-input'
+                          }
                           value={montos[fila.metodo_pago] ?? ''}
-                          onChange={(evento) =>
+                          onChange={(evento) => {
                             setMontos((actuales) => ({
                               ...actuales,
                               [fila.metodo_pago]: evento.target.value,
                             }))
-                          }
+                            if (errores[String(fila.metodo_pago)]) {
+                              setErrores((previos) => {
+                                const siguientes = { ...previos }
+                                delete siguientes[String(fila.metodo_pago)]
+                                return siguientes
+                              })
+                            }
+                          }}
                           placeholder="0.00"
                           aria-label={`Contado en ${fila.metodo_pago_detalle}`}
                         />
+                        <MensajeError>{errores[String(fila.metodo_pago)]}</MensajeError>
                       </td>
                       <td className={`mono ${claseDiferencia}`}>
                         {diferencia === null
@@ -228,6 +270,16 @@ export default function FormularioCierreSeccion({
                 </tr>
               </tfoot>
             </table>
+
+            {totalDiferencia !== 0 && (
+              <p className="caja-aviso-diferencia" role="status">
+                Diferencia de{' '}
+                <strong>{formatearMoneda(Math.abs(totalDiferencia))}</strong>
+                {totalDiferencia < 0 ? ' faltante' : ' sobrante'}: se registrará
+                una nota automática del sistema con el detalle. Podés agregar
+                observaciones si querés.
+              </p>
+            )}
 
             <label className="campo-comercial ancho-completo">
               <span>Observaciones del cierre</span>

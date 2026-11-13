@@ -3,6 +3,7 @@ import Swal from 'sweetalert2'
 import { IconDeviceFloppy, IconLoader2, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
 import MensajeError from '../common/MensajeError.jsx'
+import { validarFecha } from '../../utils/validaciones'
 
 function notaAutomatica(texto) {
   const valor = String(texto || '')
@@ -32,8 +33,17 @@ export default function FormularioDetalleStock({
       nuevos.observaciones =
         'La nota automática de origen no se puede modificar ni eliminar.'
     }
+    if (fechaVenc) {
+      const fechaError = validarFecha(fechaVenc, 'La fecha de vencimiento')
+      if (fechaError) {
+        nuevos.fecha_venc = fechaError
+      }
+    }
     if (Object.keys(nuevos).length > 0) {
       setErrores(nuevos)
+      requestAnimationFrame(() => {
+        document.querySelector('.input-error')?.focus()
+      })
       return
     }
     setErrores({})
@@ -94,9 +104,11 @@ export default function FormularioDetalleStock({
             <span>Fecha de vencimiento</span>
             <input
               type="date"
+              className={errores.fecha_venc ? 'input-error' : ''}
               value={fechaVenc || ''}
               onChange={(evento) => setFechaVenc(evento.target.value)}
             />
+            <MensajeError>{errores.fecha_venc}</MensajeError>
           </label>
 
           <label className="campo-comercial ancho-completo">

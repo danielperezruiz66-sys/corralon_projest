@@ -85,8 +85,10 @@ python manage.py seed_data --reset
 `--reset` **borra los datos de negocio actuales** y genera un entorno completo:
 
 - 2 sucursales en Salta: **Salta Capital** y **Campo Quijano**.
-- 2 depósitos y 1 caja por sucursal.
-- 4 empleados por sucursal (Administrador, Cajero, Vendedor y Encargado de depósito).
+- 2 depósitos y 2 cajas físicas (`Caja 1` y `Caja 2`) habilitadas en ambas
+  sucursales. Abren secciones simultáneamente en las dos.
+- 4 empleados por sucursal (Administrador, Cajero, Vendedor y Encargado de
+  depósito).
 - 30 productos con categoría, marca, unidad, precio de venta, costo y stock.
 - 6 meses de compras y ventas (240 ventas y 72 compras por defecto).
 
@@ -171,19 +173,19 @@ cd ../frontend
 npm install
 ```
 
-## 7. Cancelación automática de ventas
+## 7. Cancelación de ventas vencidas (manual)
 
-Las ventas pendientes sin pagos se anulan según `VENTAS_MINUTOS_PARA_CONFIRMAR`
-(30 minutos por defecto). El barrido debe ejecutarse cada 10 minutos.
+Las ventas pendientes sin pagos **no se anulan automáticamente** tras
+`VENTAS_MINUTOS_PARA_CONFIRMAR` (30 minutos). Se muestran como **alerta** en el
+dashboard y en el módulo de ventas; el stock sigue reservado hasta que se
+anulan manualmente.
 
-**Windows:** ejecutar una vez:
+El comando queda disponible para uso manual en desarrollo o si se decide
+correrlo manualmente:
 
-```bat
-scripts\programar_cancelacion.bat
+```bash
+python manage.py cancelar_ventas_vencidas --minutos 30
 ```
 
-**Linux:** agregar al cron:
-
-```cron
-*/10 * * * * cd /ruta/al/proyecto/backend && ../venv/bin/python manage.py cancelar_ventas_vencidas >> logs/cancelar_ventas_vencidas.log 2>&1
-```
+> **No programar** la tarea `Corralon\CancelarVentasVencidas` (ni cron
+> equivalente) en el servidor.

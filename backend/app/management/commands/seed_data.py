@@ -1164,13 +1164,21 @@ class Command(BaseCommand):
 
     def _secciones(self, asignaciones):
         ahora = timezone.now()
+        usadas_por_sucursal = {}
         for asignacion in asignaciones:
-            cajero = self.empleados_por_sucursal[asignacion.sucursal.nombre]['CA']
+            nombre_sucursal = asignacion.sucursal.nombre
+            empleados = self.empleados_por_sucursal[nombre_sucursal]
+            usadas = usadas_por_sucursal.setdefault(nombre_sucursal, set())
+            # Un empleado no puede tener dos secciones abiertas a la vez:
+            # la primera caja la abre el cajero y la segunda el administrador.
+            cajero = empleados['CA']
+            empleado = cajero if cajero not in usadas else empleados['AD']
+            usadas.add(empleado)
             seccion, _ = SeccionCaja.objects.get_or_create(
                 sucursal_caja=asignacion,
                 estado=SeccionCaja.EstadoSeccion.ABIERTA,
                 defaults={
-                    'empleado': cajero,
+                    'empleado': empleado,
                     'fecha_hora_apertura': ahora - timedelta(hours=2),
                     'monto_inicial': Decimal('25000.00'),
                 },

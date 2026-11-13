@@ -207,13 +207,87 @@ class UsuarioSerializer(serializers.ModelSerializer):
         return usuario
 
 
+class UsuarioDatosSerializer(serializers.Serializer):
+    """Datos opcionales para crear el acceso del empleado en el alta."""
+
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField(required=False, allow_blank=True, default='')
+    password = serializers.CharField(
+        write_only=True,
+        max_length=128,
+        style={'input_type': 'password'},
+    )
+
+    def validate_username(self, value):
+        if Usuario.objects.filter(username=value).exists():
+            raise serializers.ValidationError(
+                'El nombre de usuario ya está en uso.'
+            )
+        return value
+
+    def validate_password(self, value):
+        username = (self.get_initial() or {}).get('username')
+        try:
+            validate_password(
+                value,
+                Usuario(username=username) if username else None,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages)) from exc
+        return value
+
+
+class CambiarPasswordSerializer(serializers.Serializer):
+    password = serializers.CharField(
+        max_length=128,
+        style={'input_type': 'password'},
+    )
+    password_confirmacion = serializers.CharField(
+        max_length=128,
+        style={'input_type': 'password'},
+    )
+    password_admin = serializers.CharField(
+        max_length=128,
+        style={'input_type': 'password'},
+    )
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password_confirmacion']:
+            raise serializers.ValidationError(
+                {'password_confirmacion': 'Las contraseñas no coinciden.'}
+            )
+        return attrs
+
+
 class EmpleadoSerializer(serializers.ModelSerializer):
     usuario_detalle = serializers.CharField(
         source='usuario.username',
         read_only=True,
         allow_null=True,
     )
+    usuario_email = serializers.CharField(
+        source='usuario.email',
+        read_only=True,
+        allow_null=True,
+    )
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
+    roles_detalle = serializers.SerializerMethodField()
+    sucursales_detalle = serializers.SerializerMethodField()
+    roles_ids = serializers.SerializerMethodField()
+    sucursales_ids = serializers.SerializerMethodField()
+    roles = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Rol.objects.all(),
+        write_only=True,
+        required=False,
+    )
+    sucursales = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Sucursal.objects.all(),
+        write_only=True,
+        required=False,
+    )
+    usuario_datos = UsuarioDatosSerializer(write_only=True, required=False)
 
     class Meta:
         model = Empleado
@@ -221,6 +295,7 @@ class EmpleadoSerializer(serializers.ModelSerializer):
             'id',
             'usuario',
             'usuario_detalle',
+            'usuario_email',
             'dni',
             'legajo',
             'nombre',
@@ -228,7 +303,123 @@ class EmpleadoSerializer(serializers.ModelSerializer):
             'telefono',
             'estado',
             'estado_detalle',
+            'roles_detalle',
+            'sucursales_detalle',
+            'roles_ids',
+            'sucursales_ids',
+            'roles',
+            'sucursales',
+            'usuario_datos',
         ]
+
+    def get_roles_detalle(self, obj):
+        return sorted(
+            asignacion.rol.codigo
+            for asignacion in obj.roles_asignados.all()
+            if asignacion.estado == 'AC' and asignacion.rol.codigo
+        )
+
+    def get_sucursales_detalle(self, obj):
+        return [
+            asignacion.sucursal.nombre
+            for asignacion in obj.sucursales_asignadas.all()
+            if asignacion.estado
+        ]
+
+    def get_roles_ids(self, obj):
+        return [
+            asignacion.rol_id
+            for asignacion in obj.roles_asignados.all()
+            if asignacion.estado == 'AC'
+        ]
+
+    def get_sucursales_ids(self, obj):
+        return [
+            asignacion.sucursal_id
+            for asignacion in obj.sucursales_asignadas.all()
+            if asignacion.estado
+        ]
+
+    def validate(self, attrs):
+        dni = attrs.get('dni', getattr(self.instance, 'dni', None))
+        legajo = attrs.get('legajo', getattr(self.instance, 'legajo', None))
+        base = Empleado.objects.all()
+        if self.instance is not None:
+            base = base.exclude(pk=self.instance.pk)
+        errores = {}
+        if dni and base.filter(dni=dni).exists():
+            errores['dni'] = 'El DNI ya está en uso.'
+        if legajo and base.filter(legajo=legajo).exists():
+            errores['legajo'] = 'El legajo ya está en uso.'
+        datos = attrs.get('usuario_datos')
+        if datos is not None and self.instance is not None:
+            if self.instance.usuario_id:
+                errores['usuario_datos'] = (
+                    'El empleado ya tiene un usuario asignado.'
+                )
+        if errores:
+            raise serializers.ValidationError(errores)
+        return attrs
+
+    @transaction.atomic()
+    def create(self, validated_data):
+        from .services import empleados as empleados_service
+
+        roles = validated_data.pop('roles', [])
+        sucursales = validated_data.pop('sucursales', [])
+        datos = validated_data.pop('usuario_datos', None)
+
+        usuario = None
+        if datos is not None:
+            password = datos['password']
+            usuario = Usuario(
+                username=datos['username'],
+                email=datos.get('email', ''),
+            )
+            usuario.set_password(password)
+            usuario.save()
+
+        empleado = Empleado.objects.create(usuario=usuario, **validated_data)
+        empleados_service.sincronizar_roles(empleado, roles)
+        empleados_service.sincronizar_sucursales(empleado, sucursales)
+        return empleado
+
+    @transaction.atomic()
+    def update(self, instance, validated_data):
+        from .services import empleados as empleados_service
+
+        roles = validated_data.pop('roles', None)
+        sucursales = validated_data.pop('sucursales', None)
+        datos = validated_data.pop('usuario_datos', None)
+        estado_anterior = instance.estado
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Si el empleado pasa a no activo, se le cierran las sesiones.
+        if (
+            instance.estado != estado_anterior
+            and instance.estado != instance.EstadoEmpleado.ACTIVO
+        ):
+            empleados_service.invalidar_sesiones(instance)
+
+        if datos is not None and instance.usuario_id is None:
+            password = datos['password']
+            usuario = Usuario(
+                username=datos['username'],
+                email=datos.get('email', ''),
+            )
+            usuario.set_password(password)
+            usuario.save()
+            instance.usuario = usuario
+            instance.save(update_fields=['usuario'])
+
+        if roles is not None:
+            empleados_service.sincronizar_roles(instance, roles)
+        if sucursales is not None:
+            empleados_service.sincronizar_sucursales(instance, sucursales)
+        return instance
 
 
 class RolSerializer(serializers.ModelSerializer):
@@ -343,6 +534,8 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
         source='sucursal_caja.sucursal_id',
         read_only=True,
     )
+    abierta_por = serializers.SerializerMethodField()
+    motivo_apertura = serializers.SerializerMethodField()
     sucursal_detalle = serializers.StringRelatedField(
         source='sucursal_caja.sucursal',
         read_only=True,
@@ -350,6 +543,30 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
     empleado_detalle = serializers.StringRelatedField(source='empleado', read_only=True)
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
     detalles_cierre = DetalleCierreCajaSerializer(many=True, read_only=True)
+
+    @staticmethod
+    def _historial_apertura(obj):
+        """Entrada '+' del historial (quien abrio y por que motivo)."""
+        cache = getattr(obj, '_historial_apertura_cache', False)
+        if cache is not False:
+            return cache
+        cache = (
+            obj.history.filter(history_type='+')
+            .order_by('history_date', 'history_id')
+            .select_related('history_user')
+            .first()
+        )
+        obj._historial_apertura_cache = cache
+        return cache
+
+    def get_abierta_por(self, obj):
+        apertura = self._historial_apertura(obj)
+        usuario = apertura.history_user if apertura else None
+        return getattr(usuario, 'username', None)
+
+    def get_motivo_apertura(self, obj):
+        apertura = self._historial_apertura(obj)
+        return apertura.history_change_reason if apertura else None
 
     class Meta:
         model = SeccionCaja
@@ -368,9 +585,12 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
             'monto_teorico',
             'monto_final',
             'observaciones',
+            'observaciones_apertura',
             'estado',
             'estado_detalle',
             'detalles_cierre',
+            'abierta_por',
+            'motivo_apertura',
         ]
 
 
@@ -382,10 +602,16 @@ class AperturaCajaSerializer(serializers.Serializer):
         decimal_places=2,
         min_value=Decimal('0.00'),
     )
-    # Solo un administrador puede abrir la caja a nombre de otro empleado.
+    # Solo un administrador o gerente puede abrir la caja a nombre de otro empleado.
     empleado = serializers.PrimaryKeyRelatedField(
         queryset=Empleado.objects.all(),
         required=False,
+        allow_null=True,
+    )
+    # Obligatoria cuando el monto difiere del sugerido (efectivo del ultimo cierre).
+    observaciones_apertura = serializers.CharField(
+        required=False,
+        allow_blank=True,
         allow_null=True,
     )
 

@@ -46,6 +46,15 @@ def es_admin(user):
     return bool(user and user.is_superuser) or ADMIN in codigos_activos(user)
 
 
+def es_gestion(user):
+    """Superuser o rol de administracion (AD/GE)."""
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return bool(codigos_activos(user) & {ADMIN, GERENTE})
+
+
 class PermisoPorRol(BasePermission):
     """Lectura libre para autenticados; escritura segun `roles_escritura`."""
 

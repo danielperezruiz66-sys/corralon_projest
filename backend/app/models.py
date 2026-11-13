@@ -260,6 +260,12 @@ class EmpleadoXRol(models.Model):
         db_table = 'EMPLEADOS_X_ROLES'
         verbose_name = 'Empleado por Rol'
         verbose_name_plural = 'Empleados por Roles'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['empleado', 'rol'],
+                name='un_rol_por_empleado',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.empleado} - {self.rol}'
@@ -283,6 +289,12 @@ class SucursalXEmpleado(models.Model):
         db_table = 'SUCURSALES_X_EMPLEADOS'
         verbose_name = 'Sucursal por Empleado'
         verbose_name_plural = 'Sucursales por Empleados'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sucursal', 'empleado'],
+                name='una_sucursal_por_empleado',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.sucursal} - {self.empleado}'
@@ -385,6 +397,11 @@ class SeccionCaja(models.Model):
         blank=True,
         help_text='Detalle u observaciones del cierre.',
     )
+    observaciones_apertura = models.TextField(
+        null=True,
+        blank=True,
+        help_text='Motivo de la diferencia entre el monto sugerido y el informado.',
+    )
     estado = models.CharField(
         max_length=2,
         choices=EstadoSeccion.choices,
@@ -402,6 +419,11 @@ class SeccionCaja(models.Model):
                 fields=['sucursal_caja'],
                 condition=models.Q(estado='AB'),
                 name='una_seccion_abierta_por_caja_sucursal',
+            ),
+            models.UniqueConstraint(
+                fields=['empleado'],
+                condition=models.Q(estado='AB'),
+                name='una_seccion_abierta_por_empleado',
             ),
         ]
 

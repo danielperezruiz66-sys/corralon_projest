@@ -5,7 +5,7 @@
 > Al cerrar una sesión: actualizar este archivo si cambió el estado y reescribir
 > `DIA_SIGUIENTE.md` solo con lo pendiente (lo terminado se borra).
 
-**Última actualización:** 2026-11-12
+**Última actualización:** 2026-11-13
 
 ## 1. Proyecto y stack
 
@@ -20,10 +20,10 @@ Arquitectura desacoplada:
 - API en `http://localhost:8000`, Vite en `http://localhost:5173`.
 - `.env` en la raíz (no se commitea); plantilla en `.env.example`.
 
-Estado: backend Fase 1+2 completo (36 viewsets, suite en `app.tests`); frontend
-con Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores y **Caja** (QA
-automatizada completa; falta el **QA visual manual** en navegador del módulo).
-Pendientes: Empleados, Perfil y Actividad. Facturación ARCA bloqueada.
+Estado: backend completo (36 viewsets, suite en `app.tests`, 218/218); frontend
+con Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores, Caja y
+**Empleados**; falta el **QA visual manual** en navegador de Caja y Empleados.
+Pendientes: Perfil y Actividad. Facturación ARCA bloqueada.
 
 ## 2. Estructura y arquitectura
 
@@ -32,9 +32,9 @@ backend/
 ├── config/            # settings.py, urls.py, asgi.py, wsgi.py
 └── app/               # ÚNICA app Django
     ├── models.py      # 35 modelos por secciones (# ==== DOMINIO ====)
-    ├── services/      # stock, caja, ventas, compras, pagos, proveedores
+    ├── services/      # stock, caja, ventas, compras, pagos, proveedores, empleados
     ├── management/commands/  # seed_data, cancelar_ventas_vencidas
-    ├── migrations/    # 0001–0020
+    ├── migrations/    # 0001–0025
     ├── tests/         # suite en app.tests
     ├── admin.py  apps.py  backends.py  exceptions.py  permissions.py
     └── serializers.py  urls.py  views.py
@@ -42,7 +42,7 @@ frontend/src/
 ├── api/  context/  pages/  components/  styles/
 ├── data/menuConfig.js  hooks/  utils/
 └── App.jsx  index.css  main.jsx
-scripts/               # tareas programadas de Windows
+scripts/               # utilidad manual (cancelación de ventas vencidas; sin tarea programada)
 ```
 
 Reglas fijas:
@@ -135,16 +135,41 @@ Reglas:
 - `Caja` es la caja física reutilizable: `nombre` único y `estado` (AC/IN/MT),
   sin sucursal. `SucursalXCaja` (`sucursal`, `caja`, `habilitada`) la habilita en
   varias sucursales; `UNIQUE(sucursal, caja)`. El conteo de dinero vive en
-  `SeccionCaja`. Plan del módulo: `refaccioncaja.md`.
+  `SeccionCaja`.
 - `SeccionCaja`: sesión de una caja física en una sucursal. `sucursal_caja`
   FK→`SucursalXCaja` (de ahí salen sucursal y caja; no hay FK directa a `Caja`).
   Máximo **1 sección `AB` por `sucursal_caja`** (la misma caja física puede estar
-  abierta en Salta y en Quijano a la vez, una por sucursal). `monto_teorico`
+  abierta en Salta y en Quijano a la vez, una por sucursal) **y 1 sección `AB`
+  por empleado** (un mismo empleado no puede abrir dos cajas a la vez,
+  constraint `una_seccion_abierta_por_empleado`). El dropdown `?puede_operar_caja=`
+  excluye a quien ya tiene una abierta. `monto_teorico`
   calculado por el sistema, `monto_final` contado.
   `DetalleCierreCaja` guarda `monto_sistema` vs `monto_real` por método.
   `MetodoPago.es_efectivo` suma el `monto_inicial` al teórico.
+  Al cerrar: el campo **Contado** arranca igual al teórico por método (se
+  edita solo lo que difiere) y si la diferencia total es ≠ 0, la primera línea
+  de `SeccionCaja.observaciones` pasa a ser una nota del sistema inborrable
+  (`Diferencia de arqueo: ±$X (faltante/sobrante).`); el usuario puede agregar
+  observaciones en líneas siguientes.
+  **Monto inicial**: el formulario precarga el efectivo contado en el último
+  cierre de la caja en esa sucursal (`GET /api/secciones-caja/sugerencia/?caja=&sucursal=`
+  lee `DetalleCierreCaja.monto_real` del método `es_efectivo` del último `CE`/`AU`).
+  Si el monto difiere de lo sugerido, `observaciones_apertura` (TextField) es
+  **obligatoria** (validada en el formulario y en `abrir_seccion`); con caja
+  nueva o sin cierre previo el sugerido es 0 y sumar dinero exige motivo.
+  Apertura: solo `AD`/`GE` pueden abrir a **nombre de otro** (`empleado`
+  opcional en el cuerpo); el empleado elegido debe ser activo con rol
+  `AD`/`GE` (cualquier sucursal) o `CA` asignado a la sucursal. La apertura a
+  nombre de otro queda en el historial (`history_type='+'`) con `history_user`
+  = quién abrió y `history_change_reason = "Apertura a nombre de <Empleado>"`;
+  el serializer expone `abierta_por` y `motivo_apertura`. Una apertura propia
+  (sin `empleado`) usa el empleado del usuario autenticado. `EmpleadoViewSet`
+  acepta `?puede_operar_caja=<sucursal_id>` devolviendo los empleados activos
+  habilitados (AD/GE o CA asignado) para el selector del formulario.
 - `Rol.codigo`: `AD` Admin, `GE` Gerente, `CA` Cajero, `VE` Vendedor, `ED`
-  Encargado de depósito. Sin código = solo lectura.
+  Encargado de depósito. Sin código = solo lectura. `EmpleadoXRol` y
+  `SucursalXEmpleado` tienen restricciones únicas `un_rol_por_empleado` y
+  `una_sucursal_por_empleado`.
 - `django-simple-history` en modelos críticos (Usuario sin password, Empleado,
   Producto, Stock, DetalleStock, MovimientoStock, TransferenciaStock,
   Proveedor, SeccionCaja, DetalleCierreCaja, Cliente, Venta, DetalleVenta,
@@ -159,7 +184,8 @@ entrada y delegan; no escriben directamente.
 | Módulo | Funciones |
 |---|---|
 | `stock.py` | `obtener_stock`, `consumir_stock`, `reponer_stock`, `restaurar_stock`, `recalcular_stock`, `deposito_predeterminado`, `ajustar_stock_detallado`, `ajustar_stock` (legado), `cargar_stock_sucursal`, `crear_transferencia`, `recibir_transferencia`, `cancelar_transferencia` |
-| `caja.py` | `abrir_seccion`, `calcular_teorico`, `cerrar_seccion`, `auditar_seccion` |
+| `empleados.py` | `sincronizar_roles`, `sincronizar_sucursales`, `cambiar_password` |
+| `caja.py` | `sugerir_apertura(caja, sucursal)`, `abrir_seccion(caja, sucursal, empleado, monto_inicial, historial_motivo?, historial_usuario?, observaciones_apertura?)`, `calcular_teorico`, `cerrar_seccion`, `auditar_seccion`, `empleados_que_pueden_abrir_caja` |
 | `ventas.py` | `crear_venta`, `confirmar_venta`, `cancelar_venta`, `cancelar_ventas_vencidas` |
 | `compras.py` | `registrar_compra`, `anular_compra`, `marcar_en_camino`, `recibir_compra` |
 | `pagos.py` | `registrar_pago_venta`, `registrar_pagos_venta`, `registrar_pago_compra`, `registrar_pagos_compra` |
@@ -205,16 +231,33 @@ de stock).
     `/{id}/cancelar/`
   - `POST /api/compras/`, `/{id}/pagar/`, `/{id}/anular/`, `/{id}/en-camino/`,
     `/{id}/recibir/` (gestión `en-camino/recibir/pagar/anular` solo `AD/GE`)
-  - `POST /api/secciones-caja/` (cuerpo `caja` + `sucursal` + `monto_inicial`),
+  - `POST /api/secciones-caja/` (cuerpo `caja` + `sucursal` + `monto_inicial`;
+    `empleado` opcional solo `AD/GE`, para abrir a nombre de otro habilitado;
+    `observaciones_apertura` obligatoria si el monto difiere de la sugerencia),
     `/{id}/cerrar/`, `/{id}/auditar/` (solo `AD/GE`) y
     `GET /{id}/teorico/` (desglose previo al cierre por método de pago)
+  - `GET /api/secciones-caja/sugerencia/?caja=<id>&sucursal=<id>` (monto inicial
+    sugerido = efectivo contado en el último cierre de esa caja en esa sucursal)
+  - `POST /api/empleados/` (alta con datos, roles, sucursales y acceso
+    opcional: `usuario_datos {username, email, password}`),
+    `POST /api/empleados/{id}/cambiar-password/` (solo AD; **requiere
+    `password_admin`** — la contraseña del administrador, verificada antes del
+    cambio; invalida refresh tokens)
+  - `GET /api/empleados/?puede_operar_caja=<sucursal_id>` (empleados activos
+    habilitados para abrir caja en la sucursal: AD/GE en cualquiera, CA
+    asignado), `?sucursal=<id>` (empleados asignados a esa sucursal,
+    respetando el selector global del encabezado)
   - `POST /api/cajas/` y `/api/sucursales-cajas/` (cajas físicas y sus
     asignaciones a sucursales; gestión `AD/GE`)
   - `POST /api/metodos-pago-ventas/` y `/api/metodos-pago-compras/`
 - Permisos: lectura para autenticados; escritura por rol. `is_superuser` y `AD`
-  pueden todo. Caja: abrir/cerrar `AD/GE/CA`, auditar `AD/GE`. El `CA` solo abre
+  pueden todo. **Un empleado suspendido, en baja temporal o inactivo no accede
+  al sistema** (login y API: `backends.py` lo rechaza y
+  `EmpleadoActivoJWTAuthentication` devuelve 401 con la sesión abierta; su
+  pase a no-`AC` invalida sus refresh tokens). Caja: abrir/cerrar `AD/GE/CA`, auditar `AD/GE`. El `CA` solo abre
   secciones en sucursales donde su empleado tiene `SucursalXEmpleado` activa;
-  `AD/GE` pueden en cualquiera. CRUD de cajas físicas y asignaciones solo
+  `AD/GE` pueden en cualquiera y además abrir a **nombre de otro** habilitado
+  (queda en el historial quién abrió y a nombre de quién). CRUD de cajas físicas y asignaciones solo
   `AD/GE`. Ventas: crear `AD/GE/CA/VE`; cobrar, confirmar y anular `AD/GE/CA`
   (el vendedor no). Compras: `AD/GE/ED`. Pagos: `AD/GE/CA/ED`. Sin rol = solo
   lectura.
@@ -234,7 +277,17 @@ de stock).
 - Tokens en `localStorage` (`corralon.acceso` / `corralon.refresco`). Ante un
   `401`, `pedir()` renueva y reintenta una vez; si falla, cierra sesión.
 - Módulos listos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores,
-  Caja. Pendientes: Empleados, Perfil y Actividad (`EnDesarrollo`).
+  Caja, Empleados. Pendientes: Perfil y Actividad (`EnDesarrollo`).
+- Empleados (`/empleados`, AD/GE): listado (legajo, nombre, DNI, teléfono,
+  roles, sucursales, acceso, estado), alta con acceso opcional (usuario +
+  contraseña con letras+números+símbolo, sin mínimo fijo de longitud), edición
+  de datos/roles/sucursales con sync (activos ↔ `AC`/`IN`), creación de acceso
+  desde la edición para empleados sin usuario, contraseña solo AD con
+  **doble verificación** (Swal de confirmación y luego un segundo formulario
+  pidiendo tu contraseña de administrador), cierra sesiones, filtro de
+  estado, CSV. En alta y edición los errores se validan **en tiempo real**
+  campo a campo (mismo criterio que el resto de módulos vía
+  `utils/validaciones.js`).
 - Convenciones UI: búsqueda en vivo con debounce, filtros persistidos en la URL,
   exportación CSV, presupuesto imprimible, cobro multi-método, recepción de
   compras con depósito, ajustes y transferencias de stock, costos por proveedor.
@@ -275,7 +328,7 @@ de stock).
   `/ventas?alerta=por_vencer|vencida`,
   `/productos?tab=stock&alerta=negativo|minimo&producto=<id>` y
   `/compras?por_recibir=1`. Inventario resalta y hace scroll al producto.
-  Cajas abiertas ancla al panel `#cajas-abiertas` hasta que exista el módulo.
+  Cajas abiertas ancla al panel `#cajas-abiertas`.
 - Facturación muestra mantenimiento hasta habilitar ARCA.
 
 ## 7. Facturación (ARCA) — bloqueada
@@ -294,7 +347,7 @@ cd backend
 ../venv/Scripts/python.exe manage.py check                 # 0 issues
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 159 tests
+../venv/Scripts/python.exe manage.py test app              # 218 tests
 ../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 

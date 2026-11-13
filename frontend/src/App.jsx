@@ -6,8 +6,9 @@ import CambiarContrasena from './pages/CambiarContrasena.jsx'
 import Caja from './pages/Caja.jsx'
 import Clientes from './pages/Clientes.jsx'
 import Compras from './pages/Compras.jsx'
-import EnDesarrollo from './pages/EnDesarrollo.jsx'
 import Facturacion from './pages/Facturacion.jsx'
+import Empleados from './pages/Empleados.jsx'
+import EnDesarrollo from './pages/EnDesarrollo.jsx'
 import Inicio from './pages/Inicio.jsx'
 import Inventario from './pages/Inventario.jsx'
 import Login from './pages/Login.jsx'
@@ -30,6 +31,9 @@ function contenidoModulo(modulo) {
   }
   if (modulo.path === '/caja') {
     return <Caja />
+  }
+  if (modulo.path === '/empleados') {
+    return <Empleados />
   }
   if (modulo.path === '/clientes') {
     return <Clientes />

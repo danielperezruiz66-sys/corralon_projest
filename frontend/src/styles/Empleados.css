@@ -1,0 +1,94 @@
+/* Empleados */
+
+.empleados-roles {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.empleados-rol {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background-color: #e0e7ff;
+  color: var(--color-navy);
+  padding: 0.12rem 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.empleados-sucursales {
+  max-width: 16rem;
+  font-size: 0.8rem;
+}
+
+.empleados-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0.18rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.empleados-badge.ac {
+  background-color: #d1fae5;
+  color: #047857;
+}
+
+.empleados-badge.bt {
+  background-color: #fef3c7;
+  color: var(--color-aviso);
+}
+
+.empleados-badge.su {
+  background-color: #ffedd5;
+  color: #c2410c;
+}
+
+.empleados-badge.in {
+  background-color: #fee2e2;
+  color: var(--color-peligro);
+}
+
+.empleados-seccion-titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.12);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(15, 42, 48, 0.65);
+}
+
+.empleados-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.35rem 1rem;
+}
+
+.empleados-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.empleados-check input[type='checkbox'] {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--color-sidebar, #4a9da8);
+}
+
+.empleados-nota {
+  margin: 0;
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.75rem;
+}

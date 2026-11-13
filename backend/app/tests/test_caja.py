@@ -1,8 +1,13 @@
+from datetime import timedelta
 from decimal import Decimal
+
+from django.db import IntegrityError
+from django.utils import timezone
 
 from app.models import (
     Caja,
     DetalleCierreCaja,
+    HistoricalSeccionCaja,
     SeccionCaja,
     Sucursal,
     SucursalXCaja,
@@ -36,6 +41,7 @@ class CajaApiTests(BaseCorralonTestCase):
                 'caja': caja.id,
                 'sucursal': self.sucursal.id,
                 'monto_inicial': '500.00',
+                'observaciones_apertura': 'Carga inicial de prueba',
             },
             format='json',
         )
@@ -43,6 +49,12 @@ class CajaApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.status_code, 201)
         self.assertEqual(respuesta.data['empleado'], self.emp_cajero.id)
         self.assertEqual(respuesta.data['estado'], 'AB')
+        self.assertEqual(respuesta.data['abierta_por'], 'cajero')
+        self.assertIsNone(respuesta.data['motivo_apertura'])
+        self.assertEqual(
+            respuesta.data['observaciones_apertura'],
+            'Carga inicial de prueba',
+        )
 
     def test_no_se_puede_abrir_dos_veces_la_misma_caja_en_la_sucursal(self):
         respuesta = self.client.post(
@@ -58,27 +70,316 @@ class CajaApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('ya tiene una seccion abierta', respuesta.data['detail'])
 
-    def test_solo_admin_abre_a_nombre_de_otro_empleado(self):
+    def test_solo_gestion_abre_a_nombre_de_otro_empleado(self):
         caja = self._caja_asignada()
         datos = {
             'caja': caja.id,
             'sucursal': self.sucursal.id,
             'monto_inicial': '500.00',
-            'empleado': self.emp_vendedor.id,
+            'empleado': self.emp_cajero.id,
+            'observaciones_apertura': 'Carga inicial de prueba',
         }
 
         como_cajero = self.client.post('/api/secciones-caja/', datos, format='json')
         self.assertEqual(como_cajero.status_code, 400)
         self.assertIn('empleado', como_cajero.data)
 
+        self.autenticar(self.user_gerente)
+        como_gerente = self.client.post('/api/secciones-caja/', datos, format='json')
+        self.assertEqual(como_gerente.status_code, 201)
+        self.assertEqual(como_gerente.data['empleado'], self.emp_cajero.id)
+        self.assertEqual(como_gerente.data['abierta_por'], 'gerente')
+        self.assertEqual(
+            como_gerente.data['motivo_apertura'],
+            f'Apertura a nombre de {self.emp_cajero}',
+        )
+        entrada = HistoricalSeccionCaja.objects.get(
+            id=como_gerente.data['id'],
+            history_type='+',
+        )
+        self.assertEqual(entrada.history_user.username, 'gerente')
+        self.assertEqual(
+            entrada.history_change_reason,
+            f'Apertura a nombre de {self.emp_cajero}',
+        )
+
+    def test_admin_abre_a_nombre_de_otro_y_queda_en_historial(self):
+        caja = self._caja_asignada()
+
         self.autenticar(self.admin)
-        como_admin = self.client.post('/api/secciones-caja/', datos, format='json')
-        self.assertEqual(como_admin.status_code, 201)
-        self.assertEqual(como_admin.data['empleado'], self.emp_vendedor.id)
+        respuesta = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '500.00',
+                'empleado': self.emp_vendedor.id,
+            },
+            format='json',
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('permisos', respuesta.data['detail'])
+
+        respuesta = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '500.00',
+                'empleado': self.emp_cajero.id,
+                'observaciones_apertura': 'Carga inicial de prueba',
+            },
+            format='json',
+        )
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertEqual(respuesta.data['abierta_por'], 'admin')
+
+    def test_superuser_sin_empleado_debe_elegir_empleado(self):
+        caja = self._caja_asignada()
+        self.autenticar(self.admin)
+
+        sin_empleado = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '100.00',
+            },
+            format='json',
+        )
+        self.assertEqual(sin_empleado.status_code, 400)
+        self.assertIn('no tiene un empleado asociado', sin_empleado.data['detail'])
+
+        con_empleado = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '100.00',
+                'empleado': self.emp_gerente.id,
+                'observaciones_apertura': 'Carga inicial de prueba',
+            },
+            format='json',
+        )
+        self.assertEqual(con_empleado.status_code, 201)
+        self.assertEqual(con_empleado.data['empleado'], self.emp_gerente.id)
+
+    def test_apertura_a_nombre_de_empleado_no_asignado_rechaza(self):
+        caja = self._caja_asignada()
+        SucursalXEmpleado.objects.filter(
+            empleado=self.emp_cajero,
+            sucursal=self.sucursal,
+        ).update(estado=False)
+
+        self.autenticar(self.admin)
+        respuesta = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '100.00',
+                'empleado': self.emp_cajero.id,
+            },
+            format='json',
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('no esta asignado', respuesta.data['detail'])
+
+    def test_empleado_con_seccion_abierta_no_abre_otra(self):
+        # `self.emp_cajero2` ya tiene la seccion abierta del fixture.
+        self.autenticar(self.user_cajero2)
+        respuesta = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': self.caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '0.00',
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('ya tiene una seccion de caja abierta', respuesta.data['detail'])
+
+    def test_apertura_a_nombre_de_empleado_con_seccion_abierta_rechaza(self):
+        caja = self._caja_asignada()
+        self.autenticar(self.admin)
+        respuesta = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '100.00',
+                'empleado': self.emp_cajero2.id,
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('ya tiene una seccion de caja abierta', respuesta.data['detail'])
+
+    def test_filtro_puede_operar_caja_excluye_a_quien_tiene_seccion_abierta(self):
+        respuesta = self.client.get(
+            f'/api/empleados/?puede_operar_caja={self.sucursal.id}'
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        ids = {fila['id'] for fila in respuesta.data['results']}
+        self.assertNotIn(self.emp_cajero2.id, ids)
+        self.assertIn(self.emp_cajero.id, ids)
+
+    def test_una_seccion_abierta_por_empleado_a_nivel_base_de_datos(self):
+        with self.assertRaises(IntegrityError):
+            SeccionCaja.objects.create(
+                sucursal_caja=self.sucursal_caja,
+                empleado=self.emp_cajero2,
+                fecha_hora_apertura=timezone.now(),
+                monto_inicial=Decimal('10.00'),
+            )
+
+    def test_filtro_puede_operar_caja_expone_solo_elegibles(self):
+        respuesta = self.client.get(
+            f'/api/empleados/?puede_operar_caja={self.sucursal.id}'
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        ids = {fila['id'] for fila in respuesta.data['results']}
+        self.assertIn(self.emp_cajero.id, ids)
+        self.assertIn(self.emp_gerente.id, ids)
+        self.assertNotIn(self.emp_vendedor.id, ids)
+        self.assertNotIn(self.emp_deposito.id, ids)
+        self.assertNotIn(self.emp_sin_rol.id, ids)
+
+    def test_filtro_puede_operar_caja_cajero_no_asignado_quedo_fuera(self):
+        SucursalXEmpleado.objects.filter(
+            empleado=self.emp_cajero,
+            sucursal=self.sucursal,
+        ).update(estado=False)
+
+        respuesta = self.client.get(
+            f'/api/empleados/?puede_operar_caja={self.sucursal.id}'
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        ids = {fila['id'] for fila in respuesta.data['results']}
+        self.assertNotIn(self.emp_cajero.id, ids)
+        self.assertIn(self.emp_gerente.id, ids)
+
+    def test_filtro_puede_operar_caja_invalido_devuelve_400(self):
+        respuesta = self.client.get('/api/empleados/?puede_operar_caja=abc')
+
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_sugerencia_y_apertura_con_monto_modificado(self):
+        caja = self._caja_asignada()
+
+        # En la primera apertura de una caja nueva, sumar dinero exige motivo.
+        caja_nueva = self._caja_asignada(nombre='Caja 3')
+        sin_motivo = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja_nueva.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '150.00',
+            },
+            format='json',
+        )
+        self.assertEqual(sin_motivo.status_code, 400)
+        self.assertIn('motivo', sin_motivo.data['detail'])
+
+        # Primera apertura de la caja: sin historial, el monto por defecto
+        # (0) abre sin motivo.
+        primera = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '0.00',
+            },
+            format='json',
+        )
+        self.assertEqual(primera.status_code, 201)
+
+        # Sugerencia antes de cerrar: no hay historial.
+        sugerencia = self.client.get(
+            f'/api/secciones-caja/sugerencia/?caja={caja.id}&sucursal={self.sucursal.id}'
+        )
+        self.assertEqual(sugerencia.status_code, 200)
+        self.assertEqual(sugerencia.data['monto_sugerido'], '0.00')
+        self.assertFalse(sugerencia.data['encontrado'])
+
+        # Se cierra la caja con efectivo contado y se consulta la sugerencia.
+        self.client.post(
+            f'/api/secciones-caja/{primera.data["id"]}/cerrar/',
+            {'montos_reales': {str(self.efectivo.id): '250.00'}},
+            format='json',
+        )
+
+        sugerencia = self.client.get(
+            f'/api/secciones-caja/sugerencia/?caja={caja.id}&sucursal={self.sucursal.id}'
+        )
+        self.assertEqual(sugerencia.status_code, 200)
+        self.assertEqual(sugerencia.data['monto_sugerido'], '250.00')
+        self.assertTrue(sugerencia.data['encontrado'])
+        self.assertEqual(sugerencia.data['seccion_id'], primera.data['id'])
+
+        # Con el monto sugerido se abre sin motivo.
+        como_sugerido = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '250.00',
+            },
+            format='json',
+        )
+        self.assertEqual(como_sugerido.status_code, 201)
+        self.assertIsNone(como_sugerido.data['observaciones_apertura'])
+
+        # Si difiere de la sugerencia, el motivo es obligatorio.
+        self.client.post(
+            f'/api/secciones-caja/{como_sugerido.data["id"]}/cerrar/',
+            {'montos_reales': {str(self.efectivo.id): '250.00'}},
+            format='json',
+        )
+        sin_motivo = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '200.00',
+            },
+            format='json',
+        )
+        self.assertEqual(sin_motivo.status_code, 400)
+        self.assertIn('motivo', sin_motivo.data['detail'])
+
+        con_motivo = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '200.00',
+                'observaciones_apertura': 'Se retiro cambio para la otra caja',
+            },
+            format='json',
+        )
+        self.assertEqual(con_motivo.status_code, 201)
+        self.assertEqual(
+            con_motivo.data['observaciones_apertura'],
+            'Se retiro cambio para la otra caja',
+        )
+
+    def test_sugerencia_requiere_caja_y_sucursal(self):
+        respuesta = self.client.get('/api/secciones-caja/sugerencia/')
+        respuesta_invalida = self.client.get('/api/secciones-caja/sugerencia/?caja=x&sucursal=1')
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta_invalida.status_code, 400)
 
     def test_misma_caja_se_puede_abrir_en_dos_sucursales_por_api(self):
-        self.autenticar(self.user_gerente)
         sucursal_extra = self._sucursal_extra()
+        user_gerente2, emp_gerente2 = self._crear_usuario('gerente2', '0007', 'GE')
         SucursalXEmpleado.objects.create(
             sucursal=sucursal_extra,
             empleado=self.emp_gerente,
@@ -88,21 +389,39 @@ class CajaApiTests(BaseCorralonTestCase):
         SucursalXCaja.objects.create(sucursal=self.sucursal, caja=caja)
         SucursalXCaja.objects.create(sucursal=sucursal_extra, caja=caja)
 
+        self.autenticar(self.user_gerente)
         primera = self.client.post(
             '/api/secciones-caja/',
             {
                 'caja': caja.id,
                 'sucursal': self.sucursal.id,
                 'monto_inicial': '100.00',
+                'observaciones_apertura': 'Carga inicial de prueba',
             },
             format='json',
         )
+        # El mismo empleado no puede abrir dos secciones a la vez.
+        repetida = self.client.post(
+            '/api/secciones-caja/',
+            {
+                'caja': caja.id,
+                'sucursal': sucursal_extra.id,
+                'monto_inicial': '200.00',
+                'observaciones_apertura': 'Carga inicial de prueba',
+            },
+            format='json',
+        )
+        self.assertEqual(repetida.status_code, 400)
+        self.assertIn('ya tiene una seccion de caja abierta', repetida.data['detail'])
+
+        self.autenticar(user_gerente2)
         segunda = self.client.post(
             '/api/secciones-caja/',
             {
                 'caja': caja.id,
                 'sucursal': sucursal_extra.id,
                 'monto_inicial': '200.00',
+                'observaciones_apertura': 'Carga inicial de prueba',
             },
             format='json',
         )
@@ -262,7 +581,36 @@ class CajaApiTests(BaseCorralonTestCase):
         self.assertEqual(detalle.monto_sistema, Decimal('1000.00'))
         self.assertEqual(detalle.monto_real, Decimal('990.00'))
         self.assertEqual(detalle.diferencia, Decimal('-10.00'))
-        self.assertEqual(respuesta.data['observaciones'], 'Faltante')
+        self.assertEqual(
+            respuesta.data['observaciones'],
+            'Diferencia de arqueo: -$10.00 (faltante).\nObservación: Faltante',
+        )
+
+    def test_cerrar_seccion_con_diferencia_sin_observaciones_lleva_nota_del_sistema(self):
+        respuesta = self.client.post(
+            f'/api/secciones-caja/{self.seccion.id}/cerrar/',
+            {'montos_reales': {str(self.efectivo.id): '990.00'}},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(
+            respuesta.data['observaciones'],
+            'Diferencia de arqueo: -$10.00 (faltante).',
+        )
+
+    def test_cerrar_seccion_con_sobrante_lleva_nota_del_sistema(self):
+        respuesta = self.client.post(
+            f'/api/secciones-caja/{self.seccion.id}/cerrar/',
+            {'montos_reales': {str(self.efectivo.id): '1100.00'}},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(
+            respuesta.data['observaciones'],
+            'Diferencia de arqueo: +$100.00 (sobrante).',
+        )
 
     def test_no_se_puede_cerrar_dos_veces(self):
         self.client.post(
@@ -329,6 +677,7 @@ class CajaServicioTests(BaseCorralonTestCase):
             self.sucursal,
             self.emp_cajero,
             '500.00',
+            observaciones_apertura='Carga inicial de prueba',
         )
 
         self.assertEqual(seccion.sucursal_caja, asignacion)
@@ -450,4 +799,148 @@ class CajaServicioTests(BaseCorralonTestCase):
                 self.sucursal,
                 self.emp_cajero,
                 '-1.00',
+            )
+
+    def test_vendedor_no_tiene_permisos_para_abrir_caja(self):
+        asignacion = self._asignacion()
+
+        with self.assertRaisesMessage(ValueError, 'no tiene permisos'):
+            caja_service.abrir_seccion(
+                asignacion.caja,
+                self.sucursal,
+                self.emp_vendedor,
+                '0.00',
+            )
+
+    def test_empleado_inactivo_no_abre_caja(self):
+        asignacion = self._asignacion()
+        self.emp_cajero.estado = self.emp_cajero.EstadoEmpleado.INACTIVO
+        self.emp_cajero.save(update_fields=['estado'])
+
+        with self.assertRaisesMessage(ValueError, 'no esta activo'):
+            caja_service.abrir_seccion(
+                asignacion.caja,
+                self.sucursal,
+                self.emp_cajero,
+                '0.00',
+            )
+
+    def test_apertura_guarda_motivo_y_usuario_en_el_historial(self):
+        asignacion = self._asignacion()
+
+        seccion = caja_service.abrir_seccion(
+            asignacion.caja,
+            self.sucursal,
+            self.emp_cajero,
+            '0.00',
+            historial_motivo='Apertura a nombre de Test, cajero',
+            historial_usuario=self.user_gerente,
+        )
+
+        entrada = HistoricalSeccionCaja.objects.get(
+            id=seccion.id,
+            history_type='+',
+        )
+        self.assertEqual(
+            entrada.history_change_reason,
+            'Apertura a nombre de Test, cajero',
+        )
+        self.assertEqual(entrada.history_user, self.user_gerente)
+
+    def test_sugerir_apertura_sin_historial_devuelve_cero(self):
+        asignacion = self._asignacion()
+
+        sugerencia = caja_service.sugerir_apertura(
+            asignacion.caja,
+            self.sucursal,
+        )
+
+        self.assertEqual(sugerencia['monto_sugerido'], Decimal('0.00'))
+        self.assertFalse(sugerencia['encontrado'])
+
+    def test_sugerir_apertura_solo_mira_la_misma_sucursal(self):
+        sucursal_extra = self._sucursal_extra()
+        SucursalXCaja.objects.create(sucursal=sucursal_extra, caja=self.caja)
+        extra_asignacion = SucursalXCaja.objects.get(
+            sucursal=sucursal_extra,
+            caja=self.caja,
+        )
+        seccion_extra = SeccionCaja.objects.create(
+            sucursal_caja=extra_asignacion,
+            empleado=self.emp_gerente,
+            fecha_hora_apertura=timezone.now() - timedelta(days=1),
+            fecha_hora_cierre=timezone.now() - timedelta(hours=23),
+            monto_inicial=Decimal('10.00'),
+            monto_final=Decimal('777.00'),
+            estado=SeccionCaja.EstadoSeccion.CERRADA,
+        )
+        DetalleCierreCaja.objects.create(
+            seccion_caja=seccion_extra,
+            metodo_pago=self.efectivo,
+            monto_sistema=Decimal('777.00'),
+            monto_real=Decimal('777.00'),
+        )
+
+        sugerencia_extra = caja_service.sugerir_apertura(
+            self.caja,
+            sucursal_extra,
+        )
+        sugerencia_central = caja_service.sugerir_apertura(
+            self.caja,
+            self.sucursal,
+        )
+
+        self.assertEqual(sugerencia_extra['monto_sugerido'], Decimal('777.00'))
+        self.assertTrue(sugerencia_extra['encontrado'])
+        self.assertEqual(sugerencia_extra['seccion_id'], seccion_extra.id)
+        self.assertEqual(sugerencia_central['monto_sugerido'], Decimal('0.00'))
+        self.assertFalse(sugerencia_central['encontrado'])
+
+    def test_sugerir_apertura_durante_la_misma_sesion_ignora_abiertas(self):
+        # La seccion de setUpTestData sigue abierta: no cuenta como cierre.
+        sugerencia = caja_service.sugerir_apertura(self.caja, self.sucursal)
+
+        self.assertEqual(sugerencia['monto_sugerido'], Decimal('0.00'))
+        self.assertFalse(sugerencia['encontrado'])
+
+    def test_abrir_seccion_difiere_de_la_sugerencia_exige_motivo(self):
+        asignacion = self._asignacion()
+        seccion = caja_service.abrir_seccion(
+            asignacion.caja,
+            self.sucursal,
+            self.emp_cajero,
+            '0.00',
+        )
+        caja_service.cerrar_seccion(
+            seccion,
+            {str(self.efectivo.id): '400.00'},
+        )
+
+        with self.assertRaisesMessage(ValueError, 'motivo'):
+            caja_service.abrir_seccion(
+                asignacion.caja,
+                self.sucursal,
+                self.emp_cajero,
+                '300.00',
+            )
+
+        # Con el monto sugerido no exige motivo.
+        seccion = caja_service.abrir_seccion(
+            asignacion.caja,
+            self.sucursal,
+            self.emp_cajero,
+            '400.00',
+        )
+        self.assertEqual(seccion.monto_inicial, Decimal('400.00'))
+
+    def test_empleado_con_seccion_abierta_no_abre_otra_seccion(self):
+        # `self.emp_cajero2` ya tiene la seccion abierta del fixture.
+        asignacion = self._asignacion()
+
+        with self.assertRaisesMessage(ValueError, 'ya tiene una seccion'):
+            caja_service.abrir_seccion(
+                asignacion.caja,
+                self.sucursal,
+                self.emp_cajero2,
+                '0.00',
             )

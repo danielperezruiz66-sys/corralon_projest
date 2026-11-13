@@ -190,6 +190,20 @@ export function validarNombreConsumidor(valor) {
   return validarNombre(texto, 'El nombre del consumidor final')
 }
 
+export function validarFuerzaPassword(password) {
+  if (!password) {
+    return 'Ingresá la contraseña.'
+  }
+  if (
+    !/[A-Za-z]/.test(password) ||
+    !/\d/.test(password) ||
+    !/[^A-Za-z0-9]/.test(password)
+  ) {
+    return 'Debe tener letras, números y un símbolo.'
+  }
+  return ''
+}
+
 export function unidadPermiteDecimales(nombreUnidad) {
   const texto = String(nombreUnidad ?? '')
     .trim()

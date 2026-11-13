@@ -97,6 +97,9 @@ class BaseCorralonTestCase(APITestCase):
             'gerente', '0001', 'GE'
         )
         cls.user_cajero, cls.emp_cajero = cls._crear_usuario('cajero', '0002', 'CA')
+        cls.user_cajero2, cls.emp_cajero2 = cls._crear_usuario(
+            'cajero2', '0006', 'CA'
+        )
         cls.user_vendedor, cls.emp_vendedor = cls._crear_usuario(
             'vendedor', '0003', 'VE'
         )
@@ -160,9 +163,11 @@ class BaseCorralonTestCase(APITestCase):
         )
         cls.tarjeta = MetodoPago.objects.create(metodo_pago='Tarjeta')
 
+        # La seccion abierta del fixture es de `emp_cajero2`, para que `emp_cajero`
+        # siga siendo elegible como empleado que abre secciones en los tests.
         cls.seccion = SeccionCaja.objects.create(
             sucursal_caja=cls.sucursal_caja,
-            empleado=cls.emp_cajero,
+            empleado=cls.emp_cajero2,
             fecha_hora_apertura=timezone.now(),
             monto_inicial=Decimal('1000.00'),
         )
@@ -172,6 +177,7 @@ class BaseCorralonTestCase(APITestCase):
         user = Usuario.objects.create_user(
             username=username,
             password=cls.PASSWORD,
+            email=f'{username}@corralon.com',
         )
         empleado = Empleado.objects.create(
             usuario=user,

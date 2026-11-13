@@ -172,7 +172,7 @@ def cancelar_venta(venta, motivo=''):
         venta,
         referencia=f'cancelacion:venta:{venta.id}',
     )
-    venta._history_change_reason = motivo
+    venta._change_reason = motivo
     venta.estado = Venta.EstadoVenta.ANULADA
     venta.save(update_fields=['estado'])
     return venta

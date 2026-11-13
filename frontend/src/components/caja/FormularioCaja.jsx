@@ -50,6 +50,13 @@ export default function FormularioCaja({ caja = null, onCerrar, onGuardado }) {
       )
       onGuardado?.(guardada, esEdicion)
     } catch (e) {
+      if (e.campos) {
+        setErrores(e.campos)
+        requestAnimationFrame(() => {
+          document.querySelector('.input-error')?.focus()
+        })
+        return
+      }
       Swal.fire({
         icon: 'error',
         title: 'No se pudo guardar la caja',

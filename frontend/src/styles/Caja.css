@@ -161,23 +161,59 @@ CAJA - APERTURA, CIERRE E HISTORIAL
   border-collapse: collapse;
   width: 100%;
   font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .caja-cierre-tabla th,
 .caja-cierre-tabla td {
-  padding: 0.45rem 0.5rem;
+  padding: 0.55rem 0.75rem;
   border-bottom: 1px solid rgba(15, 42, 48, 0.1);
   text-align: left;
+  white-space: nowrap;
+}
+
+.caja-cierre-tabla th:nth-child(1),
+.caja-cierre-tabla td:nth-child(1) {
+  width: 100%;
+  white-space: normal;
 }
 
 .caja-cierre-tabla th:not(:first-child),
 .caja-cierre-tabla td:not(:first-child) {
   text-align: right;
+  width: 8.5rem;
 }
 
 .caja-cierre-tabla tfoot td {
   border-bottom: none;
   font-weight: 700;
+}
+
+.caja-cierre-input {
+  width: 8rem;
+  border: 1px solid rgba(15, 42, 48, 0.15);
+  border-radius: 0.65rem;
+  padding: 0.45rem 0.6rem;
+  box-sizing: border-box;
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--color-oscuro);
+  font-variant-numeric: tabular-nums;
+}
+
+.caja-cierre-input:focus-visible {
+  outline: 2px solid var(--color-sidebar);
+}
+
+.caja-aviso-diferencia {
+  margin: 0.5rem 0 1rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #f5d9a8;
+  border-left: 4px solid #d97706;
+  border-radius: 0.6rem;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.8rem;
 }
 
 .caja-chip-efectivo {
