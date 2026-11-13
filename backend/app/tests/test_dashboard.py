@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.utils import timezone
 
-from app.models import Stock, Sucursal, Venta
+from app.models import SeccionCaja, Stock, Sucursal, SucursalXCaja, Venta
 
 from .base import BaseCorralonTestCase
 
@@ -59,11 +59,12 @@ class DashboardApiTests(BaseCorralonTestCase):
             estado_entrega='EC',
             fecha_estimada_llegada=fecha_llegada,
         )
-        self.autenticar()
+        self.autenticar(self.user_deposito)
 
         respuesta = self.client.get('/api/dashboard/')
 
         self.assertEqual(respuesta.status_code, 200)
+        self.assertIs(respuesta.data['bloques']['compras'], True)
         self.assertEqual(respuesta.data['compras']['pendientes_recepcion'], 1)
         self.assertEqual(len(respuesta.data['compras_por_recibir']), 1)
         self.assertEqual(
@@ -124,6 +125,7 @@ class DashboardApiTests(BaseCorralonTestCase):
             ubicacion=self.ubicacion,
             nombre='Sucursal Norte',
         )
+        self.autenticar(self.admin)
 
         respuesta = self.client.get('/api/dashboard/', {'sucursal': self.sucursal.id})
         self.assertEqual(respuesta.status_code, 200)
@@ -133,6 +135,141 @@ class DashboardApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta.data['caja']['abiertas'], 0)
         self.assertEqual(respuesta.data['ventas']['hoy']['cantidad'], 0)
+
+    def test_dashboard_bloques_por_rol(self):
+        casos = [
+            (
+                self.admin,
+                'gestion',
+                {
+                    'ventas': True,
+                    'compras': True,
+                    'caja': True,
+                    'equipo': True,
+                    'stock': True,
+                    'actividad': True,
+                },
+            ),
+            (
+                self.user_gerente,
+                'gestion',
+                {
+                    'ventas': True,
+                    'compras': True,
+                    'caja': True,
+                    'equipo': True,
+                    'stock': True,
+                    'actividad': True,
+                },
+            ),
+            (
+                self.user_cajero,
+                'caja',
+                {
+                    'ventas': True,
+                    'compras': False,
+                    'caja': True,
+                    'equipo': False,
+                    'stock': True,
+                    'actividad': False,
+                },
+            ),
+            (
+                self.user_vendedor,
+                'ventas',
+                {
+                    'ventas': True,
+                    'compras': False,
+                    'caja': False,
+                    'equipo': False,
+                    'stock': True,
+                    'actividad': False,
+                },
+            ),
+            (
+                self.user_deposito,
+                'deposito',
+                {
+                    'ventas': False,
+                    'compras': True,
+                    'caja': False,
+                    'equipo': False,
+                    'stock': True,
+                    'actividad': False,
+                },
+            ),
+            (
+                self.user_sin_rol,
+                'lectura',
+                {
+                    'ventas': False,
+                    'compras': False,
+                    'caja': False,
+                    'equipo': False,
+                    'stock': False,
+                    'actividad': False,
+                },
+            ),
+        ]
+
+        for user, vista, esperado in casos:
+            with self.subTest(vista=vista):
+                self.autenticar(user)
+                respuesta = self.client.get('/api/dashboard/')
+
+                self.assertEqual(respuesta.status_code, 200)
+                self.assertEqual(respuesta.data['vista'], vista)
+                for bloque, valor in esperado.items():
+                    self.assertIs(respuesta.data['bloques'][bloque], valor)
+
+    def test_dashboard_rechaza_sucursal_ajena(self):
+        otra = Sucursal.objects.create(
+            empresa=self.empresa,
+            ubicacion=self.ubicacion,
+            nombre='Sucursal Norte',
+        )
+        self.autenticar(self.user_cajero)
+
+        respuesta = self.client.get('/api/dashboard/', {'sucursal': otra.id})
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_dashboard_sin_sucursal_limita_a_las_asignadas(self):
+        otra = Sucursal.objects.create(
+            empresa=self.empresa,
+            ubicacion=self.ubicacion,
+            nombre='Sucursal Norte',
+        )
+        otra_caja = SucursalXCaja.objects.create(
+            sucursal=otra,
+            caja=self.caja,
+        )
+        SeccionCaja.objects.create(
+            sucursal_caja=otra_caja,
+            empleado=self.emp_cajero,
+            fecha_hora_apertura=timezone.now(),
+            monto_inicial=Decimal('500.00'),
+        )
+
+        self.autenticar(self.user_cajero)
+        respuesta = self.client.get('/api/dashboard/')
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['caja']['abiertas'], 1)
+        self.assertEqual(
+            {item['id'] for item in respuesta.data['filtros']['sucursales']},
+            {self.sucursal.id},
+        )
+
+        self.autenticar(self.admin)
+        respuesta = self.client.get('/api/dashboard/')
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['caja']['abiertas'], 2)
+        self.assertEqual(
+            {item['id'] for item in respuesta.data['filtros']['sucursales']},
+            {self.sucursal.id, otra.id},
+        )
 
     def test_dashboard_rechaza_sucursal_inexistente(self):
         respuesta = self.client.get('/api/dashboard/', {'sucursal': 999999})

@@ -31,6 +31,19 @@ import {
 import '../styles/Inicio.css'
 
 const DATOS_VACIOS = {
+  vista: 'lectura',
+  codigos: [],
+  bloques: {
+    ventas: false,
+    compras: false,
+    stock: false,
+    caja: false,
+    equipo: false,
+    actividad: false,
+    ventas_por_sucursal: false,
+    formas_pago: false,
+    diferencias_caja: false,
+  },
   filtros: { periodo: 'hoy', sucursal: null, sucursales: [] },
   ventas: {
     hoy: { cantidad: 0, monto: '0', ticket_promedio: '0' },
@@ -269,6 +282,7 @@ export default function Inicio() {
   }
 
   const { ventas, compras, catalogo, stock, caja, equipo, alertas } = datos
+  const bloques = datos.bloques ?? DATOS_VACIOS.bloques
   const maximo = Math.max(
     ...datos.ventas_por_dia.map((dia) => Number(dia.monto) || 0),
     1,
@@ -290,7 +304,7 @@ export default function Inicio() {
     : 'Revisar ventas pendientes'
 
   const alertasActivas = [
-    alertas.ventas_por_vencer > 0 && {
+    bloques.ventas && alertas.ventas_por_vencer > 0 && {
       id: 'vencer',
       tono: 'peligro',
       icono: IconClock,
@@ -300,17 +314,19 @@ export default function Inicio() {
       detalle: detalleVencimiento,
       to: '/ventas?alerta=por_vencer',
     },
-    alertas.ventas_vencidas > 0 && {
+    bloques.ventas && alertas.ventas_vencidas > 0 && {
       id: 'vencidas',
       tono: 'peligro',
       icono: IconClock,
       titulo: `${alertas.ventas_vencidas} venta${
         alertas.ventas_vencidas === 1 ? '' : 's'
-      } vencida${alertas.ventas_vencidas === 1 ? '' : 's'} sin barrido`,
-      detalle: 'El barrido automático las anula en la próxima ejecución',
+      } vencida${
+        alertas.ventas_vencidas === 1 ? '' : 's'
+      } pendiente${alertas.ventas_vencidas === 1 ? '' : 's'} de anular`,
+      detalle: 'La anulación es manual desde Ventas',
       to: '/ventas?alerta=vencida',
     },
-    alertas.stock_negativo > 0 && {
+    bloques.stock && alertas.stock_negativo > 0 && {
       id: 'negativo',
       tono: 'peligro',
       icono: IconAlertTriangle,
@@ -320,7 +336,7 @@ export default function Inicio() {
       detalle: 'Revisar reposición urgente',
       to: '/productos?tab=stock&alerta=negativo',
     },
-    alertas.stock_bajo > 0 && {
+    bloques.stock && alertas.stock_bajo > 0 && {
       id: 'bajo',
       tono: 'aviso',
       icono: IconPackage,
@@ -330,7 +346,7 @@ export default function Inicio() {
       detalle: 'Programar compra',
       to: '/productos?tab=stock&alerta=minimo',
     },
-    alertas.compras_por_recibir > 0 && {
+    bloques.compras && alertas.compras_por_recibir > 0 && {
       id: 'compras',
       tono: 'aviso',
       icono: IconTruckDelivery,
@@ -340,7 +356,7 @@ export default function Inicio() {
       detalle: 'Pendientes de recepción',
       to: '/compras?por_recibir=1',
     },
-    alertas.cajas_abiertas > 0 && {
+    bloques.caja && alertas.cajas_abiertas > 0 && {
       id: 'cajas',
       tono: 'info',
       icono: IconCash,
@@ -362,21 +378,37 @@ export default function Inicio() {
       <div className="dashboard">
         <section className="dashboard-controles">
           <div className="dashboard-acciones">
-            <Link
-              to="/ventas?nueva=1"
-              className="boton-accion boton-accion-primario"
-            >
-              <IconPlus size={18} />
-              Nueva venta
-            </Link>
-            <Link to="/clientes?nuevo=1" className="boton-accion">
-              <IconUserPlus size={18} />
-              Registrar cliente
-            </Link>
-            <Link to="/ventas?presupuesto=1" className="boton-accion">
-              <IconFileText size={18} />
-              Nuevo presupuesto
-            </Link>
+            {bloques.ventas && (
+              <>
+                <Link
+                  to="/ventas?nueva=1"
+                  className="boton-accion boton-accion-primario"
+                >
+                  <IconPlus size={18} />
+                  Nueva venta
+                </Link>
+                <Link to="/clientes?nuevo=1" className="boton-accion">
+                  <IconUserPlus size={18} />
+                  Registrar cliente
+                </Link>
+                <Link to="/ventas?presupuesto=1" className="boton-accion">
+                  <IconFileText size={18} />
+                  Nuevo presupuesto
+                </Link>
+              </>
+            )}
+            {bloques.compras && (
+              <>
+                <Link to="/compras?nueva=1" className="boton-accion">
+                  <IconPlus size={18} />
+                  Nueva compra
+                </Link>
+                <Link to="/compras?por_recibir=1" className="boton-accion">
+                  <IconTruckDelivery size={18} />
+                  Recibir mercadería
+                </Link>
+              </>
+            )}
           </div>
 
           <span className="dashboard-actualizado">
@@ -426,7 +458,7 @@ export default function Inicio() {
           </section>
         )}
 
-        {datos.ventas_por_vencer.length > 0 && (
+        {bloques.ventas && datos.ventas_por_vencer.length > 0 && (
           <section className="panel panel-vencimientos">
             <div className="panel-cabecera">
               <h2 className="panel-titulo">
@@ -474,90 +506,107 @@ export default function Inicio() {
           </section>
         )}
 
-        <section className="dashboard-kpis">
-          <TarjetaKpi
-            icono={IconCurrencyDollar}
-            etiqueta="Ventas de hoy"
-            valor={formatearMoneda(ventas.hoy.monto)}
-            detalle={
-              <span>
-                {ventas.hoy.cantidad} venta
-                {ventas.hoy.cantidad === 1 ? '' : 's'} ·{' '}
-                {formatearMoneda(ventas.hoy.ticket_promedio)} ticket
-              </span>
-            }
-          />
-          <TarjetaKpi
-            icono={IconChartBar}
-            etiqueta="Ventas de la semana"
-            valor={formatearMoneda(ventas.semana.monto)}
-            detalle={
+        {(bloques.ventas || bloques.caja || bloques.compras) && (
+          <section className="dashboard-kpis">
+            {bloques.ventas && (
               <>
-                <span>
-                  {ventas.semana.cantidad} venta
-                  {ventas.semana.cantidad === 1 ? '' : 's'} ·{' '}
-                  {formatearMoneda(ventas.semana.ticket_promedio)} ticket
-                </span>
-                <Comparacion
-                  valor={ventas.semana.comparacion.variacion_porcentaje}
-                  etiqueta="vs. semana anterior"
+                <TarjetaKpi
+                  icono={IconCurrencyDollar}
+                  etiqueta="Ventas de hoy"
+                  valor={formatearMoneda(ventas.hoy.monto)}
+                  detalle={
+                    <span>
+                      {ventas.hoy.cantidad} venta
+                      {ventas.hoy.cantidad === 1 ? '' : 's'} ·{' '}
+                      {formatearMoneda(ventas.hoy.ticket_promedio)} ticket
+                    </span>
+                  }
+                />
+                <TarjetaKpi
+                  icono={IconChartBar}
+                  etiqueta="Ventas de la semana"
+                  valor={formatearMoneda(ventas.semana.monto)}
+                  detalle={
+                    <>
+                      <span>
+                        {ventas.semana.cantidad} venta
+                        {ventas.semana.cantidad === 1 ? '' : 's'} ·{' '}
+                        {formatearMoneda(ventas.semana.ticket_promedio)} ticket
+                      </span>
+                      <Comparacion
+                        valor={ventas.semana.comparacion.variacion_porcentaje}
+                        etiqueta="vs. semana anterior"
+                      />
+                    </>
+                  }
+                />
+                <TarjetaKpi
+                  icono={IconClock}
+                  etiqueta="Pendientes de confirmar"
+                  valor={formatearNumero(ventas.pendientes.cantidad)}
+                  detalle={
+                    <>
+                      <span>
+                        {formatearMoneda(ventas.pendientes.monto)} en juego
+                      </span>
+                      {ventas.pendientes.por_vencer > 0 && (
+                        <span className="kpi-alerta-texto">
+                          {ventas.pendientes.por_vencer} por vencer
+                          {ventas.pendientes.minutos_restantes !== null
+                            ? ` · ${ventas.pendientes.minutos_restantes} min`
+                            : ''}
+                        </span>
+                      )}
+                      {ventas.pendientes.vencidas > 0 && (
+                        <span className="kpi-alerta-texto">
+                          {ventas.pendientes.vencidas} vencida
+                          {ventas.pendientes.vencidas === 1 ? '' : 's'}{' '}
+                          pendiente
+                          {ventas.pendientes.vencidas === 1 ? '' : 's'} de
+                          anular
+                        </span>
+                      )}
+                    </>
+                  }
+                  tono={ventas.pendientes.cantidad > 0 ? 'kpi-aviso' : ''}
                 />
               </>
-            }
-          />
-          <TarjetaKpi
-            icono={IconClock}
-            etiqueta="Pendientes de confirmar"
-            valor={formatearNumero(ventas.pendientes.cantidad)}
-            detalle={
-              <>
-                <span>{formatearMoneda(ventas.pendientes.monto)} en juego</span>
-                {ventas.pendientes.por_vencer > 0 && (
-                  <span className="kpi-alerta-texto">
-                    {ventas.pendientes.por_vencer} por vencer
-                    {ventas.pendientes.minutos_restantes !== null
-                      ? ` · ${ventas.pendientes.minutos_restantes} min`
-                      : ''}
+            )}
+            {bloques.caja && (
+              <TarjetaKpi
+                icono={IconCash}
+                etiqueta="Cajas abiertas"
+                valor={formatearNumero(caja.abiertas)}
+                detalle={
+                  <span>
+                    {caja.abiertas > 0
+                      ? `${formatearMoneda(montoInicialCajas)} inicial`
+                      : 'Sin secciones abiertas'}
                   </span>
-                )}
-                {ventas.pendientes.vencidas > 0 && (
-                  <span className="kpi-alerta-texto">
-                    {ventas.pendientes.vencidas} vencida
-                    {ventas.pendientes.vencidas === 1 ? '' : 's'} sin barrido
+                }
+                tono={caja.abiertas === 0 ? 'kpi-neutro' : ''}
+              />
+            )}
+            {bloques.compras && (
+              <TarjetaKpi
+                icono={IconTruckDelivery}
+                etiqueta="Compras por recibir"
+                valor={formatearNumero(compras.pendientes_recepcion)}
+                detalle={
+                  <span>
+                    {formatearMoneda(compras.mes.monto)} comprado este mes
                   </span>
-                )}
-              </>
-            }
-            tono={ventas.pendientes.cantidad > 0 ? 'kpi-aviso' : ''}
-          />
-          <TarjetaKpi
-            icono={IconCash}
-            etiqueta="Cajas abiertas"
-            valor={formatearNumero(caja.abiertas)}
-            detalle={
-              <span>
-                {caja.abiertas > 0
-                  ? `${formatearMoneda(montoInicialCajas)} inicial`
-                  : 'Sin secciones abiertas'}
-              </span>
-            }
-            tono={caja.abiertas === 0 ? 'kpi-neutro' : ''}
-          />
-          <TarjetaKpi
-            icono={IconTruckDelivery}
-            etiqueta="Compras por recibir"
-            valor={formatearNumero(compras.pendientes_recepcion)}
-            detalle={
-              <span>
-                {formatearMoneda(compras.mes.monto)} comprado este mes
-              </span>
-            }
-            tono={compras.pendientes_recepcion > 0 ? 'kpi-aviso' : ''}
-          />
-        </section>
+                }
+                tono={compras.pendientes_recepcion > 0 ? 'kpi-aviso' : ''}
+              />
+            )}
+          </section>
+        )}
 
-        <section className="dashboard-grid">
-          <article className="panel panel-grafico">
+        {(bloques.ventas || bloques.caja) && (
+          <section className="dashboard-grid">
+            {bloques.ventas && (
+              <article className="panel panel-grafico">
             <div className="panel-cabecera">
               <h2 className="panel-titulo">
                 <IconChartBar size={24} />
@@ -599,38 +648,50 @@ export default function Inicio() {
             )}
 
             <div className="dashboard-mini">
-              <div className="mini-dato">
-                <IconPackage size={20} />
-                <span>
-                  <strong>{formatearNumero(catalogo.productos)}</strong>
-                  Productos
-                </span>
-              </div>
-              <div className="mini-dato">
-                <IconAlertTriangle size={20} />
-                <span>
-                  <strong>{formatearNumero(stock.bajo)}</strong>
-                  Stock bajo
-                </span>
-              </div>
-              <div className="mini-dato">
-                <IconTruckDelivery size={20} />
-                <span>
-                  <strong>{formatearNumero(compras.pendientes_recepcion)}</strong>
-                  Compras por recibir
-                </span>
-              </div>
-              <div className="mini-dato">
-                <IconUsers size={20} />
-                <span>
-                  <strong>{formatearNumero(equipo.empleados_activos)}</strong>
-                  Empleados activos
-                </span>
-              </div>
+              {bloques.stock && (
+                <>
+                  <div className="mini-dato">
+                    <IconPackage size={20} />
+                    <span>
+                      <strong>{formatearNumero(catalogo.productos)}</strong>
+                      Productos
+                    </span>
+                  </div>
+                  <div className="mini-dato">
+                    <IconAlertTriangle size={20} />
+                    <span>
+                      <strong>{formatearNumero(stock.bajo)}</strong>
+                      Stock bajo
+                    </span>
+                  </div>
+                </>
+              )}
+              {bloques.compras && (
+                <div className="mini-dato">
+                  <IconTruckDelivery size={20} />
+                  <span>
+                    <strong>
+                      {formatearNumero(compras.pendientes_recepcion)}
+                    </strong>
+                    Compras por recibir
+                  </span>
+                </div>
+              )}
+              {bloques.equipo && (
+                <div className="mini-dato">
+                  <IconUsers size={20} />
+                  <span>
+                    <strong>{formatearNumero(equipo.empleados_activos)}</strong>
+                    Empleados activos
+                  </span>
+                </div>
+              )}
             </div>
-          </article>
+              </article>
+            )}
 
-          <article className="panel" id="cajas-abiertas">
+            {bloques.caja && (
+              <article className="panel" id="cajas-abiertas">
             <div className="panel-cabecera">
               <h2 className="panel-titulo">
                 <IconCash size={24} />
@@ -668,16 +729,20 @@ export default function Inicio() {
                 ))}
               </ul>
             )}
-          </article>
-        </section>
+              </article>
+            )}
+          </section>
+        )}
 
-        <section className="dashboard-grid dashboard-grid-inferior">
-          <article className="panel">
-            <div className="panel-cabecera">
-              <h2 className="panel-titulo">
-                <IconShoppingCart size={24} />
-                Últimas ventas
-              </h2>
+        {(bloques.ventas || bloques.stock) && (
+          <section className="dashboard-grid dashboard-grid-inferior">
+            {bloques.ventas && (
+              <article className="panel">
+                <div className="panel-cabecera">
+                  <h2 className="panel-titulo">
+                    <IconShoppingCart size={24} />
+                    Últimas ventas
+                  </h2>
               <Link to="/ventas" className="panel-enlace">
                 Ver todas
               </Link>
@@ -718,14 +783,16 @@ export default function Inicio() {
                 </table>
               </div>
             )}
-          </article>
+              </article>
+            )}
 
-          <article className="panel">
-            <div className="panel-cabecera">
-              <h2 className="panel-titulo">
-                <IconAlertTriangle size={24} />
-                Stock crítico
-              </h2>
+            {bloques.stock && (
+              <article className="panel">
+                <div className="panel-cabecera">
+                  <h2 className="panel-titulo">
+                    <IconAlertTriangle size={24} />
+                    Stock crítico
+                  </h2>
               <Link
                 to="/productos?tab=stock"
                 className="panel-enlace"
@@ -784,15 +851,18 @@ export default function Inicio() {
                 Inventario.
               </Link>
             )}
-          </article>
-        </section>
+              </article>
+            )}
+          </section>
+        )}
 
-        <article className="panel">
-          <div className="panel-cabecera">
-            <h2 className="panel-titulo">
-              <IconTruckDelivery size={24} />
-              Compras por recibir
-            </h2>
+        {bloques.compras && (
+          <article className="panel">
+            <div className="panel-cabecera">
+              <h2 className="panel-titulo">
+                <IconTruckDelivery size={24} />
+                Compras por recibir
+              </h2>
             <Link
               to="/compras?por_recibir=1"
               className="panel-enlace"
@@ -845,7 +915,8 @@ export default function Inicio() {
               ))}
             </ul>
           )}
-        </article>
+          </article>
+        )}
       </div>
     </>
   )

@@ -212,14 +212,36 @@ def perfil(request):
     )
 
 
+def _sucursales_permitidas(user):
+    """Sucursales que puede consultar el usuario.
+
+    Devuelve `None` cuando el usuario ve todas (superuser o Admin) y un
+    queryset con las asignadas en el resto de los casos. Un usuario sin
+    empleado no tiene sucursales.
+    """
+    if user.is_superuser or ADMIN in codigos_activos(user):
+        return None
+
+    empleado = getattr(user, 'empleado', None)
+    if empleado is None:
+        return Sucursal.objects.none()
+
+    return Sucursal.objects.filter(
+        empleados_asignados__empleado=empleado,
+        empleados_asignados__estado=True,
+    ).distinct()
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard(request):
-    """Resumen agregado para el dashboard de Inicio (vista Admin).
+    """Resumen agregado para el dashboard de Inicio.
 
     Acepta `?periodo=hoy|7d|mes` y `?sucursal=<id>`. Los KPIs y la serie
     respetan ambos filtros; las alertas y paneles operativos son siempre del
-    estado actual.
+    estado actual. El usuario solo puede consultar sus sucursales asignadas
+    (salvo Admin/superuser) y la respuesta incluye `vista`, `codigos` y
+    `bloques` para que el cliente arme el dashboard por rol.
     """
     hoy = timezone.localdate()
     ahora = timezone.now()
@@ -233,10 +255,42 @@ def dashboard(request):
     if sucursal_id in ('', 'null', 'undefined', None):
         sucursal_id = None
 
+    codigos = codigos_activos(request.user)
+    es_admin_total = request.user.is_superuser or ADMIN in codigos
+    gestion = es_admin_total or GERENTE in codigos
+    cajero = CAJERO in codigos
+    vendedor = VENDEDOR in codigos
+    deposito = DEPOSITO in codigos
+
+    if gestion:
+        vista = 'gestion'
+    elif cajero:
+        vista = 'caja'
+    elif vendedor:
+        vista = 'ventas'
+    elif deposito:
+        vista = 'deposito'
+    else:
+        vista = 'lectura'
+
+    bloques = {
+        'ventas': gestion or cajero or vendedor,
+        'compras': gestion or deposito,
+        'stock': bool(codigos),
+        'caja': gestion or cajero,
+        'equipo': gestion,
+        'actividad': gestion,
+        'ventas_por_sucursal': gestion,
+        'formas_pago': gestion or cajero,
+        'diferencias_caja': gestion or cajero,
+    }
+
     ventas = Venta.objects.exclude(estado=Venta.EstadoVenta.ANULADA)
     compras = Compra.objects.exclude(estado=Compra.EstadoCompra.ANULADA)
     stocks = Stock.objects.all()
     secciones = SeccionCaja.objects.all()
+
+    permitidas = _sucursales_permitidas(request.user)
 
     sucursal = None
     if sucursal_id is not None:
@@ -247,10 +301,26 @@ def dashboard(request):
                 {'detail': 'La sucursal indicada no existe.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if (
+            permitidas is not None
+            and not permitidas.filter(pk=sucursal.pk).exists()
+        ):
+            raise PermissionDenied(
+                'No tenés acceso a la sucursal indicada.'
+            )
         ventas = ventas.filter(seccion_caja__sucursal_caja__sucursal=sucursal)
         compras = compras.filter(seccion_caja__sucursal_caja__sucursal=sucursal)
         stocks = stocks.filter(sucursal=sucursal)
         secciones = secciones.filter(sucursal_caja__sucursal=sucursal)
+    elif permitidas is not None:
+        ventas = ventas.filter(
+            seccion_caja__sucursal_caja__sucursal__in=permitidas
+        )
+        compras = compras.filter(
+            seccion_caja__sucursal_caja__sucursal__in=permitidas
+        )
+        stocks = stocks.filter(sucursal__in=permitidas)
+        secciones = secciones.filter(sucursal_caja__sucursal__in=permitidas)
 
     def rango_actual_y_anterior():
         if periodo == 'hoy':
@@ -531,14 +601,29 @@ def dashboard(request):
             sucursales_asociadas__sucursal=sucursal,
             sucursales_asociadas__estado=True,
         ).distinct()
+    elif permitidas is not None:
+        empleados_qs = empleados_qs.filter(
+            sucursales_asignadas__sucursal__in=permitidas,
+            sucursales_asignadas__estado=True,
+        ).distinct()
+        proveedores_qs = proveedores_qs.filter(
+            sucursales_asociadas__sucursal__in=permitidas,
+            sucursales_asociadas__estado=True,
+        ).distinct()
 
+    sucursales_qs = Sucursal.objects.order_by('nombre')
+    if permitidas is not None:
+        sucursales_qs = sucursales_qs.filter(pk__in=permitidas.values('pk'))
     sucursales = [
         {'id': item.id, 'nombre': item.nombre}
-        for item in Sucursal.objects.order_by('nombre')
+        for item in sucursales_qs
     ]
 
     return Response(
         {
+            'vista': vista,
+            'codigos': sorted(str(codigo) for codigo in codigos),
+            'bloques': bloques,
             'filtros': {
                 'periodo': periodo,
                 'sucursal': sucursal.id if sucursal else None,
