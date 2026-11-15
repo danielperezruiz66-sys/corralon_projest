@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
-  IconBan,
   IconCash,
   IconCheck,
   IconChevronDown,
@@ -19,6 +18,7 @@ import {
 } from '@tabler/icons-react'
 import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
+import DetalleCompra from '../components/comercial/DetalleCompra.jsx'
 import Encabezado from '../components/Encabezado.jsx'
 import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
 const FormularioCompra = lazy(
@@ -28,6 +28,14 @@ import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
+import {
+  claseEstado,
+  montoPago,
+  nuevoPago,
+  saldoCompra,
+  totalPagado,
+} from '../utils/comercial'
+import { fechaHoyLocal } from '../utils/fechas'
 import { formatearFecha, formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/components/comercial/Cobro.css'
@@ -65,10 +73,6 @@ const ESTADOS = [
 
 const ORDEN_INICIAL = '-fecha_compra'
 
-function claseEstado(estado) {
-  return `estado-badge estado-${estado.toLowerCase()}`
-}
-
 function claseEntrega(compra) {
   if (compra.estado === 'AN') {
     return 'estado-badge estado-an'
@@ -87,38 +91,6 @@ function etiquetaEntrega(compra) {
     return 'Anulada'
   }
   return compra.estado_entrega_detalle || 'Por recibir'
-}
-
-let siguientePagoId = 1
-
-function nuevoPago(metodo = '', monto = '') {
-  siguientePagoId += 1
-  return { id: siguientePagoId, metodo, monto }
-}
-
-function montoPago(valor) {
-  const numero = Number(valor)
-  return Number.isFinite(numero) ? Number(numero.toFixed(2)) : 0
-}
-
-function totalPagado(compra) {
-  return (compra.pagos ?? []).reduce(
-    (total, pago) => total + Number(pago.monto_pagado),
-    0,
-  )
-}
-
-function saldoCompra(compra) {
-  return Math.max(0, Number(compra.monto_compra) - totalPagado(compra))
-}
-
-function fechaHoyLocal() {
-  const hoy = new Date()
-  return [
-    hoy.getFullYear(),
-    String(hoy.getMonth() + 1).padStart(2, '0'),
-    String(hoy.getDate()).padStart(2, '0'),
-  ].join('-')
 }
 
 function fechaMinimaLlegada() {
@@ -1006,188 +978,24 @@ export default function Compras() {
       )}
 
       {detalle && (
-        <div className="comercial-modal-fondo" role="dialog" aria-modal="true">
-          <div className="comercial-modal">
-            <div className="comercial-modal-cabecera">
-              <h2>
-                <IconTruckDelivery size={24} />
-                Compra #{detalle.id}
-              </h2>
-              <button
-                type="button"
-                className="comercial-modal-cerrar"
-                onClick={() => setDetalle(null)}
-                aria-label="Cerrar"
-              >
-                <IconX size={20} />
-              </button>
-            </div>
-
-            <div className="detalle-cabecera">
-              <div>
-                <span>Proveedor</span>
-                <strong>{detalle.proveedor_detalle || 'Sin proveedor'}</strong>
-              </div>
-              <div>
-                <span>Fecha</span>
-                <strong>{formatearFechaHora(detalle.fecha_compra)}</strong>
-              </div>
-              <div>
-                <span>Caja / Sección</span>
-                <strong>{detalle.seccion_caja_detalle || '—'}</strong>
-              </div>
-              <div>
-                <span>Pago</span>
-                <span className={claseEstado(detalle.estado)}>
-                  {detalle.estado_detalle}
-                </span>
-              </div>
-              <div>
-                <span>Recepción</span>
-                <span className={claseEntrega(detalle)}>
-                  {etiquetaEntrega(detalle)}
-                </span>
-              </div>
-              {detalle.fecha_estimada_llegada && (
-                <div>
-                  <span>Llegada estimada</span>
-                  <strong>
-                    {formatearFecha(detalle.fecha_estimada_llegada)}
-                  </strong>
-                </div>
-              )}
-            </div>
-
-            {detalle.estado === 'AN' && detalle.motivo_cancelacion && (
-              <p className="comercial-nota">
-                <strong>Motivo de anulación:</strong>{' '}
-                {detalle.motivo_cancelacion}
-              </p>
-            )}
-
-            <div className="comercial-tabla-scroll">
-              <table className="tabla-comercial tabla-lineas">
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th className="numero">Cantidad</th>
-                    <th className="numero">Precio</th>
-                    <th className="numero">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detalle.detalles.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <strong>{item.producto_detalle}</strong>
-                      </td>
-                      <td className="numero">{item.cantidad_compra}</td>
-                      <td className="numero">
-                        {formatearMoneda(item.precio_compra)}
-                      </td>
-                      <td className="numero">{formatearMoneda(item.subtotal)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="comercial-total">
-              <span>Total</span>
-              <strong>{formatearMoneda(detalle.monto_compra)}</strong>
-            </div>
-
-            {detalle.pagos?.length > 0 && (
-              <div className="cobro-pagos">
-                <span>Pagos registrados</span>
-                {detalle.pagos.map((pago) => (
-                  <div key={pago.id}>
-                    <span>{pago.metodo_pago_detalle}</span>
-                    <strong>{formatearMoneda(pago.monto_pagado)}</strong>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {detalle.estado !== 'AN' && (
-              <div className="comercial-total">
-                <span>Saldo pendiente</span>
-                <strong>{formatearMoneda(saldoCompra(detalle))}</strong>
-              </div>
-            )}
-
-            <div className="comercial-modal-acciones">
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                onClick={() => setDetalle(null)}
-              >
-                Cerrar
-              </button>
-              {puedeGestionar &&
-                !detalle.recibida &&
-                detalle.estado !== 'AN' &&
-                totalPagado(detalle) === 0 && (
-                  <button
-                    type="button"
-                    className="boton-comercial-secundario"
-                    onClick={() => anularCompra(detalle)}
-                  >
-                    <IconBan size={18} />
-                    Anular compra
-                  </button>
-                )}
-              {puedeGestionar &&
-                detalle.estado !== 'AN' &&
-                saldoCompra(detalle) > 0 && (
-                  <button
-                    type="button"
-                    className="boton-comercial-secundario"
-                    onClick={() => {
-                      const compra = detalle
-                      setDetalle(null)
-                      abrirPago(compra)
-                    }}
-                  >
-                    <IconCash size={18} />
-                    Registrar pago
-                  </button>
-                )}
-              {puedeGestionar &&
-                detalle.estado !== 'AN' &&
-                !detalle.recibida &&
-                detalle.estado_entrega !== 'EC' && (
-                  <button
-                    type="button"
-                    className="boton-comercial-secundario"
-                    onClick={() => {
-                      const compra = detalle
-                      setDetalle(null)
-                      marcarEnCamino(compra)
-                    }}
-                  >
-                    <IconTruck size={18} />
-                    Marcar en camino
-                  </button>
-                )}
-              {puedeGestionar &&
-                detalle.estado !== 'AN' &&
-                !detalle.recibida && (
-                <button
-                  type="button"
-                  className="boton-comercial-primario"
-                  onClick={() => {
-                    const compra = detalle
-                    setDetalle(null)
-                    recibirCompra(compra)
-                  }}
-                >
-                  Recibir compra
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <DetalleCompra
+          compra={detalle}
+          puedeGestionar={puedeGestionar}
+          onCerrar={() => setDetalle(null)}
+          onAnular={anularCompra}
+          onPagar={(compra) => {
+            setDetalle(null)
+            abrirPago(compra)
+          }}
+          onEnCamino={(compra) => {
+            setDetalle(null)
+            marcarEnCamino(compra)
+          }}
+          onRecibir={(compra) => {
+            setDetalle(null)
+            recibirCompra(compra)
+          }}
+        />
       )}
 
       {pago && (

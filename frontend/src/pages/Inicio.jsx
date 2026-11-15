@@ -18,6 +18,9 @@ import {
 } from '@tabler/icons-react'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
+import Comparacion from '../components/inicio/Comparacion.jsx'
+import EstadoVenta from '../components/inicio/EstadoVenta.jsx'
+import TarjetaKpi from '../components/inicio/TarjetaKpi.jsx'
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import {
@@ -86,45 +89,6 @@ const DATOS_VACIOS = {
   stock_critico: [],
   compras_por_recibir: [],
   cajas_abiertas: [],
-}
-
-function TarjetaKpi({ icono: Icono, etiqueta, valor, detalle, tono = '' }) {
-  return (
-    <article className={`kpi-tarjeta ${tono}`}>
-      <span className="kpi-icono">
-        <Icono size={26} stroke={1.75} />
-      </span>
-      <div className="kpi-contenido">
-        <p className="kpi-etiqueta">{etiqueta}</p>
-        <p className="kpi-valor">{valor}</p>
-        {detalle && <div className="kpi-detalle">{detalle}</div>}
-      </div>
-    </article>
-  )
-}
-
-function Comparacion({ valor, etiqueta }) {
-  if (valor === null || valor === undefined) {
-    return (
-      <span className="kpi-comparacion kpi-comparacion-neutra">
-        Sin comparación <small>{etiqueta}</small>
-      </span>
-    )
-  }
-
-  const numero = Number(valor)
-  const clase = numero > 0 ? 'positiva' : numero < 0 ? 'negativa' : 'neutra'
-  const simbolo = numero > 0 ? '▲' : numero < 0 ? '▼' : '='
-
-  return (
-    <span className={`kpi-comparacion kpi-comparacion-${clase}`}>
-      {simbolo} {Math.abs(numero).toFixed(1)}% <small>{etiqueta}</small>
-    </span>
-  )
-}
-
-function EstadoVenta({ estado, etiqueta }) {
-  return <span className={`badge badge-${estado.toLowerCase()}`}>{etiqueta}</span>
 }
 
 export default function Inicio() {

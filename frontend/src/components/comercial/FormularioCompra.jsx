@@ -10,6 +10,7 @@ import {
 import { pedirTodas } from '../../api/catalogos'
 import { pedir } from '../../api/client'
 import { formatearMoneda } from '../../utils/formato'
+import { fechaHoyLocal } from '../../utils/fechas'
 import {
   unidadPermiteDecimales,
   validarCantidadPorUnidad,
@@ -21,15 +22,6 @@ import FormularioProductosProveedor from '../proveedores/FormularioProductosProv
 import FormularioProveedor from '../proveedores/FormularioProveedor.jsx'
 import SelectorProductos from './SelectorProductos'
 import '../../styles/components/comercial/FormularioCompra.css'
-
-function fechaHoyLocal() {
-  const hoy = new Date()
-  return [
-    hoy.getFullYear(),
-    String(hoy.getMonth() + 1).padStart(2, '0'),
-    String(hoy.getDate()).padStart(2, '0'),
-  ].join('-')
-}
 
 export default function FormularioCompra({
   sucursalActiva = '',
