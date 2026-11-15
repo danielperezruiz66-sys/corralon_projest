@@ -276,6 +276,10 @@ de stock).
   catálogos son globales.
 - Tokens en `localStorage` (`corralon.acceso` / `corralon.refresco`). Ante un
   `401`, `pedir()` renueva y reintenta una vez; si falla, cierra sesión.
+- Las páginas se cargan con `React.lazy` + `Suspense` por ruta y los modales
+  pesados solo al abrirse; SweetAlert2 entra por import dinámico. El bundle
+  inicial queda en ~282 KB (~90 KB gzip): no volver a importar páginas o
+  modales de forma estática.
 - Módulos listos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores,
   Caja, Empleados. Pendientes: Perfil y Actividad (`EnDesarrollo`).
 - Empleados (`/empleados`, AD/GE): listado (legajo, nombre, DNI, teléfono,
@@ -347,7 +351,7 @@ cd backend
 ../venv/Scripts/python.exe manage.py check                 # 0 issues
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 218 tests
+../venv/Scripts/python.exe manage.py test app              # 223 tests
 ../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 

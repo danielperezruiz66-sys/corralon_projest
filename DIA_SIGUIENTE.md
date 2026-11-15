@@ -22,6 +22,15 @@ edición; suite backend **218/218** y build/lint en verde.
 
 ## Pendientes
 
+### Rendimiento (rama `perf/carga-inicial-y-queries`)
+- [ ] Revisar y mergear **Fase 2** (rutas y modales lazy) + **Fase 5**
+      (`select_related` en stocks, ventas y compras). Bundle inicial
+      669→282 KB; stocks 23→3 queries, ventas/compras 47→7.
+- [ ] **Fase 1**: separar CSS por página/componente sin cambios visuales.
+- [ ] **Fase 3**: partir Inventario, Ventas, Compras, Caja e Inicio.
+- [ ] **Fase 4**: caché de catálogos, `page_size` en backend, Inventario por
+      pestaña y refresco de Inicio; el dashboard sigue en 32 queries.
+
 ### QA visual manual (usuario)
 - [ ] **Caja**: selector "A nombre de" solo con habilitados en la sucursal
       (CA asignado o AD/GE); apertura propia y a nombre de otro; sugerencia

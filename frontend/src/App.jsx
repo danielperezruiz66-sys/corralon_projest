@@ -1,19 +1,26 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import MenuDesplegable from './components/MenuDesplegable.jsx'
 import { useAuth } from './context/auth-context'
 import { modulosDelMenu } from './data/menuConfig.js'
-import CambiarContrasena from './pages/CambiarContrasena.jsx'
-import Caja from './pages/Caja.jsx'
-import Clientes from './pages/Clientes.jsx'
-import Compras from './pages/Compras.jsx'
-import Facturacion from './pages/Facturacion.jsx'
-import Empleados from './pages/Empleados.jsx'
-import EnDesarrollo from './pages/EnDesarrollo.jsx'
-import Inicio from './pages/Inicio.jsx'
-import Inventario from './pages/Inventario.jsx'
-import Login from './pages/Login.jsx'
-import Proveedores from './pages/Proveedores.jsx'
-import Ventas from './pages/Ventas.jsx'
+
+// Cada pagina se descarga recien cuando se entra a su ruta.
+const CambiarContrasena = lazy(() => import('./pages/CambiarContrasena.jsx'))
+const Caja = lazy(() => import('./pages/Caja.jsx'))
+const Clientes = lazy(() => import('./pages/Clientes.jsx'))
+const Compras = lazy(() => import('./pages/Compras.jsx'))
+const Empleados = lazy(() => import('./pages/Empleados.jsx'))
+const EnDesarrollo = lazy(() => import('./pages/EnDesarrollo.jsx'))
+const Facturacion = lazy(() => import('./pages/Facturacion.jsx'))
+const Inicio = lazy(() => import('./pages/Inicio.jsx'))
+const Inventario = lazy(() => import('./pages/Inventario.jsx'))
+const Login = lazy(() => import('./pages/Login.jsx'))
+const Proveedores = lazy(() => import('./pages/Proveedores.jsx'))
+const Ventas = lazy(() => import('./pages/Ventas.jsx'))
+
+function CargandoModulo() {
+  return <div className="cargando-modulo">Cargando…</div>
+}
 
 function RutaProtegida() {
   const { user } = useAuth()
@@ -22,7 +29,10 @@ function RutaProtegida() {
 
 function ModuloProtegido({ modulo, children }) {
   const { puedeVer } = useAuth()
-  return puedeVer(modulo) ? children : <Navigate to="/" replace />
+  if (!puedeVer(modulo)) {
+    return <Navigate to="/" replace />
+  }
+  return <Suspense fallback={<CargandoModulo />}>{children}</Suspense>
 }
 
 function contenidoModulo(modulo) {
@@ -76,11 +86,32 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route
+        path="/login"
+        element={
+          <Suspense fallback={<div className="pantalla-carga">Cargando…</div>}>
+            <Login />
+          </Suspense>
+        }
+      />
       <Route element={<RutaProtegida />}>
-        <Route index element={<Inicio />} />
+        <Route
+          index
+          element={
+            <Suspense fallback={<CargandoModulo />}>
+              <Inicio />
+            </Suspense>
+          }
+        />
         {rutasModulos}
-        <Route path="cambiar-contrasena" element={<CambiarContrasena />} />
+        <Route
+          path="cambiar-contrasena"
+          element={
+            <Suspense fallback={<CargandoModulo />}>
+              <CambiarContrasena />
+            </Suspense>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

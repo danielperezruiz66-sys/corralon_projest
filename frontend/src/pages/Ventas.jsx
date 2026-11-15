@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -22,7 +22,9 @@ import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
-import FormularioVenta from '../components/comercial/FormularioVenta.jsx'
+const FormularioVenta = lazy(
+  () => import('../components/comercial/FormularioVenta.jsx'),
+)
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
@@ -941,14 +943,16 @@ export default function Ventas() {
       </div>
 
       {modalAbierto && (
-        <FormularioVenta
-          key={sucursalActiva || 'todas'}
-          modo={modo}
-          clienteInicial={clienteInicial}
-          sucursalActiva={sucursalActiva}
-          onCerrar={() => setModalAbierto(false)}
-          onGuardado={() => setRefresco((valor) => valor + 1)}
-        />
+        <Suspense fallback={null}>
+          <FormularioVenta
+            key={sucursalActiva || 'todas'}
+            modo={modo}
+            clienteInicial={clienteInicial}
+            sucursalActiva={sucursalActiva}
+            onCerrar={() => setModalAbierto(false)}
+            onGuardado={() => setRefresco((valor) => valor + 1)}
+          />
+        </Suspense>
       )}
 
       {detalle && (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -21,7 +21,9 @@ import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
-import FormularioCompra from '../components/comercial/FormularioCompra.jsx'
+const FormularioCompra = lazy(
+  () => import('../components/comercial/FormularioCompra.jsx'),
+)
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
@@ -991,13 +993,15 @@ export default function Compras() {
       </div>
 
       {modalAbierto && (
-        <FormularioCompra
-          key={sucursalActiva || 'todas'}
-          sucursalActiva={sucursalActiva}
-          puedeGestionar={puedeGestionar}
-          onCerrar={() => setModalAbierto(false)}
-          onGuardado={() => setRefresco((valor) => valor + 1)}
-        />
+        <Suspense fallback={null}>
+          <FormularioCompra
+            key={sucursalActiva || 'todas'}
+            sucursalActiva={sucursalActiva}
+            puedeGestionar={puedeGestionar}
+            onCerrar={() => setModalAbierto(false)}
+            onGuardado={() => setRefresco((valor) => valor + 1)}
+          />
+        </Suspense>
       )}
 
       {detalle && (

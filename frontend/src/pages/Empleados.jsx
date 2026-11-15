@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -13,8 +13,12 @@ import {
 import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
-import FormularioContrasena from '../components/empleados/FormularioContrasena.jsx'
-import FormularioEmpleado from '../components/empleados/FormularioEmpleado.jsx'
+const FormularioContrasena = lazy(
+  () => import('../components/empleados/FormularioContrasena.jsx'),
+)
+const FormularioEmpleado = lazy(
+  () => import('../components/empleados/FormularioEmpleado.jsx'),
+)
 import { useAuth } from '../context/auth-context'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv } from '../utils/csv'
@@ -397,20 +401,22 @@ export default function Empleados() {
         </section>
       </div>
 
-      {empleadoEditando !== null && (
-        <FormularioEmpleado
-          empleado={empleadoEditando}
-          onCerrar={() => setEmpleadoEditando(null)}
-          onGuardado={empleadoGuardado}
-        />
-      )}
+      <Suspense fallback={null}>
+        {empleadoEditando !== null && (
+          <FormularioEmpleado
+            empleado={empleadoEditando}
+            onCerrar={() => setEmpleadoEditando(null)}
+            onGuardado={empleadoGuardado}
+          />
+        )}
 
-      {contrasenaPara && (
-        <FormularioContrasena
-          empleado={contrasenaPara}
-          onCerrar={() => setContrasenaPara(null)}
-        />
-      )}
+        {contrasenaPara && (
+          <FormularioContrasena
+            empleado={contrasenaPara}
+            onCerrar={() => setContrasenaPara(null)}
+          />
+        )}
+      </Suspense>
     </>
   )
 }

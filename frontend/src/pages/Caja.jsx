@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -16,11 +16,21 @@ import {
 import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
-import DetalleSeccionCaja from '../components/caja/DetalleSeccionCaja.jsx'
-import FormularioAsignacionCaja from '../components/caja/FormularioAsignacionCaja.jsx'
-import FormularioAperturaSeccion from '../components/caja/FormularioAperturaSeccion.jsx'
-import FormularioCaja from '../components/caja/FormularioCaja.jsx'
-import FormularioCierreSeccion from '../components/caja/FormularioCierreSeccion.jsx'
+const DetalleSeccionCaja = lazy(
+  () => import('../components/caja/DetalleSeccionCaja.jsx'),
+)
+const FormularioAsignacionCaja = lazy(
+  () => import('../components/caja/FormularioAsignacionCaja.jsx'),
+)
+const FormularioAperturaSeccion = lazy(
+  () => import('../components/caja/FormularioAperturaSeccion.jsx'),
+)
+const FormularioCaja = lazy(
+  () => import('../components/caja/FormularioCaja.jsx'),
+)
+const FormularioCierreSeccion = lazy(
+  () => import('../components/caja/FormularioCierreSeccion.jsx'),
+)
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
@@ -932,55 +942,57 @@ export default function Caja() {
         )}
       </div>
 
-      {aperturaAbierta && sucursalActiva && (
-        <FormularioAperturaSeccion
-          sucursalActiva={sucursalActiva}
-          sucursalNombre={sucursalDetalle?.nombre ?? ''}
-          cajasDisponibles={cajasDisponibles}
-          onCerrar={() => setAperturaAbierta(false)}
-          onGuardado={seccionAbiertaGuardada}
-        />
-      )}
+      <Suspense fallback={null}>
+        {aperturaAbierta && sucursalActiva && (
+          <FormularioAperturaSeccion
+            sucursalActiva={sucursalActiva}
+            sucursalNombre={sucursalDetalle?.nombre ?? ''}
+            cajasDisponibles={cajasDisponibles}
+            onCerrar={() => setAperturaAbierta(false)}
+            onGuardado={seccionAbiertaGuardada}
+          />
+        )}
 
-      {cierreSeccion && (
-        <FormularioCierreSeccion
-          seccion={cierreSeccion}
-          onCerrar={() => setCierreSeccion(null)}
-          onGuardado={seccionCerradaGuardada}
-        />
-      )}
+        {cierreSeccion && (
+          <FormularioCierreSeccion
+            seccion={cierreSeccion}
+            onCerrar={() => setCierreSeccion(null)}
+            onGuardado={seccionCerradaGuardada}
+          />
+        )}
 
-      {detalleSeccion && (
-        <DetalleSeccionCaja
-          seccion={detalleSeccion}
-          puedeAuditar={puedeGestionar}
-          onCerrar={() => setDetalleSeccion(null)}
-          onAuditado={() => {
-            setDetalleSeccion(null)
-            refrescar()
-          }}
-        />
-      )}
+        {detalleSeccion && (
+          <DetalleSeccionCaja
+            seccion={detalleSeccion}
+            puedeAuditar={puedeGestionar}
+            onCerrar={() => setDetalleSeccion(null)}
+            onAuditado={() => {
+              setDetalleSeccion(null)
+              refrescar()
+            }}
+          />
+        )}
 
-      {cajaEditando !== null && (
-        <FormularioCaja
-          caja={cajaEditando}
-          onCerrar={() => setCajaEditando(null)}
-          onGuardado={guardadoCaja}
-        />
-      )}
+        {cajaEditando !== null && (
+          <FormularioCaja
+            caja={cajaEditando}
+            onCerrar={() => setCajaEditando(null)}
+            onGuardado={guardadoCaja}
+          />
+        )}
 
-      {asignacionEditando !== null && (
-        <FormularioAsignacionCaja
-          asignacion={
-            asignacionEditando.id ? asignacionEditando : null
-          }
-          cajas={cajasFisicas}
-          sucursales={sucursales}
-          onCerrar={() => setAsignacionEditando(null)}
-          onGuardado={guardadaAsignacion}
-        />
-      )}
+        {asignacionEditando !== null && (
+          <FormularioAsignacionCaja
+            asignacion={
+              asignacionEditando.id ? asignacionEditando : null
+            }
+            cajas={cajasFisicas}
+            sucursales={sucursales}
+            onCerrar={() => setAsignacionEditando(null)}
+            onGuardado={guardadaAsignacion}
+          />
+        )}
+      </Suspense>
     </>
   )
 }

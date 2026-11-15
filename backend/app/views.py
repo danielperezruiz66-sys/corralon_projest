@@ -1145,7 +1145,7 @@ class StockViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = Stock.objects.select_related('producto', 'sucursal')
+    queryset = Stock.objects.select_related('producto__unidad', 'sucursal')
     serializer_class = serializers.StockSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, DEPOSITO)
@@ -1550,7 +1550,11 @@ class VentaViewSet(
     viewsets.GenericViewSet,
 ):
     queryset = (
-        Venta.objects.select_related('seccion_caja__sucursal_caja', 'cliente')
+        Venta.objects.select_related(
+            'seccion_caja__sucursal_caja__caja',
+            'seccion_caja__sucursal_caja__sucursal',
+            'cliente',
+        )
         .prefetch_related('detalles__producto', 'pagos__metodo_pago')
     )
     serializer_class = serializers.VentaSerializer
@@ -1735,7 +1739,11 @@ class CompraViewSet(
     viewsets.GenericViewSet,
 ):
     queryset = (
-        Compra.objects.select_related('seccion_caja__sucursal_caja', 'proveedor')
+        Compra.objects.select_related(
+            'seccion_caja__sucursal_caja__caja',
+            'seccion_caja__sucursal_caja__sucursal',
+            'proveedor',
+        )
         .prefetch_related('detalles__producto', 'pagos__metodo_pago')
     )
     serializer_class = serializers.CompraSerializer

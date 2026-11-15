@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -24,15 +24,33 @@ import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import CampoSelectorBuscable from '../components/common/CampoSelectorBuscable.jsx'
 import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
-import FormularioCompra from '../components/comercial/FormularioCompra.jsx'
-import FormularioAjusteStock from '../components/inventario/FormularioAjusteStock.jsx'
-import FormularioCargaStock from '../components/inventario/FormularioCargaStock.jsx'
-import FormularioCatalogo from '../components/inventario/FormularioCatalogo.jsx'
-import FormularioDeposito from '../components/inventario/FormularioDeposito.jsx'
-import FormularioDetalleStock from '../components/inventario/FormularioDetalleStock.jsx'
-import FormularioProducto from '../components/inventario/FormularioProducto.jsx'
-import FormularioStock from '../components/inventario/FormularioStock.jsx'
-import FormularioTransferencia from '../components/inventario/FormularioTransferencia.jsx'
+const FormularioCompra = lazy(
+  () => import('../components/comercial/FormularioCompra.jsx'),
+)
+const FormularioAjusteStock = lazy(
+  () => import('../components/inventario/FormularioAjusteStock.jsx'),
+)
+const FormularioCargaStock = lazy(
+  () => import('../components/inventario/FormularioCargaStock.jsx'),
+)
+const FormularioCatalogo = lazy(
+  () => import('../components/inventario/FormularioCatalogo.jsx'),
+)
+const FormularioDeposito = lazy(
+  () => import('../components/inventario/FormularioDeposito.jsx'),
+)
+const FormularioDetalleStock = lazy(
+  () => import('../components/inventario/FormularioDetalleStock.jsx'),
+)
+const FormularioProducto = lazy(
+  () => import('../components/inventario/FormularioProducto.jsx'),
+)
+const FormularioStock = lazy(
+  () => import('../components/inventario/FormularioStock.jsx'),
+)
+const FormularioTransferencia = lazy(
+  () => import('../components/inventario/FormularioTransferencia.jsx'),
+)
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
@@ -1705,6 +1723,7 @@ export default function Inventario() {
         )}
       </div>
 
+      <Suspense fallback={null}>
       {productoEditando !== null && (
         <FormularioProducto
           key={sucursalActiva || 'todas'}
@@ -2195,6 +2214,7 @@ export default function Inventario() {
           }}
         />
       )}
+      </Suspense>
     </>
   )
 }

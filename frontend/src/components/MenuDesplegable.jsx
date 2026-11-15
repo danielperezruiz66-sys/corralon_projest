@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import Swal from 'sweetalert2'
 import {
   IconHome2,
   IconMenu2,
@@ -58,8 +57,9 @@ export default function MenuDesplegable() {
 
   const cerrarMenuMovil = () => setMenuMovil(false)
 
-  const handleLogoutClick = () => {
+  const handleLogoutClick = async () => {
     cerrarMenuMovil()
+    const { default: Swal } = await import('sweetalert2')
     Swal.fire({
       title: '¿Cerrar sesión?',
       text: '¿Estás seguro de que deseas salir del sistema?',
