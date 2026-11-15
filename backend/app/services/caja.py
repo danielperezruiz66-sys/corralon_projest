@@ -311,21 +311,33 @@ def abrir_seccion(
 
 
 @transaction.atomic
-def cerrar_seccion(seccion, montos_reales, observaciones=None):
+def cerrar_seccion(seccion, montos_reales, observaciones=None, clave=''):
     """Cierra la seccion con los montos reales contados por el usuario.
 
     `montos_reales` es un diccionario `{metodo_pago_id_o_instancia: monto}`.
     Si el arqueo tiene diferencia, la primera linea de `observaciones` es una
     nota del sistema inborrable con el monto y la direccion (faltante/
     sobrante); el usuario puede agregar sus observaciones en lineas siguientes.
+
+    `clave` es la clave de idempotencia: si se reintenta el mismo cierre, no
+    se repite el arqueo.
     """
     seccion = SeccionCaja.objects.select_for_update().get(pk=seccion.pk)
+    if clave and seccion.clave_cierre == clave:
+        # El cierre ya se registro con esta misma operacion.
+        return seccion
+    if seccion.estado == SeccionCaja.EstadoSeccion.PAUSADA:
+        raise ValueError(
+            'La sección está en pausa: primero hay que reanudarla.'
+        )
     if seccion.estado != SeccionCaja.EstadoSeccion.ABIERTA:
         raise ValueError('La seccion de caja no esta abierta.')
 
     reales = {}
-    for clave, valor in montos_reales.items():
-        metodo_id = clave.id if hasattr(clave, 'id') else int(clave)
+    for metodo_clave, valor in montos_reales.items():
+        metodo_id = (
+            metodo_clave.id if hasattr(metodo_clave, 'id') else int(metodo_clave)
+        )
         reales[metodo_id] = _decimal(valor)
 
     detalles = []
@@ -379,6 +391,7 @@ def cerrar_seccion(seccion, montos_reales, observaciones=None):
     seccion.observaciones = observaciones or None
     seccion.fecha_hora_cierre = timezone.now()
     seccion.estado = SeccionCaja.EstadoSeccion.CERRADA
+    seccion.clave_cierre = clave or seccion.clave_cierre
     seccion.save()
     return seccion
 
@@ -390,4 +403,73 @@ def auditar_seccion(seccion):
         raise ValueError('Solo se puede auditar una seccion cerrada.')
     seccion.estado = SeccionCaja.EstadoSeccion.AUDITADA
     seccion.save(update_fields=['estado'])
+    return seccion
+
+
+def _es_dueno(seccion, usuario):
+    """True si el usuario es el empleado que abrio la seccion."""
+    empleado = getattr(usuario, 'empleado', None)
+    return empleado is not None and seccion.empleado_id == empleado.id
+
+
+def _puede_gestionar(usuario):
+    """True si el usuario es admin o gerente."""
+    if usuario is None or not usuario.is_authenticated:
+        return False
+    if usuario.is_superuser:
+        return True
+    empleado = getattr(usuario, 'empleado', None)
+    if empleado is None:
+        return False
+    return bool(_roles_activos(empleado) & ROLES_GESTION)
+
+
+@transaction.atomic
+def pausar_seccion(seccion, motivo, usuario):
+    """Deja la seccion en pausa.
+
+    La caja queda bloqueada: no se pueden registrar ventas ni pagos sobre
+    ella y el empleado no puede abrir otra seccion. Queda registrado quien
+    pauso, cuando y por que (historial de la seccion).
+    """
+    motivo = (motivo or '').strip()
+    if len(motivo) < 10:
+        raise ValueError('Explicá el motivo de la pausa (10 caracteres o más).')
+
+    seccion = SeccionCaja.objects.select_for_update().get(pk=seccion.pk)
+    if seccion.estado != SeccionCaja.EstadoSeccion.ABIERTA:
+        raise ValueError('Solo se puede pausar una seccion abierta.')
+    if not _es_dueno(seccion, usuario) and not _puede_gestionar(usuario):
+        raise ValueError(
+            'Solo el empleado que abrió la sección puede pausarla.'
+        )
+
+    seccion._change_reason = f'Pausa de caja: {motivo}'[:100]
+    seccion.estado = SeccionCaja.EstadoSeccion.PAUSADA
+    seccion.motivo_pausa = motivo
+    seccion.save(update_fields=['estado', 'motivo_pausa'])
+    return seccion
+
+
+@transaction.atomic
+def reanudar_seccion(seccion, clave, usuario):
+    """Vuelve a abrir una seccion pausada.
+
+    Solo la reanuda el empleado que la abrió y tiene que volver a poner su
+    contraseña: asi nadie mas puede quedarse con la caja.
+    """
+    seccion = SeccionCaja.objects.select_for_update().get(pk=seccion.pk)
+    if seccion.estado != SeccionCaja.EstadoSeccion.PAUSADA:
+        raise ValueError('La seccion de caja no esta pausada.')
+    if not _es_dueno(seccion, usuario):
+        raise ValueError(
+            'Solo el empleado que abrió la sección puede reanudarla.'
+        )
+    if not clave or not usuario.check_password(clave):
+        raise ValueError('La contraseña no es correcta.')
+
+    seccion._change_reason = 'Reanudación de caja por el dueño'[:100]
+    seccion.estado = SeccionCaja.EstadoSeccion.ABIERTA
+    seccion.motivo_pausa = ''
+    seccion.save(update_fields=['estado', 'motivo_pausa'])
     return seccion

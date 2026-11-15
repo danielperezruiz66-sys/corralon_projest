@@ -37,6 +37,7 @@ from app.models import (
     Provincia,
     Rol,
     SeccionCaja,
+    SolicitudCompra,
     Stock,
     Sucursal,
     SucursalXCaja,
@@ -220,6 +221,15 @@ EMPLEADOS = [
         'ED',
         'Campo Quijano',
         'deposito.quijano',
+    ),
+    (
+        '29182736',
+        '0009',
+        'Sofía',
+        'Ramírez',
+        'GE',
+        'Salta Capital',
+        'gerente.salta',
     ),
 ]
 
@@ -776,7 +786,7 @@ class Command(BaseCommand):
         modelos = [
             TransferenciaStock, DetalleCierreCaja, MovimientoStock,
             MetodoPagoXCompra, MetodoPagoXVenta, DetalleCompra, DetalleVenta,
-            Factura, Compra, Venta, Cliente, MetodoPago,
+            Factura, SolicitudCompra, Compra, Venta, Cliente, MetodoPago,
             DetalleStock, Stock, ProductoXSucursal, ProductoXProveedor,
             ProveedorXSucursal, Proveedor, Deposito, SeccionCaja,
             SucursalXCaja, Caja,

@@ -343,6 +343,60 @@ COMERCIAL - VENTAS Y COMPRAS
   color: var(--color-peligro);
 }
 
+.estado-rs {
+  background-color: #d1fae5;
+  color: #047857;
+}
+
+.estado-rj {
+  background-color: #fee2e2;
+  color: var(--color-peligro);
+}
+
+/* Pestañas de compras y solicitudes */
+.compras-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.compras-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgba(15, 42, 48, 0.12);
+  border-radius: 9999px;
+  background-color: #ffffff;
+  padding: 0.5rem 0.95rem;
+  color: rgba(15, 42, 48, 0.65);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.compras-tabs button:hover {
+  background-color: var(--color-fondo);
+}
+
+.compras-tabs button.activo {
+  border-color: var(--color-oscuro);
+  background-color: var(--color-oscuro);
+  color: #ffffff;
+}
+
+.compras-tabs-contador {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.3rem;
+  border-radius: 9999px;
+  background-color: var(--color-peligro);
+  padding: 0 0.35rem;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 /* Acciones de fila */
 .acciones-fila {
   display: flex;
@@ -1151,6 +1205,16 @@ COMERCIAL - VENTAS Y COMPRAS
 .stock-negativo {
   color: var(--color-peligro) !important;
   font-weight: 700;
+}
+
+/* Disponibilidad en otras sucursales dentro del selector de productos */
+.selector-disponibilidad {
+  display: block;
+  margin-top: 0.15rem;
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 .tabla-lineas {

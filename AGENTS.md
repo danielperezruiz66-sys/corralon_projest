@@ -20,10 +20,11 @@ Arquitectura desacoplada:
 - API en `http://localhost:8000`, Vite en `http://localhost:5173`.
 - `.env` en la raíz (no se commitea); plantilla en `.env.example`.
 
-Estado: backend completo (36 viewsets, suite en `app.tests`, 218/218); frontend
-con Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores, Caja y
-**Empleados**; falta el **QA visual manual** en navegador de Caja y Empleados.
-Pendientes: Perfil y Actividad. Facturación ARCA bloqueada.
+Estado: backend completo (37 viewsets, suite en `app.tests`); frontend con
+Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores, Caja,
+**Empleados** y **Facturación** (cascarón); falta el **QA visual manual** en
+navegador. Pendientes: Perfil, Actividad y las métricas del Dashboard V2.
+Facturación ARCA bloqueada (solo queda el permissions y el cascarón).
 
 ## 2. Estructura y arquitectura
 
@@ -69,7 +70,7 @@ las que referencia):
 | PROVEEDORES | Proveedor, ProveedorXSucursal, ProductoXProveedor |
 | PAGOS | MetodoPago |
 | VENTAS | Cliente, Venta, DetalleVenta, Factura, MetodoPagoXVenta |
-| COMPRAS | Compra, DetalleCompra, MetodoPagoXCompra |
+| COMPRAS | Compra, DetalleCompra, MetodoPagoXCompra, SolicitudCompra |
 
 Reglas:
 
@@ -86,6 +87,15 @@ Reglas:
   `AJ` ajuste, `TR` transferencia.
 - Stock negativo: piso `Stock.cant_negativa_max` (default `-10`). El faltante se
   registra como detalle negativo según el flujo que lo genere.
+- **Disponibilidad entre sucursales**: `GET /api/stocks/` sin `?sucursal=`
+  devuelve el stock de **todas** las sucursales y cualquier rol autenticado
+  puede leerlo (es información estratégica: si no hay stock en una sucursal se
+  puede derivar al cliente a la otra). En el frontend, la pestaña Stock de
+  Inventario tiene el check **"Ver el stock de todas las sucursales"** y el
+  selector de productos de Ventas muestra la disponibilidad de las demás
+  sucursales. Operar (vender, ajustar, recibir) sigue atado a la sucursal del
+  usuario: ver stock ajeno no habilita a moverlo; para eso está la
+  transferencia.
 - Carga masiva por sucursal: suma cantidades en un depósito de la sucursal
   (vencimiento opcional), producto activo en la sucursal y registra movimientos
   `AJ` con referencia `carga-stock: <motivo>` creando lotes nuevos.
@@ -138,12 +148,21 @@ Reglas:
   `SeccionCaja`.
 - `SeccionCaja`: sesión de una caja física en una sucursal. `sucursal_caja`
   FK→`SucursalXCaja` (de ahí salen sucursal y caja; no hay FK directa a `Caja`).
-  Máximo **1 sección `AB` por `sucursal_caja`** (la misma caja física puede estar
-  abierta en Salta y en Quijano a la vez, una por sucursal) **y 1 sección `AB`
-  por empleado** (un mismo empleado no puede abrir dos cajas a la vez,
-  constraint `una_seccion_abierta_por_empleado`). El dropdown `?puede_operar_caja=`
-  excluye a quien ya tiene una abierta. `monto_teorico`
-  calculado por el sistema, `monto_final` contado.
+  Estados: `AB` abierta, `PA` en pausa, `CE` cerrada, `AU` auditada.
+  Máximo **1 sección `AB`/`PA` por `sucursal_caja`** (la misma caja física puede
+  estar abierta en Salta y en Quijano a la vez, una por sucursal) **y 1 sección
+  `AB`/`PA` por empleado** (un mismo empleado no puede abrir dos cajas a la vez,
+  constraints `una_seccion_abierta_por_caja_sucursal` y
+  `una_seccion_abierta_por_empleado`; una sesión en pausa también cuenta).
+  El dropdown `?puede_operar_caja=` excluye a quien ya tiene una abierta.
+  `monto_teorico` calculado por el sistema, `monto_final` contado.
+  **En pausa**: `POST /api/secciones-caja/{id}/pausar/` (motivo obligatorio,
+  queda en `motivo_pausa` y en el historial) y
+  `POST /api/secciones-caja/{id}/reanudar/` (**pide la contraseña del dueño**;
+  solo el empleado que abrió la sección puede reanudarla). En pausa no se
+  registran ventas ni pagos ni se puede hacer el arqueo: hay que reanudar
+  primero. `AD`/`GE` pueden pausar la sesión de otro (queda auditado), pero
+  nunca reanudarla.
   `DetalleCierreCaja` guarda `monto_sistema` vs `monto_real` por método.
   `MetodoPago.es_efectivo` suma el `monto_inicial` al teórico.
   Al cerrar: el campo **Contado** arranca igual al teórico por método (se
@@ -170,11 +189,29 @@ Reglas:
   Encargado de depósito. Sin código = solo lectura. `EmpleadoXRol` y
   `SucursalXEmpleado` tienen restricciones únicas `un_rol_por_empleado` y
   `una_sucursal_por_empleado`.
+- `SolicitudCompra`: pedido de pago (`PG`) o anulación (`AN`) de una compra que
+  **resuelve `AD`/`GE`**; la crea quien opera (`CA`/`VE`/`ED`) con motivo
+  obligatorio (10 caracteres o más). Estados: `PE` pendiente, `RS` resuelta,
+  `RJ` rechazada. Reglas: **una sola solicitud pendiente por compra**
+  (constraint `una_solicitud_pendiente_por_compra`); con una solicitud
+  pendiente la compra **no se puede volver a solicitar, pagar ni anular**
+  (el pago directo y la anulación se bloquean); **resolver = pagar/anular en la
+  misma transacción** (si el pago falla, la solicitud sigue pendiente);
+  rechazar exige motivo y deja la compra como estaba.
+- **Claves de idempotencia**: los pagos de compra (`MetodoPagoXCompra.clave`),
+  los de venta (`MetodoPagoXVenta.clave`) y el cierre de caja
+  (`SeccionCaja.clave_cierre`) aceptan una `clave` opcional. Si la misma
+  operación se reintenta con la misma clave, el backend devuelve el resultado
+  anterior en vez de cobrar o arquear de nuevo. El frontend la genera con
+  `utils/clave.js` (una por operación, se mantiene al reintentar).
 - `django-simple-history` en modelos críticos (Usuario sin password, Empleado,
   Producto, Stock, DetalleStock, MovimientoStock, TransferenciaStock,
   Proveedor, SeccionCaja, DetalleCierreCaja, Cliente, Venta, DetalleVenta,
-  Factura, MetodoPagoXVenta, Compra, DetalleCompra, MetodoPagoXCompra).
+  Factura, MetodoPagoXVenta, Compra, DetalleCompra, MetodoPagoXCompra,
+  SolicitudCompra).
   `HistoryRequestMiddleware` guarda el usuario autenticado en `history_user`.
+  El motivo de un cambio se escribe en `instancia._change_reason` (máx. 100
+  caracteres) antes de `save()`.
 
 ## 4. Servicios
 
@@ -216,8 +253,12 @@ de stock).
 - Errores de negocio: `400 {"detail": "...", "codigo": "..."}` con `codigo` =
   `stock_insuficiente`, `error_de_negocio`, `validacion`, `no_encontrado` o
   `protegido`.
-- Routers: 36 viewsets en `app/urls.py` + `GET /api/perfil/` y
-  `GET /api/dashboard/?periodo=hoy|7d|mes&sucursal=<id>`.
+- Routers: 37 viewsets en `app/urls.py` + `GET /api/perfil/` y
+  `GET /api/dashboard/?periodo=hoy|7d|mes&sucursal=<id>`. El dashboard
+  devuelve además `vista` (`gestion`/`caja`/`ventas`/`deposito`/`lectura`),
+  `codigos` y `bloques` (qué ve cada rol) y **solo muestra datos de las
+  sucursales asignadas** al usuario (superuser y `AD` ven todas; pedir una
+  sucursal ajena devuelve 403).
 - Escrituras clave:
   - `POST /api/ventas/`, `/{id}/confirmar/`, `/{id}/cobrar/`, `/{id}/cancelar/`
   - `PATCH /api/clientes/{id}/estado/`
@@ -230,12 +271,24 @@ de stock).
   - `POST /api/transferencias-stock/` (por `detalle_origen`), `/{id}/recibir/`,
     `/{id}/cancelar/`
   - `POST /api/compras/`, `/{id}/pagar/`, `/{id}/anular/`, `/{id}/en-camino/`,
-    `/{id}/recibir/` (gestión `en-camino/recibir/pagar/anular` solo `AD/GE`)
+    `/{id}/recibir/` (pagar y anular solo `AD/GE`; registrar, poner en camino y
+    recibir `AD/GE/ED/CA/VE`), `/{id}/solicitar/` (deja una `SolicitudCompra`)
+  - `GET /api/solicitudes-compras/` (los no `AD/GE` solo ven las suyas) y
+    `POST /api/solicitudes-compras/{id}/resolver/` (`accion` = `PAGAR`,
+    `ANULAR` o `RECHAZAR`; solo `AD/GE`)
   - `POST /api/secciones-caja/` (cuerpo `caja` + `sucursal` + `monto_inicial`;
     `empleado` opcional solo `AD/GE`, para abrir a nombre de otro habilitado;
     `observaciones_apertura` obligatoria si el monto difiere de la sugerencia),
-    `/{id}/cerrar/`, `/{id}/auditar/` (solo `AD/GE`) y
+    `/{id}/cerrar/`, `/{id}/auditar/` (solo `AD/GE`),
+    `/{id}/pausar/`, `/{id}/reanudar/` y
     `GET /{id}/teorico/` (desglose previo al cierre por método de pago)
+  - `GET /api/secciones-caja/mia/` (sección `AB`/`PA` del usuario; el frontend
+    no deja cerrar sesión con la caja abierta)
+- **Alcance de caja por rol** (`GET /api/secciones-caja/`): superuser y `AD`
+  ven todo; `GE` ve todas las secciones de sus sucursales asignadas; `CA` (y
+  cualquier rol que no sea gestión) **solo ve sus propias secciones**, dentro de
+  sus sucursales asignadas. Pedir `?sucursal=<ajena>` devuelve 403. El dashboard
+  aplica la misma regla para las cajas abiertas del rol.
   - `GET /api/secciones-caja/sugerencia/?caja=<id>&sucursal=<id>` (monto inicial
     sugerido = efectivo contado en el último cierre de esa caja en esa sucursal)
   - `POST /api/empleados/` (alta con datos, roles, sucursales y acceso
@@ -246,7 +299,8 @@ de stock).
   - `GET /api/empleados/?puede_operar_caja=<sucursal_id>` (empleados activos
     habilitados para abrir caja en la sucursal: AD/GE en cualquiera, CA
     asignado), `?sucursal=<id>` (empleados asignados a esa sucursal,
-    respetando el selector global del encabezado)
+    respetando el selector global del encabezado) y
+    `?rol=AD|GE|CA|VE|ED` (filtra por rol activo)
   - `POST /api/cajas/` y `/api/sucursales-cajas/` (cajas físicas y sus
     asignaciones a sucursales; gestión `AD/GE`)
   - `POST /api/metodos-pago-ventas/` y `/api/metodos-pago-compras/`
@@ -254,13 +308,30 @@ de stock).
   pueden todo. **Un empleado suspendido, en baja temporal o inactivo no accede
   al sistema** (login y API: `backends.py` lo rechaza y
   `EmpleadoActivoJWTAuthentication` devuelve 401 con la sesión abierta; su
-  pase a no-`AC` invalida sus refresh tokens). Caja: abrir/cerrar `AD/GE/CA`, auditar `AD/GE`. El `CA` solo abre
-  secciones en sucursales donde su empleado tiene `SucursalXEmpleado` activa;
-  `AD/GE` pueden en cualquiera y además abrir a **nombre de otro** habilitado
-  (queda en el historial quién abrió y a nombre de quién). CRUD de cajas físicas y asignaciones solo
-  `AD/GE`. Ventas: crear `AD/GE/CA/VE`; cobrar, confirmar y anular `AD/GE/CA`
-  (el vendedor no). Compras: `AD/GE/ED`. Pagos: `AD/GE/CA/ED`. Sin rol = solo
-  lectura.
+  pase a no-`AC` invalida sus refresh tokens).
+- **Matriz por rol** (menú y API):
+
+  | Módulo | AD | GE | CA | VE | ED |
+  |---|---|---|---|---|---|
+  | Ventas | ✔ | ✔ | ✔ | ✔ | ✖ |
+  | Compras | ✔ | ✔ | ✔ | ✔ | ✔ |
+  | Clientes | ✔ | ✔ | ✔ | ✔ | ✖ |
+  | Inventario | ✔ | ✔ | consulta | consulta | ✔ |
+  | Proveedores | ✔ | ✔ | consulta | consulta | ✔ |
+  | Caja | ✔ | ✔ | ✔ | ✖ | ✖ |
+  | Empleados | ✔ | ✔ | ✖ | ✖ | ✖ |
+  | Facturación | ✔ | ✔ | ✔ | ✖ | ✖ |
+  | Perfil / Actividad | ✔ | ✔ | perfil | perfil | perfil |
+
+  Caja: abrir/cerrar/pausar/reanudar `AD/GE/CA`, auditar `AD/GE`. El `CA`
+  solo abre secciones en sucursales donde su empleado tiene `SucursalXEmpleado`
+  activa; `AD/GE` pueden en cualquiera y además abrir a **nombre de otro**
+  habilitado (queda en el historial quién abrió y a nombre de quién). CRUD de
+  cajas físicas y asignaciones solo `AD/GE`. Ventas: crear `AD/GE/CA/VE`;
+  cobrar, confirmar y anular `AD/GE/CA` (el vendedor no). Compras: registrar,
+  poner en camino y recibir `AD/GE/ED/CA/VE`; **pagar y anular solo `AD/GE`**
+  (el resto deja una `SolicitudCompra`). Pagos de venta `AD/GE/CA`. Sin rol =
+  solo lectura.
 - `Usuario` exige `IsAdminUser`, contraseña write-only con `set_password()`.
   `Producto` acepta `sucursales` write-only y sincroniza `ProductoXSucursal`.
 

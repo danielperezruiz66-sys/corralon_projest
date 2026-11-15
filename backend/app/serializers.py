@@ -47,6 +47,7 @@ from .models import (
     ProveedorXSucursal,
     Rol,
     SeccionCaja,
+    SolicitudCompra,
     Stock,
     Sucursal,
     SucursalXCaja,
@@ -542,6 +543,7 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
     )
     empleado_detalle = serializers.StringRelatedField(source='empleado', read_only=True)
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
+    motivo_pausa = serializers.CharField(read_only=True)
     detalles_cierre = DetalleCierreCajaSerializer(many=True, read_only=True)
 
     @staticmethod
@@ -588,10 +590,30 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
             'observaciones_apertura',
             'estado',
             'estado_detalle',
+            'motivo_pausa',
             'detalles_cierre',
             'abierta_por',
             'motivo_apertura',
         ]
+
+
+class PausaCajaSerializer(serializers.Serializer):
+    motivo = serializers.CharField()
+
+    def validate_motivo(self, value):
+        texto = str(value or '').strip()
+        if len(texto) < 10:
+            raise serializers.ValidationError(
+                'Explicá el motivo de la pausa (10 caracteres o más).'
+            )
+        return texto
+
+
+class ReanudarCajaSerializer(serializers.Serializer):
+    clave = serializers.CharField(
+        write_only=True,
+        help_text='Contraseña del empleado que abrió la sección.',
+    )
 
 
 class AperturaCajaSerializer(serializers.Serializer):
@@ -629,6 +651,13 @@ class CierreCajaSerializer(serializers.Serializer):
         required=False,
         allow_blank=True,
         allow_null=True,
+    )
+    clave = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default='',
+        max_length=64,
+        help_text='Clave de idempotencia: reintentar el mismo cierre no repite el arqueo.',
     )
 
     def validate_montos_reales(self, value):
@@ -2100,6 +2129,7 @@ class PagoVentaCreateSerializer(serializers.Serializer):
         decimal_places=2,
         min_value=Decimal('0.01'),
     )
+    clave = serializers.CharField(required=False, allow_blank=True, default='', max_length=64)
 
 
 class PagoVentaItemSerializer(serializers.Serializer):
@@ -2114,6 +2144,13 @@ class PagoVentaItemSerializer(serializers.Serializer):
 class CobroVentaSerializer(serializers.Serializer):
     pagos = PagoVentaItemSerializer(many=True, allow_empty=False)
     confirmar = serializers.BooleanField(required=False, default=False)
+    clave = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default='',
+        max_length=64,
+        help_text='Clave de idempotencia: reintentar la misma clave no cobra dos veces.',
+    )
 
 
 class VentaCancelarSerializer(serializers.Serializer):
@@ -2165,6 +2202,7 @@ class CompraSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     recibida = serializers.SerializerMethodField()
+    solicitud_pendiente = serializers.SerializerMethodField()
     detalles = DetalleCompraSerializer(many=True, read_only=True)
     pagos = MetodoPagoXCompraSerializer(many=True, read_only=True)
 
@@ -2186,6 +2224,7 @@ class CompraSerializer(serializers.ModelSerializer):
             'estado',
             'estado_detalle',
             'motivo_cancelacion',
+            'solicitud_pendiente',
             'detalles',
             'pagos',
         ]
@@ -2197,6 +2236,21 @@ class CompraSerializer(serializers.ModelSerializer):
 
     def get_recibida(self, obj):
         return obj.estado_entrega == Compra.EstadoEntrega.RECIBIDA
+
+    def get_solicitud_pendiente(self, obj):
+        """Solicitud abierta de la compra, si la hay."""
+        solicitudes = getattr(obj, 'solicitudes', None)
+        if solicitudes is None:
+            return None
+        for solicitud in solicitudes.all():
+            if solicitud.estado == SolicitudCompra.EstadoSolicitud.PENDIENTE:
+                return {
+                    'id': solicitud.id,
+                    'tipo': solicitud.tipo,
+                    'tipo_detalle': solicitud.get_tipo_display(),
+                    'fecha_solicitud': solicitud.fecha_solicitud.isoformat(),
+                }
+        return None
 
 
 class CompraItemSerializer(serializers.Serializer):
@@ -2339,6 +2393,7 @@ class PagoCompraCreateSerializer(serializers.Serializer):
         decimal_places=2,
         min_value=Decimal('0.01'),
     )
+    clave = serializers.CharField(required=False, allow_blank=True, default='', max_length=64)
 
 
 class PagoCompraItemSerializer(serializers.Serializer):
@@ -2352,6 +2407,128 @@ class PagoCompraItemSerializer(serializers.Serializer):
 
 class PagoCompraMultipleSerializer(serializers.Serializer):
     pagos = PagoCompraItemSerializer(many=True, allow_empty=False)
+    clave = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default='',
+        max_length=64,
+        help_text='Clave de idempotencia: reintentar la misma clave no cobra dos veces.',
+    )
+
+
+# =============================================================================
+# SOLICITUDES DE COMPRA
+# =============================================================================
+
+class SolicitudCompraSerializer(serializers.ModelSerializer):
+    tipo_detalle = serializers.CharField(source='get_tipo_display', read_only=True)
+    estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
+    compra_detalle = serializers.SerializerMethodField()
+    solicitante_detalle = serializers.SerializerMethodField()
+    resuelto_por_detalle = serializers.SerializerMethodField()
+    dias_esperando = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SolicitudCompra
+        fields = [
+            'id',
+            'compra',
+            'compra_detalle',
+            'tipo',
+            'tipo_detalle',
+            'estado',
+            'estado_detalle',
+            'motivo',
+            'solicitante',
+            'solicitante_detalle',
+            'fecha_solicitud',
+            'resuelto_por',
+            'resuelto_por_detalle',
+            'fecha_resolucion',
+            'motivo_rechazo',
+            'dias_esperando',
+        ]
+        read_only_fields = fields
+
+    @staticmethod
+    def _persona(usuario):
+        if usuario is None:
+            return None
+        nombre = usuario.get_full_name() or usuario.username
+        return {'username': usuario.username, 'nombre': nombre}
+
+    def get_compra_detalle(self, obj):
+        compra = obj.compra
+        return {
+            'id': compra.id,
+            'proveedor': (
+                str(compra.proveedor) if compra.proveedor else 'Sin proveedor'
+            ),
+            'fecha_compra': compra.fecha_compra.isoformat(),
+            'monto_compra': str(compra.monto_compra),
+            'estado': compra.estado,
+            'estado_detalle': compra.get_estado_display(),
+            'estado_entrega': compra.estado_entrega,
+            'estado_entrega_detalle': compra.get_estado_entrega_display(),
+            'recibida': compra.estado_entrega == Compra.EstadoEntrega.RECIBIDA,
+        }
+
+    def get_solicitante_detalle(self, obj):
+        return self._persona(obj.solicitante)
+
+    def get_resuelto_por_detalle(self, obj):
+        return self._persona(obj.resuelto_por)
+
+    def get_dias_esperando(self, obj):
+        if obj.estado != SolicitudCompra.EstadoSolicitud.PENDIENTE:
+            return 0
+        return max(0, (timezone.now() - obj.fecha_solicitud).days)
+
+
+class SolicitudCompraCreateSerializer(serializers.Serializer):
+    tipo = serializers.ChoiceField(
+        choices=SolicitudCompra.TipoSolicitud.choices,
+        default=SolicitudCompra.TipoSolicitud.PAGO,
+    )
+    motivo = serializers.CharField()
+
+    def validate_motivo(self, value):
+        texto = str(value or '').strip()
+        if len(texto) < 10:
+            raise serializers.ValidationError(
+                'Explicá el motivo de la solicitud (10 caracteres o más).'
+            )
+        return texto
+
+
+class ResolverSolicitudSerializer(serializers.Serializer):
+    ACCIONES = ('PAGAR', 'ANULAR', 'RECHAZAR')
+
+    accion = serializers.ChoiceField(choices=ACCIONES)
+    pagos = PagoCompraItemSerializer(many=True, required=False, allow_empty=False)
+    motivo = serializers.CharField(required=False, allow_blank=True, default='')
+    clave = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default='',
+        max_length=64,
+        help_text='Clave de idempotencia: reintentar la misma clave no paga dos veces.',
+    )
+
+    def validate(self, attrs):
+        accion = attrs['accion']
+        if accion == 'PAGAR' and not attrs.get('pagos'):
+            raise serializers.ValidationError(
+                {'pagos': 'Indicá al menos un método de pago.'}
+            )
+        if accion == 'RECHAZAR':
+            motivo = str(attrs.get('motivo') or '').strip()
+            if len(motivo) < 10:
+                raise serializers.ValidationError(
+                    {'motivo': 'Explicá por qué se rechaza (10 caracteres o más).'}
+                )
+            attrs['motivo'] = motivo
+        return attrs
 
 
 # =============================================================================

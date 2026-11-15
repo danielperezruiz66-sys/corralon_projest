@@ -64,6 +64,10 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
         .select_related('sucursal_caja__sucursal')
         .get(pk=seccion_caja.pk)
     )
+    if seccion_caja.estado == SeccionCaja.EstadoSeccion.PAUSADA:
+        raise ValueError(
+            'La sección de caja está en pausa: primero hay que reanudarla.'
+        )
     if seccion_caja.estado != SeccionCaja.EstadoSeccion.ABIERTA:
         raise ValueError('La seccion de caja no esta abierta.')
 

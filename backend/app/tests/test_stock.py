@@ -4,6 +4,8 @@ from app.models import (
     DetalleStock,
     MovimientoStock,
     ProductoXSucursal,
+    Stock,
+    Sucursal,
 )
 
 from .base import BaseCorralonTestCase
@@ -299,3 +301,61 @@ class StockApiTests(BaseCorralonTestCase):
 
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('items', respuesta.data)
+
+    def test_cualquier_rol_ve_el_stock_de_todas_las_sucursales(self):
+        """La disponibilidad es estratégica: se ve aunque no sea la sucursal."""
+        otra = Sucursal.objects.create(
+            empresa=self.empresa,
+            ubicacion=self.ubicacion,
+            nombre='Sucursal Norte',
+        )
+        Stock.objects.create(
+            producto=self.producto,
+            sucursal=otra,
+            cantidad=Decimal('25.000'),
+            cant_negativa_max=Decimal('-10.000'),
+        )
+
+        for user in (
+            self.user_cajero,
+            self.user_vendedor,
+            self.user_deposito,
+            self.user_gerente,
+        ):
+            with self.subTest(rol=user.username):
+                self.autenticar(user)
+
+                respuesta = self.client.get('/api/stocks/')
+
+                self.assertEqual(respuesta.status_code, 200)
+                self.assertEqual(respuesta.data['count'], 3)
+                self.assertEqual(
+                    {item['sucursal_detalle'] for item in respuesta.data['results']},
+                    {'Central', 'Sucursal Norte'},
+                )
+
+    def test_el_filtro_por_sucursal_sigue_acotando_el_stock(self):
+        otra = Sucursal.objects.create(
+            empresa=self.empresa,
+            ubicacion=self.ubicacion,
+            nombre='Sucursal Norte',
+        )
+        Stock.objects.create(
+            producto=self.producto,
+            sucursal=otra,
+            cantidad=Decimal('25.000'),
+            cant_negativa_max=Decimal('-10.000'),
+        )
+        self.autenticar(self.user_vendedor)
+
+        respuesta = self.client.get(
+            '/api/stocks/',
+            {'sucursal': self.sucursal.id},
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['count'], 2)
+        self.assertEqual(
+            {item['sucursal_detalle'] for item in respuesta.data['results']},
+            {'Central'},
+        )

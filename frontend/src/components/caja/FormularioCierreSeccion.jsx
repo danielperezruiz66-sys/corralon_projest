@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Swal from 'sweetalert2'
 import { IconCash, IconLoader2, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
+import { nuevaClave } from '../../utils/clave'
 import { formatearMoneda } from '../../utils/formato'
 import MensajeError from '../common/MensajeError.jsx'
 import { validarNumero } from '../../utils/validaciones'
@@ -26,6 +27,8 @@ export default function FormularioCierreSeccion({
   const [errorCarga, setErrorCarga] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
+  // Clave de idempotencia: si el cierre se reintenta, no repite el arqueo.
+  const [claveCierre] = useState(() => nuevaClave())
 
   useEffect(() => {
     let vigente = true
@@ -111,6 +114,7 @@ export default function FormularioCierreSeccion({
       const cerrada = await pedir(`/secciones-caja/${seccion.id}/cerrar/`, {
         method: 'POST',
         body: JSON.stringify({
+          clave: claveCierre,
           montos_reales: montosReales,
           observaciones: observaciones.trim() || null,
         }),

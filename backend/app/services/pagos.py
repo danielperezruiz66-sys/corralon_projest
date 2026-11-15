@@ -26,6 +26,7 @@ from ..models import (
     MetodoPago,
     MetodoPagoXCompra,
     MetodoPagoXVenta,
+    SolicitudCompra,
     Venta,
 )
 
@@ -55,10 +56,15 @@ def _pagado(objeto):
 
 
 @transaction.atomic
-def registrar_pago_venta(venta, metodo_pago, monto):
+def registrar_pago_venta(venta, metodo_pago, monto, clave=''):
     venta = Venta.objects.select_for_update().get(pk=venta.pk)
     if venta.estado == Venta.EstadoVenta.ANULADA:
         raise ValueError('No se puede registrar un pago sobre una venta anulada.')
+
+    if clave:
+        existentes = list(MetodoPagoXVenta.objects.filter(venta=venta, clave=clave))
+        if existentes:
+            return existentes[0]
 
     metodo_pago = _metodo(metodo_pago)
     monto = _validar_monto(monto)
@@ -74,20 +80,30 @@ def registrar_pago_venta(venta, metodo_pago, monto):
         venta=venta,
         metodo_pago=metodo_pago,
         monto_pagado=monto,
+        clave=clave,
     )
 
 
 @transaction.atomic
-def registrar_pagos_venta(venta, pagos, confirmar=False):
+def registrar_pagos_venta(venta, pagos, confirmar=False, clave=''):
     """Registra varios métodos de pago para una venta en una sola transaccion.
 
     Si `confirmar` es True, exige que la suma de los pagos cubra el saldo y
     deja la venta Confirmada. Si es False, la venta sigue Pendiente aunque
     los pagos cubran el total.
+
+    `clave` es la clave de idempotencia: si la misma operacion se reintenta,
+    se devuelven los pagos ya registrados en vez de cobrarlos dos veces.
     """
     venta = Venta.objects.select_for_update().get(pk=venta.pk)
     if venta.estado == Venta.EstadoVenta.ANULADA:
         raise ValueError('No se puede registrar un pago sobre una venta anulada.')
+
+    if clave:
+        existentes = list(MetodoPagoXVenta.objects.filter(venta=venta, clave=clave))
+        if existentes:
+            return existentes, venta
+
     if venta.estado == Venta.EstadoVenta.CONFIRMADA:
         raise ValueError('La venta ya está confirmada.')
 
@@ -120,6 +136,7 @@ def registrar_pagos_venta(venta, pagos, confirmar=False):
             venta=venta,
             metodo_pago=metodo_pago,
             monto_pagado=monto,
+            clave=clave,
         )
         for metodo_pago, monto in preparados
     ]
@@ -132,15 +149,43 @@ def registrar_pagos_venta(venta, pagos, confirmar=False):
 
 
 @transaction.atomic
-def registrar_pagos_compra(compra, pagos):
+def registrar_pagos_compra(compra, pagos, bypass_solicitud=False, clave=''):
     """Registra varios metodos de pago para una compra en una sola transaccion.
 
     La compra queda `PARCIAL` si los pagos no cubren el total y `PAGADA` cuando
     lo cubren. La recepcion de la mercaderia no interviene en este estado.
+
+    Si la compra tiene una solicitud de pago pendiente, el pago directo queda
+    bloqueado: hay que resolver o rechazar la solicitud primero.
+
+    `clave` es la clave de idempotencia: si la misma operacion se reintenta,
+    se devuelven los pagos ya registrados en vez de pagarlos dos veces.
     """
     compra = Compra.objects.select_for_update().get(pk=compra.pk)
     if compra.estado == Compra.EstadoCompra.ANULADA:
         raise ValueError('No se puede registrar un pago sobre una compra anulada.')
+
+    if clave:
+        existentes = list(
+            MetodoPagoXCompra.objects.filter(compra=compra, clave=clave)
+        )
+        if existentes:
+            return existentes, compra
+
+    if not bypass_solicitud:
+        pendiente = (
+            SolicitudCompra.objects.filter(
+                compra=compra,
+                estado=SolicitudCompra.EstadoSolicitud.PENDIENTE,
+            )
+            .order_by('fecha_solicitud')
+            .first()
+        )
+        if pendiente is not None:
+            raise ValueError(
+                f'La compra tiene la solicitud #{pendiente.id} pendiente. '
+                'Resolvela o rechazala antes de pagar.'
+            )
 
     if not pagos:
         raise ValueError('Registrá al menos un pago.')
@@ -169,6 +214,7 @@ def registrar_pagos_compra(compra, pagos):
             compra=compra,
             metodo_pago=metodo_pago,
             monto_pagado=monto,
+            clave=clave,
         )
         for metodo_pago, monto in preparados
     ]
@@ -182,9 +228,10 @@ def registrar_pagos_compra(compra, pagos):
 
 
 @transaction.atomic
-def registrar_pago_compra(compra, metodo_pago, monto):
+def registrar_pago_compra(compra, metodo_pago, monto, clave=''):
     creados, _ = registrar_pagos_compra(
         compra,
         [{'metodo_pago': metodo_pago, 'monto_pagado': monto}],
+        clave=clave,
     )
     return creados[0]

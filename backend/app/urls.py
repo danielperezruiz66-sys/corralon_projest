@@ -101,6 +101,11 @@ router.register(
     views.MetodoPagoXCompraViewSet,
     basename='metodo-pago-compra',
 )
+router.register(
+    'solicitudes-compras',
+    views.SolicitudCompraViewSet,
+    basename='solicitud-compra',
+)
 
 urlpatterns = [
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),

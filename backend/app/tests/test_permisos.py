@@ -1,3 +1,10 @@
+from datetime import timedelta
+from decimal import Decimal
+
+from django.utils import timezone
+
+from app.models import Caja, SeccionCaja, Sucursal, SucursalXCaja
+
 from .base import BaseCorralonTestCase
 
 
@@ -25,6 +32,128 @@ class PermisoLecturaTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.data['empleado']['legajo'], '0002')
         self.assertEqual([rol['codigo'] for rol in respuesta.data['roles']], ['CA'])
         self.assertEqual(respuesta.data['codigos'], ['CA'])
+
+
+class AlcanceCajaTests(BaseCorralonTestCase):
+    """Cada rol ve solo las secciones de caja que le corresponden."""
+
+    def _seccion_de_un_colega(self):
+        """Otra sección abierta en la misma sucursal, de otro empleado."""
+        otra_caja = Caja.objects.create(nombre='Caja 2')
+        asignacion = SucursalXCaja.objects.create(
+            sucursal=self.sucursal,
+            caja=otra_caja,
+        )
+        SeccionCaja.objects.create(
+            sucursal_caja=asignacion,
+            empleado=self.emp_cajero,
+            fecha_hora_apertura=timezone.now(),
+            monto_inicial=Decimal('500.00'),
+        )
+
+    def _seccion_en_otra_sucursal(self):
+        otra = Sucursal.objects.create(
+            empresa=self.empresa,
+            ubicacion=self.ubicacion,
+            nombre='Sucursal Norte',
+        )
+        asignacion = SucursalXCaja.objects.create(
+            sucursal=otra,
+            caja=self.caja,
+        )
+        SeccionCaja.objects.create(
+            sucursal_caja=asignacion,
+            empleado=self.emp_vendedor,
+            fecha_hora_apertura=timezone.now(),
+            monto_inicial=Decimal('500.00'),
+        )
+        return otra
+
+    def test_el_cajero_solo_ve_sus_propias_secciones(self):
+        self.autenticar(self.user_cajero2)
+
+        respuesta = self.client.get('/api/secciones-caja/')
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['count'], 1)
+        self.assertEqual(
+            respuesta.data['results'][0]['empleado'],
+            self.emp_cajero2.id,
+        )
+
+    def test_el_cajero_no_ve_las_secciones_de_sus_colegas(self):
+        self._seccion_de_un_colega()
+        self.autenticar(self.user_cajero2)
+
+        respuesta = self.client.get('/api/secciones-caja/')
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['count'], 1)
+        self.assertEqual(
+            respuesta.data['results'][0]['empleado'],
+            self.emp_cajero2.id,
+        )
+
+    def test_el_cajero_no_puede_consultar_otra_sucursal(self):
+        otra = self._seccion_en_otra_sucursal()
+        self.autenticar(self.user_cajero)
+
+        respuesta = self.client.get(
+            '/api/secciones-caja/',
+            {'sucursal': otra.id},
+        )
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_el_gerente_ve_las_secciones_de_su_sucursal(self):
+        self._seccion_en_otra_sucursal()
+        self.autenticar(self.user_gerente)
+
+        respuesta = self.client.get('/api/secciones-caja/')
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['count'], 1)
+
+    def test_el_admin_ve_todas_las_secciones(self):
+        self._seccion_en_otra_sucursal()
+        self.autenticar(self.admin)
+
+        respuesta = self.client.get('/api/secciones-caja/')
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['count'], 2)
+
+    def test_el_dashboard_del_cajero_solo_muestra_sus_cajas(self):
+        self._seccion_de_un_colega()
+        self.autenticar(self.user_cajero2)
+
+        respuesta = self.client.get('/api/dashboard/')
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['caja']['abiertas'], 1)
+        self.assertEqual(len(respuesta.data['cajas_abiertas']), 1)
+        self.assertEqual(
+            respuesta.data['cajas_abiertas'][0]['empleado'],
+            str(self.emp_cajero2),
+        )
+
+    def test_empleados_se_pueden_filtrar_por_rol(self):
+        self.autenticar(self.user_gerente)
+
+        respuesta = self.client.get('/api/empleados/', {'rol': 'CA'})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertGreaterEqual(respuesta.data['count'], 1)
+        for empleado in respuesta.data['results']:
+            self.assertIn('CA', empleado['roles_detalle'])
+
+    def test_el_filtro_por_rol_devuelve_lista_vacia_si_no_hay_coincidencias(self):
+        self.autenticar(self.user_gerente)
+
+        respuesta = self.client.get('/api/empleados/', {'rol': 'ZZ'})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['count'], 0)
 
 
 class PermisoEscrituraTests(BaseCorralonTestCase):
@@ -127,7 +256,67 @@ class PermisoEscrituraTests(BaseCorralonTestCase):
     def test_compras_las_hace_el_encargado_de_deposito(self):
         self.assertEqual(self.crear_compra(user=self.user_deposito).status_code, 201)
         self.assertEqual(self.crear_compra(user=self.user_gerente).status_code, 201)
-        self.assertEqual(self.crear_compra(user=self.user_vendedor).status_code, 403)
+        self.assertEqual(self.crear_compra(user=self.user_cajero).status_code, 201)
+        self.assertEqual(self.crear_compra(user=self.user_vendedor).status_code, 201)
+        self.assertEqual(self.crear_compra(user=self.user_sin_rol).status_code, 403)
+
+    def test_cajero_y_vendedor_operan_compras_pero_no_las_gestionan(self):
+        for user in (self.user_cajero, self.user_vendedor):
+            with self.subTest(rol=user.username):
+                compra = self.crear_compra(user=user)
+                self.assertEqual(compra.status_code, 201)
+                compra_id = compra.data['id']
+
+                self.autenticar(user)
+                en_camino = self.client.post(
+                    f'/api/compras/{compra_id}/en-camino/',
+                    {'fecha_estimada_llegada': '2026-12-01'},
+                    format='json',
+                )
+                self.assertEqual(en_camino.status_code, 200)
+
+                recibir = self.client.post(f'/api/compras/{compra_id}/recibir/')
+                self.assertEqual(recibir.status_code, 200)
+
+                pago = self.client.post(
+                    f'/api/compras/{compra_id}/pagar/',
+                    {
+                        'pagos': [
+                            {
+                                'metodo_pago': self.efectivo.id,
+                                'monto_pagado': '100.00',
+                            }
+                        ],
+                    },
+                    format='json',
+                )
+                self.assertEqual(pago.status_code, 403)
+
+                anular = self.client.post(
+                    f'/api/compras/{compra_id}/anular/',
+                    {'motivo': 'Compra de prueba'},
+                    format='json',
+                )
+                self.assertEqual(anular.status_code, 403)
+
+    def test_cajero_y_vendedor_consultan_proveedores_pero_no_los_editan(self):
+        for user in (self.user_cajero, self.user_vendedor):
+            with self.subTest(rol=user.username):
+                self.autenticar(user)
+                lectura = self.client.get('/api/proveedores/')
+                self.assertEqual(lectura.status_code, 200)
+
+                escritura = self.client.post(
+                    '/api/proveedores/',
+                    {
+                        'cuit': '30722222222',
+                        'nombre': 'Proveedor sin permiso',
+                        'razon_social': 'Proveedor sin permiso SA',
+                        'sucursales': [self.sucursal.id],
+                    },
+                    format='json',
+                )
+                self.assertEqual(escritura.status_code, 403)
 
     def test_cancelar_venta_no_lo_puede_hacer_un_vendedor(self):
         venta = self.crear_venta(user=self.user_vendedor)

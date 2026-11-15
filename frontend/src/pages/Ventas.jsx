@@ -27,6 +27,7 @@ import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
+import { nuevaClave } from '../utils/clave'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
 
@@ -122,6 +123,7 @@ export default function Ventas() {
   const [error, setError] = useState('')
   const [detalle, setDetalle] = useState(null)
   const [cobro, setCobro] = useState(null)
+  const [claveCobro, setClaveCobro] = useState('')
   const [metodos, setMetodos] = useState([])
   const [pagosCobro, setPagosCobro] = useState([])
   const [confirmarCobro, setConfirmarCobro] = useState(false)
@@ -463,6 +465,7 @@ export default function Ventas() {
       nuevoPago(metodoInicial, saldo > 0 ? saldo.toFixed(2) : ''),
     ])
     setConfirmarCobro(false)
+    setClaveCobro(nuevaClave())
     setCobro(venta)
     setDetalle(null)
   }
@@ -513,6 +516,7 @@ export default function Ventas() {
       await pedir(`/ventas/${cobro.id}/cobrar/`, {
         method: 'POST',
         body: JSON.stringify({
+          clave: claveCobro,
           pagos: pagosCobro.map((pago) => ({
             metodo_pago: Number(pago.metodo),
             monto_pagado: montoPago(pago.monto).toFixed(2),

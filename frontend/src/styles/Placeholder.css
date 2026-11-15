@@ -54,3 +54,78 @@ PANTALLAS INFORMATIVAS - FER-CONS
   background-color: #fef3c7;
   color: var(--color-aviso);
 }
+
+/* ============================================
+FACTURACION
+============================================ */
+
+.facturacion-contenido {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  align-items: start;
+}
+
+.facturacion-panel {
+  border-radius: 1.5rem;
+  background-color: #ffffff;
+  padding: 1.75rem;
+  box-shadow: 0 10px 24px rgba(15, 42, 48, 0.06);
+}
+
+.facturacion-panel h2 {
+  margin: 1rem 0 0.5rem;
+  color: var(--color-oscuro);
+  font-size: 1.25rem;
+}
+
+.facturacion-panel p {
+  margin: 0 0 0.9rem;
+  color: rgba(15, 42, 48, 0.75);
+  line-height: 1.6;
+}
+
+.facturacion-icono {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  place-items: center;
+  border-radius: 1rem;
+  background-color: var(--color-tarjeta);
+  color: var(--color-sidebar);
+}
+
+.facturacion-icono-bloqueado {
+  background-color: #fef3c7;
+  color: var(--color-aviso);
+}
+
+.facturacion-cargando {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.facturacion-datos {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin-bottom: 1rem;
+}
+
+.facturacion-datos div {
+  display: flex;
+  flex-direction: column;
+}
+
+.facturacion-datos span {
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.facturacion-datos strong {
+  color: var(--color-oscuro);
+  font-size: 0.95rem;
+}

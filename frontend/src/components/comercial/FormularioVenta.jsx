@@ -49,6 +49,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   const [modalCliente, setModalCliente] = useState(false)
   const [items, setItems] = useState([])
   const [stocks, setStocks] = useState({})
+  const [disponibilidad, setDisponibilidad] = useState({})
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -139,28 +140,45 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   )
 
   useEffect(() => {
-    if (!sucursalActual) {
-      return undefined
-    }
-
     let vigente = true
-    pedirTodas(`/stocks/?sucursal=${sucursalActual}`)
-      .then((datos) => {
+
+    const cargarStocks = async () => {
+      try {
+        const [propios, todos] = await Promise.all([
+          sucursalActual
+            ? pedirTodas(`/stocks/?sucursal=${sucursalActual}`)
+            : [],
+          pedirTodas('/stocks/'),
+        ])
         if (!vigente) {
           return
         }
         const mapa = {}
-        datos.forEach((stock) => {
+        propios.forEach((stock) => {
           mapa[stock.producto] = stock
         })
         setStocks(mapa)
-      })
-      .catch(() => {
+        // Disponibilidad por producto en todas las sucursales: sirve para
+        // orientar al vendedor cuando no hay stock en la suya.
+        const porProducto = {}
+        todos.forEach((stock) => {
+          ;(porProducto[stock.producto] ??= []).push({
+            sucursal_id: stock.sucursal,
+            sucursal_detalle: stock.sucursal_detalle,
+            cantidad: stock.cantidad,
+          })
+        })
+        setDisponibilidad(porProducto)
+      } catch {
         if (vigente) {
           setStocks({})
           setProductos([])
+          setDisponibilidad({})
         }
-      })
+      }
+    }
+
+    cargarStocks()
 
     return () => {
       vigente = false
@@ -567,6 +585,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
               productos={[]}
               onBuscar={buscarProductos}
               stocks={stocks}
+              disponibilidad={disponibilidad}
               mostrarStock={Boolean(sucursalActual)}
               onAgregar={agregarProducto}
             />

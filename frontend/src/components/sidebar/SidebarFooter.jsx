@@ -1,9 +1,9 @@
 import { NavLink } from 'react-router-dom'
-import { IconKey, IconLogout } from '@tabler/icons-react'
+import { IconCash, IconKey, IconLogout } from '@tabler/icons-react'
 import { useAuth } from '../../context/auth-context'
 import { iniciales } from '../../utils/formato'
 
-export default function SidebarFooter({ abierto, onLogoutClick }) {
+export default function SidebarFooter({ abierto, cajaAbierta, onLogoutClick }) {
   const { user } = useAuth()
 
   return (
@@ -17,6 +17,22 @@ export default function SidebarFooter({ abierto, onLogoutClick }) {
           </span>
         )}
       </div>
+
+      {cajaAbierta && (
+        <NavLink
+          to="/caja"
+          className="sidebar-caja-abierta"
+          title={`Sección #${cajaAbierta.id} · ${cajaAbierta.caja_detalle}`}
+        >
+          <IconCash size={abierto ? 20 : 22} />
+          {abierto && (
+            <span>
+              {cajaAbierta.estado === 'PA' ? 'Caja en pausa' : 'Caja abierta'}
+              <small>Sección #{cajaAbierta.id}</small>
+            </span>
+          )}
+        </NavLink>
+      )}
 
       <NavLink
         to="/cambiar-contrasena"

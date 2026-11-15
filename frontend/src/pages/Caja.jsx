@@ -8,6 +8,8 @@ import {
   IconEye,
   IconLoader2,
   IconPencil,
+  IconPlayerPause,
+  IconPlayerPlay,
   IconPlus,
   IconSearch,
   IconSettings,
@@ -48,18 +50,20 @@ const TABS = [
 const FILTROS_ESTADO = [
   { id: '', etiqueta: 'Todas' },
   { id: 'AB', etiqueta: 'Abiertas' },
+  { id: 'PA', etiqueta: 'En pausa' },
   { id: 'CE', etiqueta: 'Cerradas' },
   { id: 'AU', etiqueta: 'Auditadas' },
 ]
 
 const CLASE_ESTADO = {
   AB: 'estado-ab',
+  PA: 'estado-pa',
   CE: 'estado-ce',
   AU: 'estado-au',
 }
 
 export default function Caja() {
-  const { puedeEscribir } = useAuth()
+  const { user, puedeEscribir } = useAuth()
   const { sucursalActiva, sucursalDetalle } = useSucursal()
   const puedeOperar = puedeEscribir(['AD', 'GE', 'CA'])
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
@@ -302,6 +306,105 @@ export default function Caja() {
       showConfirmButton: false,
     })
     refrescar()
+  }
+
+  function esDueño(seccion) {
+    const id = user?.empleado?.id
+    return Boolean(id) && Number(seccion.empleado) === Number(id)
+  }
+
+  async function pausarSeccion(seccion) {
+    const resultado = await Swal.fire({
+      title: `¿Pausar la sección #${seccion.id}?`,
+      text: 'La caja queda bloqueada: no se pueden registrar ventas ni pagos hasta que la reanudes.',
+      icon: 'warning',
+      input: 'textarea',
+      inputLabel: 'Motivo de la pausa *',
+      inputPlaceholder: 'Indicá por qué dejás la caja en pausa',
+      inputAttributes: { maxlength: 500 },
+      showCancelButton: true,
+      confirmButtonColor: '#6d28d9',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Sí, pausar',
+      cancelButtonText: 'Cancelar',
+      inputValidator: (valor) => {
+        if (!valor || valor.trim().length < 10) {
+          return 'Explicá el motivo (10 caracteres o más).'
+        }
+        return null
+      },
+    })
+    if (!resultado.isConfirmed) {
+      return
+    }
+
+    try {
+      await pedir(`/secciones-caja/${seccion.id}/pausar/`, {
+        method: 'POST',
+        body: JSON.stringify({ motivo: resultado.value }),
+      })
+      Swal.fire({
+        icon: 'success',
+        title: 'Sección en pausa',
+        text: 'Quedó registrada la pausa con su motivo.',
+        timer: 1800,
+        showConfirmButton: false,
+      })
+      refrescar()
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo pausar la sección',
+        text: e.message,
+        confirmButtonColor: '#4a9da8',
+      })
+    }
+  }
+
+  async function reanudarSeccion(seccion) {
+    const resultado = await Swal.fire({
+      title: `¿Reanudar la sección #${seccion.id}?`,
+      text: 'Poné tu contraseña para volver a abrir la caja.',
+      icon: 'question',
+      input: 'password',
+      inputLabel: 'Tu contraseña *',
+      inputAttributes: { autocapitalize: 'off', autocomplete: 'current-password' },
+      showCancelButton: true,
+      confirmButtonColor: '#4a9da8',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Reanudar',
+      cancelButtonText: 'Cancelar',
+      inputValidator: (valor) => {
+        if (!valor) {
+          return 'Ingresá tu contraseña.'
+        }
+        return null
+      },
+    })
+    if (!resultado.isConfirmed) {
+      return
+    }
+
+    try {
+      await pedir(`/secciones-caja/${seccion.id}/reanudar/`, {
+        method: 'POST',
+        body: JSON.stringify({ clave: resultado.value }),
+      })
+      Swal.fire({
+        icon: 'success',
+        title: 'Sección reanudada',
+        timer: 1600,
+        showConfirmButton: false,
+      })
+      refrescar()
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo reanudar la sección',
+        text: e.message,
+        confirmButtonColor: '#4a9da8',
+      })
+    }
   }
 
   function guardadoCaja(_, esEdicion) {
@@ -733,6 +836,26 @@ export default function Caja() {
                             {puedeOperar && item.estado === 'AB' && (
                               <button
                                 type="button"
+                                className="boton-icono"
+                                onClick={() => pausarSeccion(item)}
+                                title="Pausar seccion"
+                              >
+                                <IconPlayerPause size={17} />
+                              </button>
+                            )}
+                            {item.estado === 'PA' && esDueño(item) && (
+                              <button
+                                type="button"
+                                className="boton-icono boton-icono-exito"
+                                onClick={() => reanudarSeccion(item)}
+                                title="Reanudar seccion"
+                              >
+                                <IconPlayerPlay size={17} />
+                              </button>
+                            )}
+                            {puedeOperar && item.estado === 'AB' && (
+                              <button
+                                type="button"
                                 className="boton-icono boton-icono-exito"
                                 onClick={() => setCierreSeccion(item)}
                                 title="Cerrar seccion"
@@ -954,6 +1077,10 @@ export default function Caja() {
         <DetalleSeccionCaja
           seccion={detalleSeccion}
           puedeAuditar={puedeGestionar}
+          puedePausar={puedeOperar}
+          puedeReanudar={esDueño(detalleSeccion)}
+          onPausar={pausarSeccion}
+          onReanudar={reanudarSeccion}
           onCerrar={() => setDetalleSeccion(null)}
           onAuditado={() => {
             setDetalleSeccion(null)

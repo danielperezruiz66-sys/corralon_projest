@@ -451,6 +451,7 @@ class CajaApiTests(BaseCorralonTestCase):
         self.assertIn('no esta asignado', respuesta.data['detail'])
 
     def test_listado_de_secciones_filtra_por_caja_y_sucursal(self):
+        self.autenticar(self.admin)
         respuesta = self.client.get(
             f'/api/secciones-caja/?caja={self.caja.id}&sucursal={self.sucursal.id}'
         )
@@ -471,6 +472,8 @@ class CajaApiTests(BaseCorralonTestCase):
             format='json',
         )
 
+        # El teorico lo consulta el dueno de la seccion.
+        self.autenticar(self.user_cajero2)
         respuesta = self.client.get(
             f'/api/secciones-caja/{self.seccion.id}/teorico/'
         )
@@ -485,6 +488,7 @@ class CajaApiTests(BaseCorralonTestCase):
         self.assertTrue(fila['es_efectivo'])
 
     def test_teorico_rechaza_seccion_cerrada(self):
+        self.autenticar(self.user_cajero2)
         self.client.post(
             f'/api/secciones-caja/{self.seccion.id}/cerrar/',
             {'montos_reales': {str(self.efectivo.id): '1000.00'}},
@@ -550,6 +554,8 @@ class CajaApiTests(BaseCorralonTestCase):
             format='json',
         )
 
+        # El cierre lo hace el dueño de la sección.
+        self.autenticar(self.user_cajero2)
         respuesta = self.client.post(
             f'/api/secciones-caja/{self.seccion.id}/cerrar/',
             {'montos_reales': {str(self.efectivo.id): '1100.00'}},
@@ -567,6 +573,7 @@ class CajaApiTests(BaseCorralonTestCase):
         )
 
     def test_cerrar_seccion_guarda_la_diferencia(self):
+        self.autenticar(self.user_cajero2)
         respuesta = self.client.post(
             f'/api/secciones-caja/{self.seccion.id}/cerrar/',
             {
@@ -587,6 +594,7 @@ class CajaApiTests(BaseCorralonTestCase):
         )
 
     def test_cerrar_seccion_con_diferencia_sin_observaciones_lleva_nota_del_sistema(self):
+        self.autenticar(self.user_cajero2)
         respuesta = self.client.post(
             f'/api/secciones-caja/{self.seccion.id}/cerrar/',
             {'montos_reales': {str(self.efectivo.id): '990.00'}},
@@ -600,6 +608,7 @@ class CajaApiTests(BaseCorralonTestCase):
         )
 
     def test_cerrar_seccion_con_sobrante_lleva_nota_del_sistema(self):
+        self.autenticar(self.user_cajero2)
         respuesta = self.client.post(
             f'/api/secciones-caja/{self.seccion.id}/cerrar/',
             {'montos_reales': {str(self.efectivo.id): '1100.00'}},
@@ -613,6 +622,7 @@ class CajaApiTests(BaseCorralonTestCase):
         )
 
     def test_no_se_puede_cerrar_dos_veces(self):
+        self.autenticar(self.user_cajero2)
         self.client.post(
             f'/api/secciones-caja/{self.seccion.id}/cerrar/',
             {'montos_reales': {str(self.efectivo.id): '1000.00'}},

@@ -234,6 +234,8 @@ class PagoCompraTests(BaseCorralonTestCase):
         compra = self.crear_compra(cantidad='10.000')
         compra_id = compra.data['id']
         self.assertEqual(Decimal(compra.data['monto_compra']), Decimal('1000.00'))
+        # Pagar compras es de administracion (AD/GE).
+        self.autenticar(self.user_gerente)
 
         parcial = self.client.post(
             '/api/metodos-pago-compras/',

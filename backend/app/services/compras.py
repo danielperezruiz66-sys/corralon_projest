@@ -18,14 +18,132 @@ from ..models import (
     ProductoXProveedor,
     Proveedor,
     SeccionCaja,
+    SolicitudCompra,
     Sucursal,
 )
 from ..utils import validar_cantidad_por_unidad
+from . import pagos as pagos_service
 from . import stock as stock_service
 
 
 def _decimal(valor):
     return Decimal(str(valor))
+
+
+def _solicitud_pendiente(compra):
+    """Solicitud abierta de la compra, si la hay."""
+    return (
+        SolicitudCompra.objects.filter(
+            compra=compra,
+            estado=SolicitudCompra.EstadoSolicitud.PENDIENTE,
+        )
+        .order_by('fecha_solicitud')
+        .first()
+    )
+
+
+@transaction.atomic
+def solicitar_compra(compra, tipo, motivo, usuario):
+    """Crea la solicitud de pago o anulacion de una compra.
+
+    Queda a la espera de que administracion (AD/GE) la resuelva. Mientras
+    exista una solicitud pendiente la compra no se puede volver a solicitar,
+    pagar ni anular.
+    """
+    motivo = (motivo or '').strip()
+    if len(motivo) < 10:
+        raise ValueError(
+            'Explicá el motivo de la solicitud (10 caracteres o más).'
+        )
+
+    compra = Compra.objects.select_for_update().get(pk=compra.pk)
+    if compra.estado == Compra.EstadoCompra.ANULADA:
+        raise ValueError('La compra está anulada.')
+
+    if tipo == SolicitudCompra.TipoSolicitud.ANULACION:
+        if compra.estado_entrega == Compra.EstadoEntrega.RECIBIDA:
+            raise ValueError('No se puede anular una compra recibida.')
+        if compra.pagos.exists():
+            raise ValueError(
+                'No se puede anular una compra con pagos registrados.'
+            )
+    else:
+        tipo = SolicitudCompra.TipoSolicitud.PAGO
+
+    pendiente = _solicitud_pendiente(compra)
+    if pendiente is not None:
+        raise ValueError(
+            f'La compra ya tiene la solicitud #{pendiente.id} pendiente.'
+        )
+
+    return SolicitudCompra.objects.create(
+        compra=compra,
+        tipo=tipo,
+        estado=SolicitudCompra.EstadoSolicitud.PENDIENTE,
+        motivo=motivo,
+        solicitante=usuario,
+    )
+
+
+@transaction.atomic
+def resolver_solicitud(
+    solicitud,
+    accion,
+    usuario,
+    pagos=None,
+    motivo_rechazo='',
+    clave='',
+):
+    """Resuelve la solicitud: paga, anula o rechaza.
+
+    Pagar y anular ocurren en la misma transaccion que marcar la solicitud
+    como resuelta: si el pago falla, la solicitud sigue pendiente.
+    """
+    solicitud = (
+        SolicitudCompra.objects.select_for_update()
+        .select_related('compra')
+        .get(pk=solicitud.pk)
+    )
+    if solicitud.estado != SolicitudCompra.EstadoSolicitud.PENDIENTE:
+        raise ValueError('La solicitud ya fue resuelta.')
+
+    if accion == 'RECHAZAR':
+        motivo = (motivo_rechazo or '').strip()
+        if len(motivo) < 10:
+            raise ValueError(
+                'Explicá por qué se rechaza (10 caracteres o más).'
+            )
+        solicitud.estado = SolicitudCompra.EstadoSolicitud.RECHAZADA
+        solicitud.motivo_rechazo = motivo
+    elif accion == 'PAGAR':
+        pagos_service.registrar_pagos_compra(
+            solicitud.compra,
+            pagos or [],
+            bypass_solicitud=True,
+            clave=clave,
+        )
+        solicitud.estado = SolicitudCompra.EstadoSolicitud.RESUELTA
+    elif accion == 'ANULAR':
+        anular_compra(
+            solicitud.compra,
+            solicitud.motivo,
+            bypass_solicitud=True,
+        )
+        solicitud.estado = SolicitudCompra.EstadoSolicitud.RESUELTA
+    else:
+        raise ValueError('Acción de resolución inválida.')
+
+    solicitud.resuelto_por = usuario
+    solicitud.fecha_resolucion = timezone.now()
+    solicitud.save(
+        update_fields=[
+            'estado',
+            'resuelto_por',
+            'fecha_resolucion',
+            'motivo_rechazo',
+        ]
+    )
+    return solicitud
 
 
 @transaction.atomic
@@ -124,13 +242,20 @@ def registrar_compra(
 
 
 @transaction.atomic
-def anular_compra(compra, motivo=''):
+def anular_compra(compra, motivo='', bypass_solicitud=False):
     """Anula una compra que todavia no fue recibida ni tiene pagos."""
     motivo = (motivo or '').strip()
     if not motivo:
         raise ValueError('Indicá el motivo de la anulación.')
 
     compra = Compra.objects.select_for_update().get(pk=compra.pk)
+    if not bypass_solicitud:
+        pendiente = _solicitud_pendiente(compra)
+        if pendiente is not None:
+            raise ValueError(
+                f'La compra tiene la solicitud #{pendiente.id} pendiente. '
+                'Resolvela o rechazala antes de anular.'
+            )
     if compra.estado == Compra.EstadoCompra.ANULADA:
         raise ValueError('La compra ya está anulada.')
     if compra.estado_entrega == Compra.EstadoEntrega.RECIBIDA:

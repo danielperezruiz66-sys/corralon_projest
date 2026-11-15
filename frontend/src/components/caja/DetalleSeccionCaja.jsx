@@ -2,6 +2,8 @@ import Swal from 'sweetalert2'
 import {
   IconCheck,
   IconCash,
+  IconPlayerPause,
+  IconPlayerPlay,
   IconPrinter,
   IconX,
 } from '@tabler/icons-react'
@@ -28,8 +30,12 @@ function fechaHoraActual() {
 export default function DetalleSeccionCaja({
   seccion,
   puedeAuditar,
+  puedePausar,
+  puedeReanudar,
   onCerrar,
   onAuditado,
+  onPausar,
+  onReanudar,
 }) {
   const totalSistema = seccion.detalles_cierre.reduce(
     (acumulado, detalle) => acumulado + Number(detalle.monto_sistema),
@@ -326,6 +332,16 @@ export default function DetalleSeccionCaja({
           </div>
         )}
 
+        {seccion.estado === 'PA' && (
+          <div className="caja-detalle-bloque">
+            <h3>En pausa</h3>
+            <p className="caja-observaciones">
+              {seccion.motivo_pausa ||
+                'La caja quedó pausada y no admite ventas ni pagos.'}
+            </p>
+          </div>
+        )}
+
         <div className="comercial-modal-acciones">
           <button
             type="button"
@@ -334,6 +350,26 @@ export default function DetalleSeccionCaja({
           >
             Cerrar
           </button>
+          {puedePausar && seccion.estado === 'AB' && (
+            <button
+              type="button"
+              className="boton-comercial-secundario"
+              onClick={() => onPausar?.(seccion)}
+            >
+              <IconPlayerPause size={17} />
+              Pausar seccion
+            </button>
+          )}
+          {puedeReanudar && seccion.estado === 'PA' && (
+            <button
+              type="button"
+              className="boton-comercial-primario"
+              onClick={() => onReanudar?.(seccion)}
+            >
+              <IconPlayerPlay size={17} />
+              Reanudar seccion
+            </button>
+          )}
           {(seccion.estado === 'CE' || seccion.estado === 'AU') && (
             <button
               type="button"

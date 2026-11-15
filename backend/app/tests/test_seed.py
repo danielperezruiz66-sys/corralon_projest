@@ -184,23 +184,33 @@ class SeedStockTests(TestCase):
         for caja in Caja.objects.all():
             self.assertEqual(caja.sucursales_asignadas.count(), 2)
 
-    def test_cada_sucursal_tiene_cuatro_empleados_con_roles(self):
+    def test_cada_sucursal_tiene_empleados_con_roles(self):
         for sucursal in Sucursal.objects.all():
             empleados = Empleado.objects.filter(
                 sucursales_asignadas__sucursal=sucursal,
                 sucursales_asignadas__estado=True,
             ).distinct()
 
-            self.assertEqual(empleados.count(), 4)
             codigos = set(
                 EmpleadoXRol.objects.filter(
                     empleado__in=empleados,
                     estado='AC',
                 ).values_list('rol__codigo', flat=True)
             )
-            self.assertEqual(codigos, {'AD', 'CA', 'VE', 'ED'})
+            self.assertTrue({'AD', 'CA', 'VE', 'ED'}.issubset(codigos))
 
-        self.assertEqual(Empleado.objects.count(), 8)
+        # Salta Capital suma un gerente de prueba.
+        self.assertEqual(Empleado.objects.count(), 9)
+        gerente = Empleado.objects.get(legajo='0009')
+        self.assertEqual(
+            set(
+                gerente.roles_asignados.filter(estado='AC').values_list(
+                    'rol__codigo',
+                    flat=True,
+                )
+            ),
+            {'GE'},
+        )
 
     def test_productos_tienen_catalogo_costo_y_stock(self):
         self.assertEqual(Producto.objects.count(), 30)

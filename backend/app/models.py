@@ -363,6 +363,7 @@ class SucursalXCaja(models.Model):
 class SeccionCaja(models.Model):
     class EstadoSeccion(models.TextChoices):
         ABIERTA = 'AB', 'Abierta'
+        PAUSADA = 'PA', 'Pausada'
         CERRADA = 'CE', 'Cerrada'
         AUDITADA = 'AU', 'Auditada'
 
@@ -402,6 +403,18 @@ class SeccionCaja(models.Model):
         blank=True,
         help_text='Motivo de la diferencia entre el monto sugerido y el informado.',
     )
+    # Clave de idempotencia del cierre: un reintento no repite el arqueo.
+    clave_cierre = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        db_index=True,
+    )
+    motivo_pausa = models.TextField(
+        blank=True,
+        default='',
+        help_text='Motivo por el que el empleado dejo la seccion en pausa.',
+    )
     estado = models.CharField(
         max_length=2,
         choices=EstadoSeccion.choices,
@@ -417,12 +430,12 @@ class SeccionCaja(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=['sucursal_caja'],
-                condition=models.Q(estado='AB'),
+                condition=models.Q(estado__in=['AB', 'PA']),
                 name='una_seccion_abierta_por_caja_sucursal',
             ),
             models.UniqueConstraint(
                 fields=['empleado'],
-                condition=models.Q(estado='AB'),
+                condition=models.Q(estado__in=['AB', 'PA']),
                 name='una_seccion_abierta_por_empleado',
             ),
         ]
@@ -976,6 +989,9 @@ class MetodoPagoXVenta(models.Model):
         related_name='pagos',
     )
     monto_pagado = models.DecimalField(max_digits=10, decimal_places=2)
+    # Clave de idempotencia: si la misma operacion se reintenta, no se
+    # registra el pago dos veces.
+    clave = models.CharField(max_length=64, blank=True, default='', db_index=True)
 
     history = HistoricalRecords()
 
@@ -1116,6 +1132,9 @@ class MetodoPagoXCompra(models.Model):
         related_name='pagos',
     )
     monto_pagado = models.DecimalField(max_digits=10, decimal_places=2)
+    # Clave de idempotencia: si la misma operacion se reintenta, no se
+    # registra el pago dos veces.
+    clave = models.CharField(max_length=64, blank=True, default='', db_index=True)
 
     history = HistoricalRecords()
 
@@ -1126,6 +1145,81 @@ class MetodoPagoXCompra(models.Model):
 
     def __str__(self):
         return f'{self.metodo_pago} - Compra {self.compra_id}'
+
+
+# =============================================================================
+# SOLICITUDES DE COMPRA
+# =============================================================================
+
+class SolicitudCompra(models.Model):
+    """Peticion de pago o anulacion de una compra.
+
+    La resuelve administracion (AD/GE). Mientras hay una solicitud pendiente
+    la compra queda bloqueada: no se puede volver a solicitar ni pagar.
+    """
+
+    class TipoSolicitud(models.TextChoices):
+        PAGO = 'PG', 'Pago'
+        ANULACION = 'AN', 'Anulacion'
+
+    class EstadoSolicitud(models.TextChoices):
+        PENDIENTE = 'PE', 'Pendiente'
+        RESUELTA = 'RS', 'Resuelta'
+        RECHAZADA = 'RJ', 'Rechazada'
+
+    compra = models.ForeignKey(
+        Compra,
+        on_delete=models.PROTECT,
+        related_name='solicitudes',
+    )
+    tipo = models.CharField(
+        max_length=2,
+        choices=TipoSolicitud.choices,
+        default=TipoSolicitud.PAGO,
+    )
+    estado = models.CharField(
+        max_length=2,
+        choices=EstadoSolicitud.choices,
+        default=EstadoSolicitud.PENDIENTE,
+    )
+    motivo = models.TextField(help_text='Motivo de la solicitud.')
+    solicitante = models.ForeignKey(
+        Usuario,
+        on_delete=models.PROTECT,
+        related_name='solicitudes_compra',
+    )
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    resuelto_por = models.ForeignKey(
+        Usuario,
+        on_delete=models.PROTECT,
+        related_name='solicitudes_compra_resueltas',
+        null=True,
+        blank=True,
+    )
+    fecha_resolucion = models.DateTimeField(null=True, blank=True)
+    motivo_rechazo = models.TextField(blank=True, default='')
+
+    history = HistoricalRecords()
+
+    class Meta:
+        db_table = 'SOLICITUDES_COMPRA'
+        ordering = ['-fecha_solicitud']
+        verbose_name = 'Solicitud de Compra'
+        verbose_name_plural = 'Solicitudes de Compras'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['compra'],
+                condition=models.Q(estado='PE'),
+                name='una_solicitud_pendiente_por_compra',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Solicitud #{self.pk} - Compra {self.compra_id} - {self.tipo}'
+
+    @property
+    def pendiente(self):
+        return self.estado == self.EstadoSolicitud.PENDIENTE
 
 
 # =============================================================================

@@ -7,6 +7,7 @@ import {
   IconCheck,
   IconChevronDown,
   IconChevronUp,
+  IconClipboardList,
   IconDownload,
   IconEye,
   IconLoader2,
@@ -26,6 +27,7 @@ import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
+import { nuevaClave } from '../utils/clave'
 import { formatearFecha, formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
 
@@ -61,6 +63,11 @@ const ESTADOS = [
 ]
 
 const ORDEN_INICIAL = '-fecha_compra'
+
+const TABS = [
+  { id: 'compras', etiqueta: 'Compras', icono: IconTruckDelivery },
+  { id: 'solicitudes', etiqueta: 'Solicitudes', icono: IconClipboardList },
+]
 
 function claseEstado(estado) {
   return `estado-badge estado-${estado.toLowerCase()}`
@@ -125,7 +132,8 @@ function fechaMinimaLlegada() {
 export default function Compras() {
   const { puedeEscribir } = useAuth()
   const { sucursalActiva } = useSucursal()
-  const puedeCrear = puedeEscribir(['AD', 'GE', 'ED'])
+  const puedeCrear = puedeEscribir(['AD', 'GE', 'ED', 'CA', 'VE'])
+  const puedeOperar = puedeEscribir(['AD', 'GE', 'ED', 'CA', 'VE'])
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
   const [searchParams, setSearchParams] = useSearchParams()
   const [datos, setDatos] = useState(PAGINA_VACIA)
@@ -164,6 +172,12 @@ export default function Compras() {
   const [modalAbierto, setModalAbierto] = useState(
     () => searchParams.get('nueva') === '1',
   )
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'compras')
+  const [solicitudes, setSolicitudes] = useState([])
+  const [cargandoSolicitudes, setCargandoSolicitudes] = useState(true)
+  const [pagoSolicitud, setPagoSolicitud] = useState(null)
+  const [clavePago, setClavePago] = useState('')
+  const [resolviendo, setResolviendo] = useState(false)
 
   const textoDiferido = useDebounce(texto.trim(), 350)
   const busqueda = textoDiferido
@@ -183,6 +197,9 @@ export default function Compras() {
   )
   const buscando = texto.trim() !== busqueda || actualizando
   const saldoPago = pago ? saldoCompra(pago) : 0
+  const solicitudesPendientes = solicitudes.filter(
+    (item) => item.estado === 'PE',
+  ).length
   const totalPago = pagosPago.reduce(
     (total, item) => total + montoPago(item.monto),
     0,
@@ -191,6 +208,29 @@ export default function Compras() {
   const pagosIncompletos = pagosPago.some(
     (item) => !item.metodo || montoPago(item.monto) <= 0,
   )
+
+  useEffect(() => {
+    let vigente = true
+    pedir('/solicitudes-compras/?page=1')
+      .then((respuesta) => {
+        if (vigente) {
+          setSolicitudes(respuesta.results ?? [])
+        }
+      })
+      .catch(() => {
+        if (vigente) {
+          setSolicitudes([])
+        }
+      })
+      .finally(() => {
+        if (vigente) {
+          setCargandoSolicitudes(false)
+        }
+      })
+    return () => {
+      vigente = false
+    }
+  }, [refresco])
 
   useEffect(() => {
     let vigente = true
@@ -234,8 +274,11 @@ export default function Compras() {
     if (pagina > 1) {
       parametros.set('page', String(pagina))
     }
+    if (tab !== 'compras') {
+      parametros.set('tab', tab)
+    }
     setSearchParams(parametros, { replace: true })
-  }, [busqueda, estado, entrega, fechas, orden, pagina, setSearchParams])
+  }, [busqueda, estado, entrega, fechas, orden, pagina, tab, setSearchParams])
 
   useEffect(() => {
     if (rangoInvalido) {
@@ -559,6 +602,7 @@ export default function Compras() {
 
   async function abrirPago(compra) {
     setPago(compra)
+    setClavePago(nuevaClave())
     setPagosPago([nuevoPago('', saldoCompra(compra).toFixed(2))])
     if (metodos.length > 0) {
       return
@@ -587,22 +631,39 @@ export default function Compras() {
     setPagosPago((actuales) => actuales.filter((item) => item.id !== id))
   }
 
+  function cerrarPago() {
+    setPago(null)
+    setPagoSolicitud(null)
+    setClavePago('')
+  }
+
   async function registrarPago() {
     if (!pago) {
       return
     }
     setPagando(true)
+    const cuerpo = {
+      clave: clavePago,
+      pagos: pagosPago.map((item) => ({
+        metodo_pago: Number(item.metodo),
+        monto_pagado: montoPago(item.monto).toFixed(2),
+      })),
+    }
     try {
-      const actualizada = await pedir(`/compras/${pago.id}/pagar/`, {
-        method: 'POST',
-        body: JSON.stringify({
-          pagos: pagosPago.map((item) => ({
-            metodo_pago: Number(item.metodo),
-            monto_pagado: montoPago(item.monto).toFixed(2),
-          })),
-        }),
-      })
-      setPago(null)
+      let actualizada
+      if (pagoSolicitud) {
+        await pedir(`/solicitudes-compras/${pagoSolicitud.id}/resolver/`, {
+          method: 'POST',
+          body: JSON.stringify({ accion: 'PAGAR', ...cuerpo }),
+        })
+        actualizada = await pedir(`/compras/${pago.id}/`)
+      } else {
+        actualizada = await pedir(`/compras/${pago.id}/pagar/`, {
+          method: 'POST',
+          body: JSON.stringify(cuerpo),
+        })
+      }
+      cerrarPago()
       setDetalle((actual) =>
         actual && actual.id === actualizada.id ? actualizada : actual,
       )
@@ -627,6 +688,159 @@ export default function Compras() {
     } finally {
       setPagando(false)
     }
+  }
+
+  async function enviarSolicitud(compra, tipo, motivo) {
+    try {
+      await pedir(`/compras/${compra.id}/solicitar/`, {
+        method: 'POST',
+        body: JSON.stringify({ tipo, motivo }),
+      })
+      Swal.fire({
+        icon: 'success',
+        title: 'Solicitud enviada',
+        text: 'Queda a la espera de que administración la resuelva.',
+        timer: 1900,
+        showConfirmButton: false,
+      })
+      setRefresco((valor) => valor + 1)
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo enviar la solicitud',
+        text: e.message,
+        confirmButtonColor: '#4a9da8',
+      })
+    }
+  }
+
+  async function solicitarPago(compra) {
+    const resultado = await Swal.fire({
+      title: `¿Solicitar el pago de la compra #${compra.id}?`,
+      text: 'Administración (AD/GE) tiene que resolverla. Mientras tanto la compra no se puede pagar.',
+      icon: 'question',
+      input: 'textarea',
+      inputLabel: 'Motivo de la solicitud *',
+      inputPlaceholder: 'Indicá por qué se necesita el pago',
+      inputAttributes: { maxlength: 500 },
+      showCancelButton: true,
+      confirmButtonColor: '#4a9da8',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Sí, solicitar',
+      cancelButtonText: 'Cancelar',
+      inputValidator: (valor) => {
+        if (!valor || valor.trim().length < 10) {
+          return 'Explicá el motivo (10 caracteres o más).'
+        }
+        return null
+      },
+    })
+    if (!resultado.isConfirmed) {
+      return
+    }
+    await enviarSolicitud(compra, 'PG', resultado.value)
+  }
+
+  async function solicitarAnulacion(compra) {
+    const resultado = await Swal.fire({
+      title: `¿Solicitar la anulación de la compra #${compra.id}?`,
+      text: 'Administración (AD/GE) tiene que resolverla.',
+      icon: 'warning',
+      input: 'textarea',
+      inputLabel: 'Motivo de la solicitud *',
+      inputPlaceholder: 'Indicá por qué hay que anular la compra',
+      inputAttributes: { maxlength: 500 },
+      showCancelButton: true,
+      confirmButtonColor: '#c0392b',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Sí, solicitar',
+      cancelButtonText: 'Cancelar',
+      inputValidator: (valor) => {
+        if (!valor || valor.trim().length < 10) {
+          return 'Explicá el motivo (10 caracteres o más).'
+        }
+        return null
+      },
+    })
+    if (!resultado.isConfirmed) {
+      return
+    }
+    await enviarSolicitud(compra, 'AN', resultado.value)
+  }
+
+  async function abrirPagoSolicitud(solicitud) {
+    setResolviendo(true)
+    try {
+      const compra = await pedir(`/compras/${solicitud.compra}/`)
+      setPagoSolicitud(solicitud)
+      setPago(compra)
+      setClavePago(nuevaClave())
+      setPagosPago([nuevoPago('', saldoCompra(compra).toFixed(2))])
+      if (metodos.length === 0) {
+        const datos = await pedirTodas('/metodos-pago/?estado=true')
+        setMetodos(datos)
+      }
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo abrir el pago',
+        text: e.message,
+        confirmButtonColor: '#4a9da8',
+      })
+    } finally {
+      setResolviendo(false)
+    }
+  }
+
+  async function resolverSolicitud(solicitud, accion, motivo = '') {
+    try {
+      await pedir(`/solicitudes-compras/${solicitud.id}/resolver/`, {
+        method: 'POST',
+        body: JSON.stringify({ accion, motivo }),
+      })
+      Swal.fire({
+        icon: 'success',
+        title:
+          accion === 'RECHAZAR' ? 'Solicitud rechazada' : 'Solicitud resuelta',
+        timer: 1800,
+        showConfirmButton: false,
+      })
+      setRefresco((valor) => valor + 1)
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo resolver la solicitud',
+        text: e.message,
+        confirmButtonColor: '#4a9da8',
+      })
+    }
+  }
+
+  async function rechazarSolicitud(solicitud) {
+    const resultado = await Swal.fire({
+      title: '¿Rechazar la solicitud?',
+      text: 'La compra queda como está y la solicitud queda registrada como rechazada.',
+      icon: 'question',
+      input: 'textarea',
+      inputLabel: 'Motivo del rechazo *',
+      inputPlaceholder: 'Indicá por qué no se aprueba',
+      inputAttributes: { maxlength: 500 },
+      showCancelButton: true,
+      confirmButtonColor: '#c0392b',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Sí, rechazar',
+      cancelButtonText: 'Cancelar',
+      inputValidator: (valor) => {
+        if (!valor || valor.trim().length < 10) {
+          return 'Explicá el motivo (10 caracteres o más).'
+        }
+        return null
+      },
+    })
+    if (!resultado.isConfirmed) {
+      return
+    }
+    await resolverSolicitud(solicitud, 'RECHAZAR', resultado.value)
   }
 
   async function anularCompra(compra) {
@@ -687,314 +901,499 @@ export default function Compras() {
       />
 
       <div className="comercial">
-        <section className="comercial-barra">
-          <form
-            className="comercial-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-              }}
-              placeholder="Buscar por N.º de compra, proveedor o CUIT"
-              aria-label="Buscar compras"
-            />
-            {buscando && (
-              <IconLoader2 className="icono-girando" size={18} />
-            )}
-            {texto && (
+        <section className="compras-tabs">
+          {TABS.map((item) => {
+            const Icono = item.icono
+            return (
               <button
+                key={item.id}
                 type="button"
-                className="boton-limpiar-busqueda"
-                onClick={limpiarTexto}
-                aria-label="Limpiar búsqueda"
+                className={tab === item.id ? 'activo' : ''}
+                onClick={() => setTab(item.id)}
               >
-                <IconX size={16} />
-              </button>
-            )}
-          </form>
-
-          <div className="comercial-acciones-barra">
-            {hayFiltros && (
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                onClick={limpiarTodo}
-              >
-                Limpiar filtros
-              </button>
-            )}
-            <button
-              type="button"
-              className="boton-comercial-secundario"
-              onClick={exportar}
-              disabled={exportando || rangoInvalido}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-            {puedeCrear && (
-              <button
-                type="button"
-                className="boton-comercial-primario"
-                onClick={() => setModalAbierto(true)}
-              >
-                <IconPlus size={18} />
-                Nueva compra
-              </button>
-            )}
-          </div>
-        </section>
-
-        <section className="filtros-tabs">
-          {ESTADOS.map((opcion) => (
-            <button
-              key={opcion.id || 'todas'}
-              type="button"
-              className={estado === opcion.id ? 'activo' : ''}
-              onClick={() => cambiarEstado(opcion.id)}
-              title={opcion.ayuda}
-            >
-              {opcion.etiqueta}
-            </button>
-          ))}
-          <div className="filtros-tabs-grupo">
-            <button
-              type="button"
-              className={`filtro-destacado ${porRecibir ? 'activo' : ''}`}
-              onClick={() => cambiarEntrega('por_recibir')}
-              title="Compras registradas que todavía no repusieron stock."
-            >
-              Por recibir
-            </button>
-            <button
-              type="button"
-              className={`filtro-destacado ${enCamino ? 'activo' : ''}`}
-              onClick={() => cambiarEntrega('EC')}
-              title="Compras que todavía están en camino y no movieron stock."
-            >
-              En camino
-            </button>
-          </div>
-        </section>
-
-        <FiltrosFecha
-          valores={fechas}
-          onCambiar={cambiarFechas}
-          error={
-            rangoInvalido
-              ? 'La fecha desde no puede ser posterior a la fecha hasta.'
-              : ''
-          }
-        />
-
-        <p className="filtros-ayuda">
-          Pago: Pendiente (sin pago total) · Parcial (pago parcial) · Pagada
-          (pago total) · Anulada. Recepción: Por recibir, En camino o
-          Recibida. El stock se mueve recién al recibir.
-        </p>
-
-        {error && <p className="comercial-error">{error}</p>}
-
-        <section
-          className={`comercial-panel ${
-            actualizando ? 'panel-actualizando' : ''
-          }`}
-        >
-          <div className="comercial-tabla-scroll">
-            <table className="tabla-comercial">
-              <thead>
-                <tr>
-                  <th>Compra</th>
-                  <th
-                    aria-sort={
-                      orden === 'fecha_compra'
-                        ? 'ascending'
-                        : orden === '-fecha_compra'
-                          ? 'descending'
-                          : 'none'
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="encabezado-orden"
-                      onClick={() => alternarOrden('fecha_compra')}
-                    >
-                      Fecha {iconoOrden('fecha_compra')}
-                    </button>
-                  </th>
-                  <th>Proveedor</th>
-                  <th>Caja / Sección</th>
-                  <th
-                    className="numero"
-                    aria-sort={
-                      orden === 'monto_compra'
-                        ? 'ascending'
-                        : orden === '-monto_compra'
-                          ? 'descending'
-                          : 'none'
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="encabezado-orden"
-                      onClick={() => alternarOrden('monto_compra')}
-                    >
-                      Monto {iconoOrden('monto_compra')}
-                    </button>
-                  </th>
-                  <th>Pago</th>
-                  <th>Recepción</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cargando && !rangoInvalido && (
-                  <tr>
-                    <td colSpan="8" className="comercial-vacio">
-                      Cargando compras…
-                    </td>
-                  </tr>
+                <Icono size={18} />
+                {item.etiqueta}
+                {item.id === 'solicitudes' && solicitudesPendientes > 0 && (
+                  <span className="compras-tabs-contador">
+                    {solicitudesPendientes}
+                  </span>
                 )}
-
-                {!cargando &&
-                  !rangoInvalido &&
-                  !error &&
-                  datos.results.length === 0 && (
-                    <tr>
-                      <td colSpan="8" className="comercial-vacio">
-                        No se encontraron compras.
-                      </td>
-                    </tr>
-                  )}
-
-                {!cargando &&
-                  datos.results.map((compra) => (
-                    <tr key={compra.id}>
-                      <td className="mono">#{compra.id}</td>
-                      <td>{formatearFechaHora(compra.fecha_compra)}</td>
-                      <td>
-                        <strong>{compra.proveedor_detalle || 'Sin proveedor'}</strong>
-                      </td>
-                      <td className="texto-chico">
-                        {compra.seccion_caja_detalle || '—'}
-                      </td>
-                      <td className="numero">
-                        <strong>{formatearMoneda(compra.monto_compra)}</strong>
-                      </td>
-                      <td>
-                        <span className={claseEstado(compra.estado)}>
-                          {compra.estado_detalle}
-                        </span>
-                        {compra.estado !== 'AN' &&
-                          saldoCompra(compra) > 0 && (
-                            <small>
-                              Saldo {formatearMoneda(saldoCompra(compra))}
-                            </small>
-                          )}
-                      </td>
-                      <td>
-                        <span className={claseEntrega(compra)}>
-                          {etiquetaEntrega(compra)}
-                        </span>
-                        {compra.estado_entrega === 'EC' &&
-                          compra.fecha_estimada_llegada && (
-                            <small>
-                              Llega {formatearFecha(compra.fecha_estimada_llegada)}
-                            </small>
-                          )}
-                      </td>
-                      <td>
-                        <div className="acciones-fila">
-                          <button
-                            type="button"
-                            className="boton-icono"
-                            onClick={() => setDetalle(compra)}
-                            title="Ver detalle"
-                          >
-                            <IconEye size={17} />
-                          </button>
-                          {puedeGestionar &&
-                            compra.estado !== 'AN' &&
-                            saldoCompra(compra) > 0 && (
-                              <button
-                                type="button"
-                                className="boton-icono"
-                                onClick={() => abrirPago(compra)}
-                                title="Registrar pago"
-                              >
-                                <IconCash size={17} />
-                              </button>
-                            )}
-                          {puedeGestionar &&
-                            compra.estado !== 'AN' &&
-                            !compra.recibida &&
-                            compra.estado_entrega !== 'EC' && (
-                              <button
-                                type="button"
-                                className="boton-icono"
-                                onClick={() => marcarEnCamino(compra)}
-                                title="Marcar en camino"
-                              >
-                                <IconTruck size={17} />
-                              </button>
-                            )}
-                          {puedeGestionar &&
-                            compra.estado !== 'AN' &&
-                            !compra.recibida && (
-                              <button
-                                type="button"
-                                className="boton-icono boton-icono-exito"
-                                onClick={() => recibirCompra(compra)}
-                                title="Recibir compra"
-                              >
-                                <IconCheck size={17} />
-                              </button>
-                            )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="comercial-paginacion">
-            <span>
-              {datos.count} compra{datos.count === 1 ? '' : 's'}
-            </span>
-            <div>
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                disabled={!datos.previous || actualizando}
-                onClick={() => irAPagina(pagina - 1)}
-              >
-                Anterior
               </button>
-              <span>Página {pagina}</span>
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                disabled={!datos.next || actualizando}
-                onClick={() => irAPagina(pagina + 1)}
-              >
-                Siguiente
-              </button>
-            </div>
-          </div>
+            )
+          })}
         </section>
+
+        {tab === 'compras' && (
+          <>
+            <section className="comercial-barra">
+              <form
+                className="comercial-busqueda"
+                onSubmit={(evento) => evento.preventDefault()}
+              >
+                <IconSearch size={20} />
+                <input
+                  type="search"
+                  value={texto}
+                  onChange={(evento) => {
+                    setTexto(evento.target.value)
+                    setPagina(1)
+                  }}
+                  placeholder="Buscar por N.º de compra, proveedor o CUIT"
+                  aria-label="Buscar compras"
+                />
+                {buscando && (
+                  <IconLoader2 className="icono-girando" size={18} />
+                )}
+                {texto && (
+                  <button
+                    type="button"
+                    className="boton-limpiar-busqueda"
+                    onClick={limpiarTexto}
+                    aria-label="Limpiar búsqueda"
+                  >
+                    <IconX size={16} />
+                  </button>
+                )}
+              </form>
+
+              <div className="comercial-acciones-barra">
+                {hayFiltros && (
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    onClick={limpiarTodo}
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="boton-comercial-secundario"
+                  onClick={exportar}
+                  disabled={exportando || rangoInvalido}
+                >
+                  <IconDownload size={18} />
+                  {exportando ? 'Exportando…' : 'Exportar CSV'}
+                </button>
+                {puedeCrear && (
+                  <button
+                    type="button"
+                    className="boton-comercial-primario"
+                    onClick={() => setModalAbierto(true)}
+                  >
+                    <IconPlus size={18} />
+                    Nueva compra
+                  </button>
+                )}
+              </div>
+            </section>
+
+            <section className="filtros-tabs">
+              {ESTADOS.map((opcion) => (
+                <button
+                  key={opcion.id || 'todas'}
+                  type="button"
+                  className={estado === opcion.id ? 'activo' : ''}
+                  onClick={() => cambiarEstado(opcion.id)}
+                  title={opcion.ayuda}
+                >
+                  {opcion.etiqueta}
+                </button>
+              ))}
+              <div className="filtros-tabs-grupo">
+                <button
+                  type="button"
+                  className={`filtro-destacado ${porRecibir ? 'activo' : ''}`}
+                  onClick={() => cambiarEntrega('por_recibir')}
+                  title="Compras registradas que todavía no repusieron stock."
+                >
+                  Por recibir
+                </button>
+                <button
+                  type="button"
+                  className={`filtro-destacado ${enCamino ? 'activo' : ''}`}
+                  onClick={() => cambiarEntrega('EC')}
+                  title="Compras que todavía están en camino y no movieron stock."
+                >
+                  En camino
+                </button>
+              </div>
+            </section>
+
+            <FiltrosFecha
+              valores={fechas}
+              onCambiar={cambiarFechas}
+              error={
+                rangoInvalido
+                  ? 'La fecha desde no puede ser posterior a la fecha hasta.'
+                  : ''
+              }
+            />
+
+            <p className="filtros-ayuda">
+              Pago: Pendiente (sin pago total) · Parcial (pago parcial) · Pagada
+              (pago total) · Anulada. Recepción: Por recibir, En camino o
+              Recibida. El stock se mueve recién al recibir.
+            </p>
+
+            {error && <p className="comercial-error">{error}</p>}
+
+            <section
+              className={`comercial-panel ${
+                actualizando ? 'panel-actualizando' : ''
+              }`}
+            >
+              <div className="comercial-tabla-scroll">
+                <table className="tabla-comercial">
+                  <thead>
+                    <tr>
+                      <th>Compra</th>
+                      <th
+                        aria-sort={
+                          orden === 'fecha_compra'
+                            ? 'ascending'
+                            : orden === '-fecha_compra'
+                              ? 'descending'
+                              : 'none'
+                        }
+                      >
+                        <button
+                          type="button"
+                          className="encabezado-orden"
+                          onClick={() => alternarOrden('fecha_compra')}
+                        >
+                          Fecha {iconoOrden('fecha_compra')}
+                        </button>
+                      </th>
+                      <th>Proveedor</th>
+                      <th>Caja / Sección</th>
+                      <th
+                        className="numero"
+                        aria-sort={
+                          orden === 'monto_compra'
+                            ? 'ascending'
+                            : orden === '-monto_compra'
+                              ? 'descending'
+                              : 'none'
+                        }
+                      >
+                        <button
+                          type="button"
+                          className="encabezado-orden"
+                          onClick={() => alternarOrden('monto_compra')}
+                        >
+                          Monto {iconoOrden('monto_compra')}
+                        </button>
+                      </th>
+                      <th>Pago</th>
+                      <th>Recepción</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cargando && !rangoInvalido && (
+                      <tr>
+                        <td colSpan="8" className="comercial-vacio">
+                          Cargando compras…
+                        </td>
+                      </tr>
+                    )}
+
+                    {!cargando &&
+                      !rangoInvalido &&
+                      !error &&
+                      datos.results.length === 0 && (
+                        <tr>
+                          <td colSpan="8" className="comercial-vacio">
+                            No se encontraron compras.
+                          </td>
+                        </tr>
+                      )}
+
+                    {!cargando &&
+                      datos.results.map((compra) => (
+                        <tr key={compra.id}>
+                          <td className="mono">#{compra.id}</td>
+                          <td>{formatearFechaHora(compra.fecha_compra)}</td>
+                          <td>
+                            <strong>{compra.proveedor_detalle || 'Sin proveedor'}</strong>
+                          </td>
+                          <td className="texto-chico">
+                            {compra.seccion_caja_detalle || '—'}
+                          </td>
+                          <td className="numero">
+                            <strong>{formatearMoneda(compra.monto_compra)}</strong>
+                          </td>
+                          <td>
+                            <span className={claseEstado(compra.estado)}>
+                              {compra.estado_detalle}
+                            </span>
+                            {compra.estado !== 'AN' &&
+                              saldoCompra(compra) > 0 && (
+                                <small>
+                                  Saldo {formatearMoneda(saldoCompra(compra))}
+                                </small>
+                              )}
+                          </td>
+                          <td>
+                            <span className={claseEntrega(compra)}>
+                              {etiquetaEntrega(compra)}
+                            </span>
+                            {compra.estado_entrega === 'EC' &&
+                              compra.fecha_estimada_llegada && (
+                                <small>
+                                  Llega {formatearFecha(compra.fecha_estimada_llegada)}
+                                </small>
+                              )}
+                          </td>
+                          <td>
+                            <div className="acciones-fila">
+                              <button
+                                type="button"
+                                className="boton-icono"
+                                onClick={() => setDetalle(compra)}
+                                title="Ver detalle"
+                              >
+                                <IconEye size={17} />
+                              </button>
+                              {compra.solicitud_pendiente && (
+                                <span className="estado-badge estado-pe">
+                                  Solicitud pendiente
+                                </span>
+                              )}
+                              {!puedeGestionar &&
+                                !compra.solicitud_pendiente &&
+                                compra.estado !== 'AN' &&
+                                saldoCompra(compra) > 0 && (
+                                  <button
+                                    type="button"
+                                    className="boton-icono"
+                                    onClick={() => solicitarPago(compra)}
+                                    title="Solicitar el pago de la compra"
+                                  >
+                                    <IconClipboardList size={17} />
+                                  </button>
+                                )}
+                              {!puedeGestionar &&
+                                !compra.solicitud_pendiente &&
+                                compra.estado !== 'AN' &&
+                                !compra.recibida && (
+                                  <button
+                                    type="button"
+                                    className="boton-icono"
+                                    onClick={() =>
+                                      solicitarAnulacion(compra)
+                                    }
+                                    title="Solicitar la anulación de la compra"
+                                  >
+                                    <IconBan size={17} />
+                                  </button>
+                                )}
+                              {puedeGestionar &&
+                                compra.estado !== 'AN' &&
+                                !compra.solicitud_pendiente &&
+                                saldoCompra(compra) > 0 && (
+                                  <button
+                                    type="button"
+                                    className="boton-icono"
+                                    onClick={() => abrirPago(compra)}
+                                    title="Registrar pago"
+                                  >
+                                    <IconCash size={17} />
+                                  </button>
+                                )}
+                              {puedeOperar &&
+                                compra.estado !== 'AN' &&
+                                !compra.recibida &&
+                                compra.estado_entrega !== 'EC' && (
+                                  <button
+                                    type="button"
+                                    className="boton-icono"
+                                    onClick={() => marcarEnCamino(compra)}
+                                    title="Marcar en camino"
+                                  >
+                                    <IconTruck size={17} />
+                                  </button>
+                                )}
+                              {puedeOperar &&
+                                compra.estado !== 'AN' &&
+                                !compra.recibida && (
+                                  <button
+                                    type="button"
+                                    className="boton-icono boton-icono-exito"
+                                    onClick={() => recibirCompra(compra)}
+                                    title="Recibir compra"
+                                  >
+                                    <IconCheck size={17} />
+                                  </button>
+                                )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="comercial-paginacion">
+                <span>
+                  {datos.count} compra{datos.count === 1 ? '' : 's'}
+                </span>
+                <div>
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    disabled={!datos.previous || actualizando}
+                    onClick={() => irAPagina(pagina - 1)}
+                  >
+                    Anterior
+                  </button>
+                  <span>Página {pagina}</span>
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    disabled={!datos.next || actualizando}
+                    onClick={() => irAPagina(pagina + 1)}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+
+        {tab === 'solicitudes' && (
+          <section className="comercial-panel">
+            <div className="comercial-panel-cabecera">
+              <h2>Solicitudes de pago y anulación</h2>
+              <p className="comercial-nota">
+                Las resuelve administración (AD/GE). Mientras hay una solicitud
+                pendiente, la compra no se puede volver a solicitar, pagar ni
+                anular.
+              </p>
+            </div>
+
+            {cargandoSolicitudes ? (
+              <p className="comercial-nota">Cargando solicitudes…</p>
+            ) : solicitudes.length === 0 ? (
+              <p className="comercial-nota">
+                No hay solicitudes registradas.
+              </p>
+            ) : (
+              <div className="comercial-tabla-scroll">
+                <table className="tabla-comercial tabla-lineas">
+                  <thead>
+                    <tr>
+                      <th>Solicitud</th>
+                      <th>Compra</th>
+                      <th>Tipo</th>
+                      <th>Solicitante</th>
+                      <th>Motivo</th>
+                      <th>Estado</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {solicitudes.map((solicitud) => (
+                      <tr key={solicitud.id}>
+                        <td>#{solicitud.id}</td>
+                        <td>
+                          <strong>#{solicitud.compra}</strong>
+                          <small>
+                            {solicitud.compra_detalle?.proveedor}
+                          </small>
+                        </td>
+                        <td>{solicitud.tipo_detalle}</td>
+                        <td>
+                          {solicitud.solicitante_detalle?.nombre || '—'}
+                        </td>
+                        <td>{solicitud.motivo}</td>
+                        <td>
+                          <span className={claseEstado(solicitud.estado)}>
+                            {solicitud.estado_detalle}
+                          </span>
+                          {solicitud.estado === 'PE' && (
+                            <small>
+                              {solicitud.dias_esperando} día
+                              {solicitud.dias_esperando === 1 ? '' : 's'}{' '}
+                              esperando
+                            </small>
+                          )}
+                          {solicitud.estado === 'RS' && (
+                            <small>
+                              por {solicitud.resuelto_por_detalle?.nombre} ·{' '}
+                              {formatearFechaHora(solicitud.fecha_resolucion)}
+                            </small>
+                          )}
+                          {solicitud.estado === 'RJ' && (
+                            <small>{solicitud.motivo_rechazo}</small>
+                          )}
+                        </td>
+                        <td>
+                          <div className="acciones-fila">
+                            {solicitud.estado === 'PE' && puedeGestionar && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="boton-icono"
+                                  onClick={() =>
+                                    abrirPagoSolicitud(solicitud)
+                                  }
+                                  disabled={resolviendo}
+                                  title="Pagar la compra"
+                                >
+                                  <IconCash size={17} />
+                                </button>
+                                {solicitud.tipo === 'AN' && (
+                                  <button
+                                    type="button"
+                                    className="boton-icono boton-icono-exito"
+                                    onClick={() =>
+                                      resolverSolicitud(
+                                        solicitud,
+                                        'ANULAR',
+                                      )
+                                    }
+                                    disabled={resolviendo}
+                                    title="Anular la compra"
+                                  >
+                                    <IconCheck size={17} />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="boton-icono"
+                                  onClick={() =>
+                                    rechazarSolicitud(solicitud)
+                                  }
+                                  disabled={resolviendo}
+                                  title="Rechazar la solicitud"
+                                >
+                                  <IconX size={17} />
+                                </button>
+                              </>
+                            )}
+                            {solicitud.estado === 'PE' && !puedeGestionar && (
+                              <small>Esperando a AD/GE</small>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
       </div>
 
       {modalAbierto && (
         <FormularioCompra
           key={sucursalActiva || 'todas'}
           sucursalActiva={sucursalActiva}
-          puedeGestionar={puedeGestionar}
+          puedeOperar={puedeOperar}
           onCerrar={() => setModalAbierto(false)}
           onGuardado={() => setRefresco((valor) => valor + 1)}
         />
@@ -1060,6 +1459,17 @@ export default function Compras() {
               </p>
             )}
 
+            {detalle.solicitud_pendiente && (
+              <p className="comercial-nota">
+                <strong>
+                  Solicitud #{detalle.solicitud_pendiente.id} pendiente (
+                  {detalle.solicitud_pendiente.tipo_detalle}).
+                </strong>{' '}
+                Hasta que administración la resuelva, la compra no se puede
+                pagar ni anular.
+              </p>
+            )}
+
             <div className="comercial-tabla-scroll">
               <table className="tabla-comercial tabla-lineas">
                 <thead>
@@ -1122,6 +1532,7 @@ export default function Compras() {
               {puedeGestionar &&
                 !detalle.recibida &&
                 detalle.estado !== 'AN' &&
+                !detalle.solicitud_pendiente &&
                 totalPagado(detalle) === 0 && (
                   <button
                     type="button"
@@ -1134,6 +1545,7 @@ export default function Compras() {
                 )}
               {puedeGestionar &&
                 detalle.estado !== 'AN' &&
+                !detalle.solicitud_pendiente &&
                 saldoCompra(detalle) > 0 && (
                   <button
                     type="button"
@@ -1148,7 +1560,33 @@ export default function Compras() {
                     Registrar pago
                   </button>
                 )}
-              {puedeGestionar &&
+              {!puedeGestionar &&
+                !detalle.solicitud_pendiente &&
+                detalle.estado !== 'AN' &&
+                saldoCompra(detalle) > 0 && (
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    onClick={() => solicitarPago(detalle)}
+                  >
+                    <IconClipboardList size={18} />
+                    Solicitar pago
+                  </button>
+                )}
+              {!puedeGestionar &&
+                !detalle.solicitud_pendiente &&
+                detalle.estado !== 'AN' &&
+                !detalle.recibida && (
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    onClick={() => solicitarAnulacion(detalle)}
+                  >
+                    <IconBan size={18} />
+                    Solicitar anulación
+                  </button>
+                )}
+              {puedeOperar &&
                 detalle.estado !== 'AN' &&
                 !detalle.recibida &&
                 detalle.estado_entrega !== 'EC' && (
@@ -1165,7 +1603,7 @@ export default function Compras() {
                     Marcar en camino
                   </button>
                 )}
-              {puedeGestionar &&
+              {puedeOperar &&
                 detalle.estado !== 'AN' &&
                 !detalle.recibida && (
                 <button
@@ -1191,12 +1629,14 @@ export default function Compras() {
             <div className="comercial-modal-cabecera">
               <h2>
                 <IconCash size={24} />
-                Registrar pago · Compra #{pago.id}
+                {pagoSolicitud
+                  ? `Resolver solicitud #${pagoSolicitud.id} · Compra #${pago.id}`
+                  : `Registrar pago · Compra #${pago.id}`}
               </h2>
               <button
                 type="button"
                 className="comercial-modal-cerrar"
-                onClick={() => setPago(null)}
+                onClick={cerrarPago}
                 aria-label="Cerrar"
               >
                 <IconX size={20} />
@@ -1343,7 +1783,7 @@ export default function Compras() {
               <button
                 type="button"
                 className="boton-comercial-secundario"
-                onClick={() => setPago(null)}
+                onClick={cerrarPago}
               >
                 Cancelar
               </button>

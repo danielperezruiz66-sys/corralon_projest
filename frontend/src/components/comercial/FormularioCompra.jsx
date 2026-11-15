@@ -35,7 +35,7 @@ export default function FormularioCompra({
   proveedorInicialId = '',
   proveedorInicialDetalle = null,
   productoInicialId = '',
-  puedeGestionar = true,
+  puedeOperar = true,
   onCerrar,
   onGuardado,
 }) {
@@ -393,8 +393,8 @@ export default function FormularioCompra({
     if (!proveedor) {
       nuevos.proveedor = 'Seleccioná un proveedor activo.'
     }
-    const entregaFinal = puedeGestionar ? estadoEntrega : 'PE'
-    const fechaLlegadaFinal = puedeGestionar ? fechaLlegada : ''
+    const entregaFinal = puedeOperar ? estadoEntrega : 'PE'
+    const fechaLlegadaFinal = puedeOperar ? fechaLlegada : ''
     if (entregaFinal === 'EC') {
       if (!fechaLlegadaFinal) {
         nuevos.fechaLlegada = 'Indicá la fecha estimada de llegada.'
@@ -437,12 +437,10 @@ export default function FormularioCompra({
       })
       Swal.fire({
         icon: 'success',
-        title: puedeGestionar ? 'Compra registrada' : 'Compra solicitada',
-        text: !puedeGestionar
-          ? 'Quedó pendiente para que la gestione un encargado o administrador. Todavía no repuso stock.'
-          : entregaFinal === 'EC'
-            ? 'Quedó en camino. El stock se repone cuando la recibas.'
-            : 'Quedó pendiente de recepción y todavía no repuso stock.',
+        title: 'Compra registrada',
+        text: entregaFinal === 'EC'
+          ? 'Quedó en camino. El stock se repone cuando la recibas.'
+          : 'Quedó pendiente de recepción y todavía no repuso stock.',
         timer: 2200,
         showConfirmButton: false,
       })
@@ -504,9 +502,9 @@ export default function FormularioCompra({
         ) : (
           <>
             <p className="comercial-nota">
-              {puedeGestionar
-                ? 'La compra se registra sin reponer stock. El stock entra cuando la recibís desde el listado.'
-                : 'La compra se solicita sin reponer stock. Queda pendiente para que la gestione un encargado o administrador.'}
+              La compra se registra sin reponer stock. El stock entra cuando la
+              recibís desde el listado. Si el pago o la anulación los lleva
+              administración, dejá la solicitud desde el detalle de la compra.
             </p>
 
             <div className="comercial-grid">

@@ -97,6 +97,9 @@ export default function Inventario() {
   const [alerta, setAlerta] = useState(
     () => searchParams.get('alerta') || '',
   )
+  // En la pestaña Stock: si está activo, muestra el stock de todas las
+  // sucursales (solo lectura; operar sigue siendo sobre la propia).
+  const [todasLasSucursales, setTodasLasSucursales] = useState(false)
   const [producto, setProducto] = useState(() => {
     const valor =
       searchParams.get('producto') ||
@@ -249,7 +252,10 @@ export default function Inventario() {
     if (busqueda) {
       parametros.set('search', busqueda)
     }
-    if (sucursalActiva) {
+    if (
+      sucursalActiva &&
+      !(tab === 'stock' && todasLasSucursales)
+    ) {
       parametros.set('sucursal', sucursalActiva)
     }
 
@@ -309,6 +315,7 @@ export default function Inventario() {
     pagina,
     busqueda,
     sucursalActiva,
+    todasLasSucursales,
     categoria,
     marca,
     unidad,
@@ -813,7 +820,9 @@ export default function Inventario() {
     try {
       const parametros = new URLSearchParams()
       if (busqueda) parametros.set('search', busqueda)
-      if (sucursalActiva) parametros.set('sucursal', sucursalActiva)
+      if (sucursalActiva && !(tab === 'stock' && todasLasSucursales)) {
+        parametros.set('sucursal', sucursalActiva)
+      }
 
       let encabezados = []
       let filas = []
@@ -1129,6 +1138,20 @@ export default function Inventario() {
                 <option value="minimo">Mínimo</option>
                 <option value="negativo">Negativo</option>
               </select>
+            </label>
+            <label className="inventario-check">
+              <input
+                type="checkbox"
+                checked={todasLasSucursales}
+                onChange={(evento) => {
+                  setTodasLasSucursales(evento.target.checked)
+                  setPagina(1)
+                }}
+              />
+              <span>
+                Ver el stock de{' '}
+                <strong>todas las sucursales</strong>
+              </span>
             </label>
           </section>
         )}

@@ -7,6 +7,7 @@ import {
   IconUserCircle,
 } from '@tabler/icons-react'
 import { useAuth } from '../context/auth-context'
+import { pedir } from '../api/client'
 import { menuCategories } from '../data/menuConfig.js'
 import SidebarCategory from './sidebar/SidebarCategory'
 import SidebarFooter from './sidebar/SidebarFooter'
@@ -31,6 +32,29 @@ export default function MenuDesplegable() {
 
   const { user, logout, puedeVer } = useAuth()
   const navigate = useNavigate()
+  const [cajaAbierta, setCajaAbierta] = useState(null)
+
+  useEffect(() => {
+    let vigente = true
+
+    const consultar = () => {
+      pedir('/secciones-caja/mia/')
+        .then((respuesta) => {
+          if (vigente) {
+            setCajaAbierta(respuesta.tiene_caja_abierta ? respuesta.seccion : null)
+          }
+        })
+        .catch(() => {})
+    }
+
+    consultar()
+    const intervalo = setInterval(consultar, 60000)
+
+    return () => {
+      vigente = false
+      clearInterval(intervalo)
+    }
+  }, [])
 
   useEffect(() => {
     const consulta = window.matchMedia('(max-width: 767px)')
@@ -58,8 +82,35 @@ export default function MenuDesplegable() {
 
   const cerrarMenuMovil = () => setMenuMovil(false)
 
-  const handleLogoutClick = () => {
+  const handleLogoutClick = async () => {
     cerrarMenuMovil()
+
+    let caja = null
+    try {
+      const respuesta = await pedir('/secciones-caja/mia/')
+      caja = respuesta.tiene_caja_abierta ? respuesta.seccion : null
+    } catch {
+      caja = null
+    }
+
+    if (caja) {
+      Swal.fire({
+        title: 'Tenés una caja abierta',
+        html: `La sección <strong>#${caja.id}</strong> (${caja.caja_detalle} · ${
+          caja.sucursal_detalle
+        }) sigue ${
+          caja.estado === 'PA' ? 'en pausa' : 'abierta'
+        }.<br/>Cerrala o pausala antes de salir del sistema.`,
+        icon: 'warning',
+        showCancelButton: false,
+        confirmButtonColor: '#4a9da8',
+        confirmButtonText: 'Ir a Caja',
+      }).then(() => {
+        navigate('/caja')
+      })
+      return
+    }
+
     Swal.fire({
       title: '¿Cerrar sesión?',
       text: '¿Estás seguro de que deseas salir del sistema?',
@@ -115,6 +166,7 @@ export default function MenuDesplegable() {
 
         <SidebarFooter
           abierto={menuAbierto}
+          cajaAbierta={cajaAbierta}
           onLogoutClick={handleLogoutClick}
         />
       </aside>
