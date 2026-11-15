@@ -2,7 +2,7 @@
 
 > Solo lo pendiente (lo terminado se borra). Contexto: `AGENTS.md`.
 
-**Última actualización:** 2026-11-13
+**Última actualización:** 2026-11-14
 
 **Qué se hizo (2026-11-13):** módulo **Caja** completo — cajas físicas
 reutilizables entre sucursales; `SeccionCaja` con apertura propia o a nombre
@@ -20,16 +20,18 @@ verificación (Swal + modal con tu contraseña); suspensión/inactividad cierra
 sesiones; API devuelve 401 a no-`AC`; validación en tiempo real en alta y
 edición; suite backend **218/218** y build/lint en verde.
 
+**Qué se hizo (2026-11-14):** rama `perf/carga-inicial-y-queries` con las
+fases 1–5: rutas y modales lazy (bundle inicial 669→282 KB, 90 KB gzip), CSS
+por componente sin cambios visuales, helpers y componentes presentacionales,
+`select_related` en listados (stocks 23→3, ventas/compras 47→7 queries),
+`page_size` configurable (tope 500) y caché de catálogos de 60 s.
+
 ## Pendientes
 
 ### Rendimiento (rama `perf/carga-inicial-y-queries`)
-- [ ] Revisar y mergear **Fase 2** (rutas y modales lazy) + **Fase 5**
-      (`select_related` en stocks, ventas y compras). Bundle inicial
-      669→282 KB; stocks 23→3 queries, ventas/compras 47→7.
-- [ ] **Fase 1**: separar CSS por página/componente sin cambios visuales.
-- [ ] **Fase 3**: partir Inventario, Ventas, Compras, Caja e Inicio.
-- [ ] **Fase 4**: caché de catálogos, `page_size` en backend, Inventario por
-      pestaña y refresco de Inicio; el dashboard sigue en 32 queries.
+- [ ] Revisar y mergear en `main` las fases 1–5 (lazy, CSS por componente,
+      componentes presentacionales, `select_related`, `page_size` y caché de
+      catálogos).
 
 ### QA visual manual (usuario)
 - [ ] **Caja**: selector "A nombre de" solo con habilitados en la sucursal

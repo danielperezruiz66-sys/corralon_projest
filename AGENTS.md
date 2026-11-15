@@ -20,7 +20,7 @@ Arquitectura desacoplada:
 - API en `http://localhost:8000`, Vite en `http://localhost:5173`.
 - `.env` en la raíz (no se commitea); plantilla en `.env.example`.
 
-Estado: backend completo (36 viewsets, suite en `app.tests`, 218/218); frontend
+Estado: backend completo (36 viewsets, suite en `app.tests`, 224/224); frontend
 con Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores, Caja y
 **Empleados**; falta el **QA visual manual** en navegador de Caja y Empleados.
 Pendientes: Perfil y Actividad. Facturación ARCA bloqueada.
@@ -211,7 +211,8 @@ de stock).
 
 - JWT: `POST /api/token/` (acepta `username` o `legajo`) y
   `POST /api/token/refresh/`. Header `Authorization: Bearer <token>`.
-- Paginación 20; filtros DjangoFilter + Search + Ordering. Ventas y compras
+- Paginación 20, configurable con `page_size` (tope 500); filtros DjangoFilter
+  + Search + Ordering. Ventas y compras
   aceptan `fecha`, `fecha_desde` y `fecha_hasta` (`AAAA-MM-DD`).
 - Errores de negocio: `400 {"detail": "...", "codigo": "..."}` con `codigo` =
   `stock_insuficiente`, `error_de_negocio`, `validacion`, `no_encontrado` o
@@ -280,6 +281,11 @@ de stock).
   pesados solo al abrirse; SweetAlert2 entra por import dinámico. El bundle
   inicial queda en ~282 KB (~90 KB gzip): no volver a importar páginas o
   modales de forma estática.
+- `api/catalogos.js`: `pedirTodas` pide páginas de 200 (`page_size`) para
+  reducir viajes y `pedirCatalogo` cachea 60 s en memoria los catálogos
+  estables (sucursales, categorías, marcas, unidades, depósitos, roles, cajas,
+  asignaciones y métodos de pago), deduplicando solicitudes. Tras altas,
+  ediciones o bajas hay que llamar a `invalidarCatalogo(ruta)`.
 - Módulos listos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores,
   Caja, Empleados. Pendientes: Perfil y Actividad (`EnDesarrollo`).
 - Empleados (`/empleados`, AD/GE): listado (legajo, nombre, DNI, teléfono,
@@ -351,7 +357,7 @@ cd backend
 ../venv/Scripts/python.exe manage.py check                 # 0 issues
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 223 tests
+../venv/Scripts/python.exe manage.py test app              # 224 tests
 ../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 
