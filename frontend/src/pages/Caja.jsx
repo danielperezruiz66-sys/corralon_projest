@@ -13,7 +13,7 @@ import {
   IconSettings,
   IconX,
 } from '@tabler/icons-react'
-import { pedirTodas } from '../api/catalogos'
+import { invalidarCatalogo, pedirCatalogo, pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 const DetalleSeccionCaja = lazy(
@@ -231,9 +231,9 @@ export default function Caja() {
     let vigente = true
 
     Promise.all([
-      pedirTodas('/cajas/'),
-      pedirTodas('/sucursales-cajas/'),
-      pedirTodas('/sucursales/'),
+      pedirCatalogo('/cajas/'),
+      pedirCatalogo('/sucursales-cajas/'),
+      pedirCatalogo('/sucursales/'),
     ])
       .then(([cajasData, asignacionesData, sucursalesData]) => {
         if (!vigente) {
@@ -316,6 +316,7 @@ export default function Caja() {
 
   function guardadoCaja(_, esEdicion) {
     setCajaEditando(null)
+    invalidarCatalogo('/cajas/')
     Swal.fire({
       icon: 'success',
       title: esEdicion ? 'Caja actualizada' : 'Caja creada',
@@ -327,6 +328,7 @@ export default function Caja() {
 
   function guardadaAsignacion(_, esEdicion) {
     setAsignacionEditando(null)
+    invalidarCatalogo('/sucursales-cajas/')
     Swal.fire({
       icon: 'success',
       title: esEdicion ? 'Asignación actualizada' : 'Asignación creada',
@@ -358,6 +360,7 @@ export default function Caja() {
         method: 'PATCH',
         body: JSON.stringify({ habilitada: nuevo }),
       })
+      invalidarCatalogo('/sucursales-cajas/')
       Swal.fire({
         icon: 'success',
         title: nuevo ? 'Habilitada' : 'Deshabilitada',

@@ -7,7 +7,7 @@ import {
   IconTruckDelivery,
   IconX,
 } from '@tabler/icons-react'
-import { pedirTodas } from '../../api/catalogos'
+import { pedirCatalogo, pedirTodas } from '../../api/catalogos'
 import { pedir } from '../../api/client'
 import { formatearMoneda } from '../../utils/formato'
 import { fechaHoyLocal } from '../../utils/fechas'
@@ -73,7 +73,7 @@ export default function FormularioCompra({
 
     Promise.all([
       pedirTodas('/secciones-caja/?estado=AB'),
-      pedirTodas('/sucursales/'),
+      pedirCatalogo('/sucursales/'),
     ])
       .then(([seccionesData, sucursalesData]) => {
         if (!vigente) {

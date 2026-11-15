@@ -19,7 +19,11 @@ import {
   IconTrash,
   IconX,
 } from '@tabler/icons-react'
-import { pedirTodas } from '../api/catalogos'
+import {
+  invalidarCatalogo,
+  pedirCatalogo,
+  pedirTodas,
+} from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import CampoSelectorBuscable from '../components/common/CampoSelectorBuscable.jsx'
@@ -181,11 +185,11 @@ export default function Inventario() {
   useEffect(() => {
     let vigente = true
     Promise.all([
-      pedirTodas('/sucursales/'),
-      pedirTodas('/categorias/'),
-      pedirTodas('/marcas/'),
-      pedirTodas('/unidades/'),
-      pedirTodas('/depositos/'),
+      pedirCatalogo('/sucursales/'),
+      pedirCatalogo('/categorias/'),
+      pedirCatalogo('/marcas/'),
+      pedirCatalogo('/unidades/'),
+      pedirCatalogo('/depositos/'),
     ])
       .then(([sucursalesData, categoriasData, marcasData, unidadesData, depositosData]) => {
         if (!vigente) {
@@ -470,6 +474,7 @@ export default function Inventario() {
   }
 
   function catalogoCreado(tipo, item) {
+    invalidarCatalogo(`/${tipo}/`)
     if (tipo === 'categorias') {
       setCategorias((previos) => [...previos, item])
     } else if (tipo === 'marcas') {
@@ -487,7 +492,8 @@ export default function Inventario() {
       showConfirmButton: false,
     })
     setDepositoEditando(null)
-    pedirTodas('/depositos/')
+    invalidarCatalogo('/depositos/')
+    pedirCatalogo('/depositos/')
       .then(setDepositos)
       .catch(() => {})
     refrescarListado()
@@ -495,11 +501,14 @@ export default function Inventario() {
 
   async function guardadoCatalogo() {
     setCatalogoEditando(null)
+    invalidarCatalogo('/categorias/')
+    invalidarCatalogo('/marcas/')
+    invalidarCatalogo('/unidades/')
     try {
       const [categoriasData, marcasData, unidadesData] = await Promise.all([
-        pedirTodas('/categorias/'),
-        pedirTodas('/marcas/'),
-        pedirTodas('/unidades/'),
+        pedirCatalogo('/categorias/'),
+        pedirCatalogo('/marcas/'),
+        pedirCatalogo('/unidades/'),
       ])
       setCategorias(categoriasData)
       setMarcas(marcasData)
@@ -557,6 +566,7 @@ export default function Inventario() {
     }
     try {
       await pedir(`/depositos/${item.id}/`, { method: 'DELETE' })
+      invalidarCatalogo('/depositos/')
       setDepositos((actuales) =>
         actuales.filter((deposito) => deposito.id !== item.id),
       )

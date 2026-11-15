@@ -16,7 +16,7 @@ import {
   IconTruckDelivery,
   IconX,
 } from '@tabler/icons-react'
-import { pedirTodas } from '../api/catalogos'
+import { pedirCatalogo, pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import DetalleCompra from '../components/comercial/DetalleCompra.jsx'
 import Encabezado from '../components/Encabezado.jsx'
@@ -169,7 +169,7 @@ export default function Compras() {
 
   useEffect(() => {
     let vigente = true
-    pedirTodas('/depositos/')
+    pedirCatalogo('/depositos/')
       .then((datosDepositos) => {
         if (vigente) {
           setDepositos(datosDepositos)
@@ -539,7 +539,7 @@ export default function Compras() {
       return
     }
     try {
-      const datos = await pedirTodas('/metodos-pago/?estado=true')
+      const datos = await pedirCatalogo('/metodos-pago/?estado=true')
       setMetodos(datos)
     } catch {
       setMetodos([])

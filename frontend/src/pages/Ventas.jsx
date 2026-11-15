@@ -17,7 +17,7 @@ import {
   IconUser,
   IconX,
 } from '@tabler/icons-react'
-import { pedirTodas } from '../api/catalogos'
+import { pedirCatalogo, pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import DetalleVenta from '../components/comercial/DetalleVenta.jsx'
@@ -133,7 +133,7 @@ export default function Ventas() {
 
   useEffect(() => {
     let vigente = true
-    pedirTodas('/metodos-pago/?estado=true')
+    pedirCatalogo('/metodos-pago/?estado=true')
       .then((datos) => {
         if (vigente) {
           setMetodos(datos)

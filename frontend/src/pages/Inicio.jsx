@@ -102,6 +102,7 @@ export default function Inicio() {
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null)
   const [error, setError] = useState('')
   const solicitudRef = useRef(false)
+  const ultimaCargaRef = useRef(0)
 
   const consultar = useCallback(() => {
     const parametros = new URLSearchParams()
@@ -124,6 +125,7 @@ export default function Inicio() {
       setError('')
       setTieneDatos(true)
       setUltimaActualizacion(new Date())
+      ultimaCargaRef.current = Date.now()
     } catch (e) {
       setError(e.message)
     } finally {
@@ -134,31 +136,32 @@ export default function Inicio() {
   }, [consultar])
 
   useEffect(() => {
-    let vigente = true
+    const solicitud = { vigente: true }
 
     consultar()
       .then((respuesta) => {
-        if (vigente) {
+        if (solicitud.vigente) {
           setDatos(respuesta)
           setError('')
           setTieneDatos(true)
           setUltimaActualizacion(new Date())
+          ultimaCargaRef.current = Date.now()
         }
       })
       .catch((e) => {
-        if (vigente) {
+        if (solicitud.vigente) {
           setError(e.message)
         }
       })
       .finally(() => {
-        if (vigente) {
+        if (solicitud.vigente) {
           setCargando(false)
           setActualizando(false)
         }
       })
 
     return () => {
-      vigente = false
+      solicitud.vigente = false
     }
   }, [consultar])
 
@@ -181,15 +184,22 @@ export default function Inicio() {
     }, 30000)
 
     const alEnfocar = () => {
+      if (Date.now() - ultimaCargaRef.current < 10_000) {
+        return
+      }
       setActualizando(true)
       cargar()
     }
 
     const alCambiarVisibilidad = () => {
-      if (document.visibilityState === 'visible') {
-        setActualizando(true)
-        cargar()
+      if (document.visibilityState !== 'visible') {
+        return
       }
+      if (Date.now() - ultimaCargaRef.current < 10_000) {
+        return
+      }
+      setActualizando(true)
+      cargar()
     }
 
     window.addEventListener('focus', alEnfocar)
