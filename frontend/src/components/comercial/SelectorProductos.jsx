@@ -3,6 +3,7 @@ import { IconPlus } from '@tabler/icons-react'
 import useDebounce from '../../hooks/useDebounce'
 import { formatearMoneda, formatearNumero } from '../../utils/formato'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
+import '../../styles/components/comercial/SelectorProductos.css'
 
 export default function SelectorProductos({
   productos = [],

@@ -31,6 +31,7 @@ import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/components/comercial/Cobro.css'
 
 const PAGINA_VACIA = {
   count: 0,

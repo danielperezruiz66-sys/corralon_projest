@@ -300,3 +300,36 @@
     max-width: 100%;
   }
 }
+
+/* Aviso de filtro aplicado desde el dashboard (extraído de Comercial.css) */
+/* Aviso de filtro aplicado desde el dashboard */
+.filtro-origen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  border: 1px solid rgba(196, 146, 55, 0.35);
+  border-radius: 0.9rem;
+  background-color: #fff8e6;
+  padding: 0.7rem 1rem;
+  color: #6b4e16;
+  font-size: 0.88rem;
+}
+
+.filtro-origen button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #8a5a00;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.filtro-origen button:hover {
+  text-decoration: underline;
+}

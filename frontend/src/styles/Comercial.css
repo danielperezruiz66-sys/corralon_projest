@@ -162,38 +162,6 @@ COMERCIAL - VENTAS Y COMPRAS
   font-size: 0.9rem;
 }
 
-/* Aviso de filtro aplicado desde el dashboard */
-.filtro-origen {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-  border: 1px solid rgba(196, 146, 55, 0.35);
-  border-radius: 0.9rem;
-  background-color: #fff8e6;
-  padding: 0.7rem 1rem;
-  color: #6b4e16;
-  font-size: 0.88rem;
-}
-
-.filtro-origen button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: #8a5a00;
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.filtro-origen button:hover {
-  text-decoration: underline;
-}
-
 /* Panel y tabla */
 .comercial-panel {
   border-radius: 1.5rem;
@@ -468,64 +436,6 @@ COMERCIAL - VENTAS Y COMPRAS
   color: rgba(15, 42, 48, 0.6);
 }
 
-.cobro-resumen {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-  border-radius: 1rem;
-  background-color: var(--color-fondo);
-  padding: 0.9rem;
-  margin-bottom: 1rem;
-}
-
-.cobro-resumen div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.cobro-resumen span {
-  color: rgba(15, 42, 48, 0.55);
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.cobro-resumen strong {
-  color: var(--color-oscuro);
-  font-size: 1.05rem;
-}
-
-.cobro-pagos {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  border-radius: 1rem;
-  background-color: var(--color-fondo);
-  padding: 0.9rem;
-  margin-top: 0.75rem;
-  font-size: 0.85rem;
-}
-
-.cobro-pagos > span {
-  color: rgba(15, 42, 48, 0.55);
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.cobro-pagos div {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  border-top: 1px solid rgba(15, 42, 48, 0.08);
-  padding-top: 0.35rem;
-}
-
-.cobro-pagos strong {
-  color: var(--color-oscuro);
-}
-
 .comercial-nota {
   margin: 0 0 1rem;
   border-radius: 0.75rem;
@@ -533,24 +443,6 @@ COMERCIAL - VENTAS Y COMPRAS
   padding: 0.7rem 0.9rem;
   color: rgba(15, 42, 48, 0.7);
   font-size: 0.82rem;
-}
-
-.comercial-nota-acciones {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.comercial-nota-acciones p {
-  margin: 0;
-}
-
-.productos-proveedor-acciones {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 0.5rem;
 }
 
 .comercial-grid {
@@ -740,145 +632,11 @@ COMERCIAL - VENTAS Y COMPRAS
   cursor: default;
 }
 
-.productos-proveedor-lista {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  margin-bottom: 0.75rem;
-}
-
-.productos-proveedor-fila {
-  display: grid;
-  grid-template-columns:
-    minmax(0, 1.6fr)
-    minmax(8rem, 0.8fr)
-    minmax(8rem, 0.8fr)
-    auto;
-  gap: 0.5rem;
-  align-items: start;
-}
-
-.productos-proveedor-accion {
-  display: flex;
-  align-items: center;
-  padding-top: 1.3rem;
-}
-
-.productos-proveedor-agregar {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin-bottom: 1rem;
-}
-
-@media (max-width: 720px) {
-  .productos-proveedor-fila {
-    grid-template-columns: 1fr;
-  }
-
-  .productos-proveedor-accion {
-    padding-top: 0;
-  }
-}
-
 .filtros-ayuda {
   margin: -0.5rem 0 0;
   color: rgba(15, 42, 48, 0.55);
   font-size: 0.78rem;
   line-height: 1.4;
-}
-
-/* Filtros de fecha */
-.filtros-fechas {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.75rem 1.25rem;
-  border-radius: 1.1rem;
-  background-color: #ffffff;
-  padding: 0.75rem 1rem;
-  box-shadow: 0 6px 18px rgba(15, 42, 48, 0.05);
-}
-
-.filtros-fechas-presets {
-  display: flex;
-  flex: 0 1 auto;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-}
-
-.filtros-fechas-presets button {
-  border: 1px solid rgba(15, 42, 48, 0.12);
-  border-radius: 9999px;
-  background-color: #ffffff;
-  padding: 0.4rem 0.8rem;
-  color: rgba(15, 42, 48, 0.65);
-  cursor: pointer;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.filtros-fechas-presets button:hover {
-  background-color: var(--color-fondo);
-}
-
-.filtros-fechas-presets button.activo {
-  border-color: var(--color-sidebar);
-  background-color: var(--color-sidebar);
-  color: #ffffff;
-}
-
-.filtros-fechas-campos {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.6rem;
-  margin-left: auto;
-  border-left: 1px solid rgba(15, 42, 48, 0.12);
-  padding-left: 1rem;
-  color: rgba(15, 42, 48, 0.55);
-}
-
-.filtros-fechas-campos label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.filtros-fechas-campos input {
-  border: 1px solid rgba(15, 42, 48, 0.15);
-  border-radius: 0.7rem;
-  background-color: #ffffff;
-  padding: 0.42rem 0.55rem;
-  color: var(--color-oscuro);
-  font-size: 0.8rem;
-}
-
-.filtros-fechas-campos input:focus-visible {
-  outline: 2px solid var(--color-sidebar);
-}
-
-.filtros-fechas-separador {
-  padding-bottom: 0.45rem;
-  font-size: 0.8rem;
-  font-style: italic;
-}
-
-.boton-limpiar-fechas {
-  padding: 0.45rem 0.75rem !important;
-  font-size: 0.78rem !important;
-}
-
-.filtros-fecha-error {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--color-peligro);
-  font-size: 0.78rem;
 }
 
 /* Encabezados ordenables */
@@ -921,236 +679,6 @@ COMERCIAL - VENTAS Y COMPRAS
 .boton-limpiar-busqueda:hover {
   background-color: var(--color-tarjeta);
   color: var(--color-oscuro);
-}
-
-.cobro-cliente {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0 0 0.85rem;
-  color: var(--color-oscuro);
-  font-weight: 700;
-}
-
-.cobro-cliente svg {
-  color: var(--color-sidebar);
-}
-
-.cobro-nota {
-  margin: 0 0 1rem;
-  color: rgba(15, 42, 48, 0.6);
-  font-size: 0.8rem;
-  line-height: 1.4;
-}
-
-.cobro-pagos-lista {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  margin-bottom: 0.65rem;
-}
-
-.cobro-pago-fila {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 0.55rem;
-  border: 1px solid rgba(15, 42, 48, 0.1);
-  border-radius: 0.9rem;
-  background-color: var(--color-fondo);
-  padding: 0.65rem;
-}
-
-.cobro-pago-fila .campo-comercial span {
-  font-size: 0.68rem;
-}
-
-.boton-quitar-pago {
-  display: grid;
-  width: 2.2rem;
-  height: 2.2rem;
-  flex-shrink: 0;
-  place-items: center;
-  border: none;
-  border-radius: 0.7rem;
-  background-color: #ffffff;
-  color: var(--color-peligro);
-  cursor: pointer;
-}
-
-.boton-quitar-pago:hover:not(:disabled) {
-  background-color: #fee2e2;
-}
-
-.boton-quitar-pago:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
-}
-
-.boton-agregar-pago {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border: 1px dashed rgba(15, 42, 48, 0.25);
-  border-radius: 0.8rem;
-  background-color: #ffffff;
-  padding: 0.5rem 0.75rem;
-  color: var(--color-sidebar);
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.boton-agregar-pago:hover:not(:disabled) {
-  background-color: var(--color-fondo);
-}
-
-.boton-agregar-pago:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.cobro-totales {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  border-radius: 1rem;
-  background-color: var(--color-fondo);
-  padding: 0.75rem 0.9rem;
-  margin: 0.75rem 0;
-}
-
-.cobro-totales div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.cobro-totales span {
-  color: rgba(15, 42, 48, 0.55);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.cobro-totales strong {
-  color: var(--color-oscuro);
-  font-size: 1rem;
-}
-
-.cobro-saldo-cubierto {
-  color: #047857 !important;
-}
-
-.cobro-saldo-excedido {
-  color: var(--color-peligro) !important;
-}
-
-.cobro-confirmar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  border: 1px solid rgba(15, 42, 48, 0.12);
-  border-radius: 0.9rem;
-  background-color: #ffffff;
-  padding: 0.65rem 0.8rem;
-  margin-bottom: 0.75rem;
-  color: var(--color-oscuro);
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.cobro-confirmar input {
-  width: 1rem;
-  height: 1rem;
-  accent-color: var(--color-sidebar);
-}
-
-/* Selector de productos */
-.selector-productos {
-  margin-bottom: 0.75rem;
-}
-
-.selector-filtros {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 0.6rem;
-  border-radius: 1rem;
-  background-color: var(--color-fondo);
-  padding: 0.75rem;
-  margin-bottom: 0.6rem;
-}
-
-.selector-lista {
-  max-height: 14rem;
-  overflow: auto;
-  border: 1px solid rgba(15, 42, 48, 0.12);
-  border-radius: 0.9rem;
-}
-
-.tabla-productos {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.82rem;
-}
-
-.tabla-productos th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background-color: #ffffff;
-  padding: 0.5rem;
-  border-bottom: 1px solid rgba(15, 42, 48, 0.15);
-  color: rgba(15, 42, 48, 0.6);
-  font-size: 0.68rem;
-  letter-spacing: 0.05em;
-  text-align: left;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.tabla-productos td {
-  padding: 0.45rem 0.5rem;
-  border-bottom: 1px solid rgba(15, 42, 48, 0.08);
-  color: var(--color-oscuro);
-  vertical-align: middle;
-}
-
-.tabla-productos tr:last-child td {
-  border-bottom: none;
-}
-
-.tabla-productos td small {
-  display: block;
-  color: rgba(15, 42, 48, 0.55);
-  font-size: 0.7rem;
-}
-
-.tabla-productos .numero {
-  text-align: right;
-}
-
-.boton-agregar-producto {
-  display: grid;
-  width: 1.8rem;
-  height: 1.8rem;
-  place-items: center;
-  border: none;
-  border-radius: 0.55rem;
-  background-color: var(--color-sidebar);
-  color: #ffffff;
-  cursor: pointer;
-}
-
-.boton-agregar-producto:hover {
-  background-color: var(--color-login);
-}
-
-.stock-negativo {
-  color: var(--color-peligro) !important;
-  font-weight: 700;
 }
 
 .tabla-lineas {
@@ -1251,12 +779,6 @@ COMERCIAL - VENTAS Y COMPRAS
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .filtros-fechas-campos {
-    width: 100%;
-    margin-left: 0;
-    border-left: none;
-    padding-left: 0;
-  }
 }
 
 @media (max-width: 640px) {
@@ -1288,10 +810,6 @@ COMERCIAL - VENTAS Y COMPRAS
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .selector-filtros {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .input-tabla {
     width: 4.5rem;
   }
@@ -1305,19 +823,8 @@ COMERCIAL - VENTAS Y COMPRAS
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .cobro-resumen {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .comercial-modal-acciones button {
     flex: 1;
   }
 
-  .cobro-pago-fila {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .cobro-pago-fila .campo-comercial:nth-child(2) {
-    grid-column: 1 / -1;
-  }
 }

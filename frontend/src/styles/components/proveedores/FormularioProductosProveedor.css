@@ -1,0 +1,41 @@
+/* Formulario de productos por proveedor (extraído de Comercial.css) */
+.productos-proveedor-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.productos-proveedor-fila {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.6fr)
+    minmax(8rem, 0.8fr)
+    minmax(8rem, 0.8fr)
+    auto;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.productos-proveedor-accion {
+  display: flex;
+  align-items: center;
+  padding-top: 1.3rem;
+}
+
+.productos-proveedor-agregar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 720px) {
+  .productos-proveedor-fila {
+    grid-template-columns: 1fr;
+  }
+
+  .productos-proveedor-accion {
+    padding-top: 0;
+  }
+}

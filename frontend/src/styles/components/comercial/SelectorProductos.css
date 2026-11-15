@@ -1,0 +1,91 @@
+/* Selector de productos (extraído de Comercial.css) */
+/* Selector de productos */
+.selector-productos {
+  margin-bottom: 0.75rem;
+}
+
+.selector-filtros {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 0.6rem;
+  border-radius: 1rem;
+  background-color: var(--color-fondo);
+  padding: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.selector-lista {
+  max-height: 14rem;
+  overflow: auto;
+  border: 1px solid rgba(15, 42, 48, 0.12);
+  border-radius: 0.9rem;
+}
+
+.tabla-productos {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.tabla-productos th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: #ffffff;
+  padding: 0.5rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.15);
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tabla-productos td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.08);
+  color: var(--color-oscuro);
+  vertical-align: middle;
+}
+
+.tabla-productos tr:last-child td {
+  border-bottom: none;
+}
+
+.tabla-productos td small {
+  display: block;
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.7rem;
+}
+
+.tabla-productos .numero {
+  text-align: right;
+}
+
+.boton-agregar-producto {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
+  border: none;
+  border-radius: 0.55rem;
+  background-color: var(--color-sidebar);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.boton-agregar-producto:hover {
+  background-color: var(--color-login);
+}
+
+.stock-negativo {
+  color: var(--color-peligro) !important;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .selector-filtros {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

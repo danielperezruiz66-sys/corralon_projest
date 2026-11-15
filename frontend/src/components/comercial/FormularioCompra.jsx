@@ -20,6 +20,7 @@ import MensajeError from '../common/MensajeError.jsx'
 import FormularioProductosProveedor from '../proveedores/FormularioProductosProveedor.jsx'
 import FormularioProveedor from '../proveedores/FormularioProveedor.jsx'
 import SelectorProductos from './SelectorProductos'
+import '../../styles/components/comercial/FormularioCompra.css'
 
 function fechaHoyLocal() {
   const hoy = new Date()
