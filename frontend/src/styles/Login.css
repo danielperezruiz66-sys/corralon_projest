@@ -196,26 +196,7 @@ ESTILOS DE LOGIN - FER-CONS
   outline: 2px solid #ffffff;
 }
 
-/* Enlaces y pie */
-.enlace-olvido {
-  text-align: center;
-  color: #ffffff;
-  text-decoration: none;
-  font-size: 0.875rem;
-}
-
-.enlace-olvido:hover {
-  text-decoration: underline;
-}
-
-.boton-enlace {
-  width: 100%;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  padding: 0;
-}
-
+/* Pie */
 .texto-demo {
   text-align: center;
   font-size: 0.875rem;

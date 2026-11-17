@@ -30,6 +30,14 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=Csv())
 
+# Cabeceras de seguridad. HSTS se activa recien cuando la API se sirve por HTTPS.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
+
 
 # Application definition
 
@@ -63,8 +71,14 @@ MIDDLEWARE = [
     # Registra el usuario autenticado en el historial de cambios
     'simple_history.middleware.HistoryRequestMiddleware',
 ]
-# Permitir peticiones desde el frontend (React)
-CORS_ALLOW_ALL_ORIGINS = True
+# Permitir peticiones solo desde los origenes explicitos del frontend.
+# En desarrollo Vite usa un proxy, pero se dejan estos valores por si se
+# consume la API directamente.
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:5173,http://127.0.0.1:5173',
+    cast=Csv(),
+)
 
 
 # Django REST Framework
@@ -106,9 +120,12 @@ VENTAS_BARRIDO_MINUTOS = config('VENTAS_BARRIDO_MINUTOS', default=10, cast=int)
 # JSON Web Tokens (web y app movil)
 # https://django-rest-framework-simplejwt.readthedocs.io/
 
+# Horas de validez del refresh token (antes eran 7 dias).
+REFRESH_TOKEN_HORAS = config('REFRESH_TOKEN_HORAS', default=12, cast=int)
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'REFRESH_TOKEN_LIFETIME': timedelta(hours=REFRESH_TOKEN_HORAS),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,

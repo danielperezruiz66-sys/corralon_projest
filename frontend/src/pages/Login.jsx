@@ -94,21 +94,6 @@ export default function Login() {
           />
         </div>
 
-        <button
-          type="button"
-          className="enlace-olvido boton-enlace"
-          onClick={() =>
-            Swal.fire({
-              icon: 'info',
-              title: 'Restablecer acceso',
-              text: 'Contactá al administrador del sistema para que restablezca tu contraseña.',
-              confirmButtonColor: '#326f7a',
-            })
-          }
-        >
-          ¿Olvidaste tu contraseña?
-        </button>
-
         <p className="texto-demo">Sistema interno · Corralón Fer-Cons</p>
       </form>
     </main>

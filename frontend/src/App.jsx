@@ -1,11 +1,11 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { IconClock } from '@tabler/icons-react'
 import MenuDesplegable from './components/MenuDesplegable.jsx'
 import { useAuth } from './context/auth-context'
 import { modulosDelMenu } from './data/menuConfig.js'
 
 // Cada pagina se descarga recien cuando se entra a su ruta.
-const CambiarContrasena = lazy(() => import('./pages/CambiarContrasena.jsx'))
 const Caja = lazy(() => import('./pages/Caja.jsx'))
 const Clientes = lazy(() => import('./pages/Clientes.jsx'))
 const Compras = lazy(() => import('./pages/Compras.jsx'))
@@ -64,10 +64,26 @@ function contenidoModulo(modulo) {
 }
 
 export default function App() {
-  const { cargando } = useAuth()
+  const { cargando, pausada } = useAuth()
 
   if (cargando) {
     return <div className="pantalla-carga">Cargando…</div>
+  }
+
+  if (pausada) {
+    return (
+      <div className="pantalla-sesion-pausada">
+        <div className="tarjeta-sesion-pausada">
+          <span className="icono-sesion-pausada">
+            <IconClock size={30} stroke={1.75} />
+          </span>
+          <h1>Sesión en pausa</h1>
+          <p>
+            Pasaron 30 minutos sin actividad. Elegí una opción para continuar.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   const rutasModulos = modulosDelMenu
@@ -104,14 +120,6 @@ export default function App() {
           }
         />
         {rutasModulos}
-        <Route
-          path="cambiar-contrasena"
-          element={
-            <Suspense fallback={<CargandoModulo />}>
-              <CambiarContrasena />
-            </Suspense>
-          }
-        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

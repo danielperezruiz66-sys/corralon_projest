@@ -1,12 +1,17 @@
 import { IconBuildingWarehouse } from '@tabler/icons-react'
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
+import { iniciales } from '../utils/formato'
 import CampoSelectorBuscable from './common/CampoSelectorBuscable.jsx'
 import '../styles/Encabezado.css'
 
 export default function Encabezado({ titulo, subtitulo, children }) {
   const { user } = useAuth()
   const { sucursales, sucursalActiva, cambiarSucursal } = useSucursal()
+  const mostrarLegajo =
+    Boolean(user?.legajo) &&
+    user.legajo !== '—' &&
+    user.legajo !== 'Superuser'
 
   return (
     <header className="encabezado-principal">
@@ -32,8 +37,20 @@ export default function Encabezado({ titulo, subtitulo, children }) {
           </div>
         )}
         <div className="tarjeta-usuario-encabezado">
-          <p>{user?.nombre}</p>
-          <p>{user?.legajo}</p>
+          <span className="avatar-usuario-encabezado">
+            {iniciales(user?.nombre)}
+          </span>
+          <span className="datos-usuario-encabezado">
+            <strong title={user?.nombre}>{user?.nombre}</strong>
+            <span className="meta-usuario-encabezado">
+              <span className="rol-usuario-encabezado">{user?.rol}</span>
+              {mostrarLegajo && (
+                <span className="legajo-usuario-encabezado">
+                  Legajo {user.legajo}
+                </span>
+              )}
+            </span>
+          </span>
         </div>
       </div>
     </header>

@@ -5,7 +5,7 @@
 > Al cerrar una sesión: actualizar este archivo si cambió el estado y reescribir
 > `DIA_SIGUIENTE.md` solo con lo pendiente (lo terminado se borra).
 
-**Última actualización:** 2026-11-13
+**Última actualización:** 2026-11-16
 
 ## 1. Proyecto y stack
 
@@ -211,6 +211,11 @@ de stock).
 
 - JWT: `POST /api/token/` (acepta `username` o `legajo`) y
   `POST /api/token/refresh/`. Header `Authorization: Bearer <token>`.
+- Refresh token: 12 h (`REFRESH_TOKEN_HORAS`, antes 7 días), con rotación y
+  blacklist. CORS restringido a `CORS_ALLOWED_ORIGINS` (por defecto
+  `http://localhost:5173,http://127.0.0.1:5173`); cabeceras `nosniff`,
+  `Referrer-Policy: same-origin` y `X-Frame-Options: DENY`. HSTS se activa con
+  `SECURE_HSTS_SECONDS` (0 en desarrollo).
 - Paginación 20, configurable con `page_size` (tope 500); filtros DjangoFilter
   + Search + Ordering. Ventas y compras
   aceptan `fecha`, `fecha_desde` y `fecha_hasta` (`AAAA-MM-DD`).
@@ -277,9 +282,16 @@ de stock).
   catálogos son globales.
 - Tokens en `localStorage` (`corralon.acceso` / `corralon.refresco`). Ante un
   `401`, `pedir()` renueva y reintenta una vez; si falla, cierra sesión.
+- Cierre por inactividad: a los 30 min sin actividad real (mouse, teclado,
+  click, scroll, touch) la app se pausa, desmonta las páginas (corta el polling
+  del dashboard) y muestra un Swal no descartable con **Mantener sesión**
+  (revalida `/api/perfil/`, renueva el JWT si hace falta y vuelve a la misma
+  ruta) o **Iniciar sesión de nuevo** (limpia tokens y va a `/login`).
+  `corralon.ultimaActividad` en `localStorage` permite que el plazo corra
+  también con la pestaña cerrada. Es una medida de carga/UX, no de seguridad.
 - Las páginas se cargan con `React.lazy` + `Suspense` por ruta y los modales
   pesados solo al abrirse; SweetAlert2 entra por import dinámico. El bundle
-  inicial queda en ~282 KB (~90 KB gzip): no volver a importar páginas o
+  inicial queda en ~283 KB (~90 KB gzip): no volver a importar páginas o
   modales de forma estática.
 - `api/catalogos.js`: `pedirTodas` pide páginas de 200 (`page_size`) para
   reducir viajes y `pedirCatalogo` cachea 60 s en memoria los catálogos
