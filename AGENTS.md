@@ -20,10 +20,10 @@ Arquitectura desacoplada:
 - API en `http://localhost:8000`, Vite en `http://localhost:5173`.
 - `.env` en la raíz (no se commitea); plantilla en `.env.example`.
 
-Estado: backend completo (37 viewsets, suite en `app.tests`); frontend con
+Estado: backend completo (38 viewsets, suite en `app.tests`); frontend con
 Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores, Caja,
-**Empleados** y **Facturación** (cascarón); falta el **QA visual manual** en
-navegador. Pendientes: Perfil, Actividad y las métricas del Dashboard V2.
+**Empleados**, **Perfil**, **Actividad** y **Facturación** (cascarón); falta el
+**QA visual manual** en navegador. Pendiente: las métricas del Dashboard V2.
 Facturación ARCA bloqueada (solo queda el permissions y el cascarón).
 
 ## 2. Estructura y arquitectura
@@ -205,13 +205,22 @@ Reglas:
   anterior en vez de cobrar o arquear de nuevo. El frontend la genera con
   `utils/clave.js` (una por operación, se mantiene al reintentar).
 - `django-simple-history` en modelos críticos (Usuario sin password, Empleado,
-  Producto, Stock, DetalleStock, MovimientoStock, TransferenciaStock,
-  Proveedor, SeccionCaja, DetalleCierreCaja, Cliente, Venta, DetalleVenta,
-  Factura, MetodoPagoXVenta, Compra, DetalleCompra, MetodoPagoXCompra,
-  SolicitudCompra).
+  Producto, ProductoXProveedor, Stock, DetalleStock, MovimientoStock,
+  TransferenciaStock, Proveedor, SeccionCaja, DetalleCierreCaja, Cliente, Venta,
+  DetalleVenta, Factura, MetodoPagoXVenta, Compra, DetalleCompra,
+  MetodoPagoXCompra, SolicitudCompra).
   `HistoryRequestMiddleware` guarda el usuario autenticado en `history_user`.
   El motivo de un cambio se escribe en `instancia._change_reason` (máx. 100
   caracteres) antes de `save()`.
+- `RegistroActividad` consolida esos cambios en una tabla de auditoría: una
+  señal `pre_create_historical_record` crea un registro por cada cambio (modelo
+  en slug kebab-case, objeto, acción `CREAR`/`EDITAR`/`ELIMINAR`, usuario y
+  `detalle` legible: motivo cargado o diff de los campos cambiados contra el
+  histórico anterior, sin passwords; los guardados sin cambios reales no
+  generan registro). Se consulta con `GET /api/actividad/`
+  (filtros `modelo`, `accion`, `usuario`, `fecha_desde`, `fecha_hasta`) y
+  `GET /api/actividad/resumen/` (totales por acción/modelo del filtro, sin
+  paginar).
 
 ## 4. Servicios
 
@@ -253,8 +262,9 @@ de stock).
 - Errores de negocio: `400 {"detail": "...", "codigo": "..."}` con `codigo` =
   `stock_insuficiente`, `error_de_negocio`, `validacion`, `no_encontrado` o
   `protegido`.
-- Routers: 37 viewsets en `app/urls.py` + `GET /api/perfil/` y
-  `GET /api/dashboard/?periodo=hoy|7d|mes&sucursal=<id>`. El dashboard
+- Routers: 38 viewsets en `app/urls.py` + `GET /api/perfil/`,
+  `GET /api/dashboard/?periodo=hoy|7d|mes&sucursal=<id>`,
+  `GET /api/actividad/` y `GET /api/actividad/resumen/`. El dashboard
   devuelve además `vista` (`gestion`/`caja`/`ventas`/`deposito`/`lectura`),
   `codigos` y `bloques` (qué ve cada rol) y **solo muestra datos de las
   sucursales asignadas** al usuario (superuser y `AD` ven todas; pedir una
@@ -348,7 +358,13 @@ de stock).
 - Tokens en `localStorage` (`corralon.acceso` / `corralon.refresco`). Ante un
   `401`, `pedir()` renueva y reintenta una vez; si falla, cierra sesión.
 - Módulos listos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores,
-  Caja, Empleados. Pendientes: Perfil y Actividad (`EnDesarrollo`).
+  Caja, Empleados, Perfil y Actividad. Pendiente: métricas del Dashboard V2.
+- Actividad (`/actividad`, AD/GE): KPIs por acción, filtros por acción/usuario/
+  fechas (sin filtro por módulo: los modelos relacionados no encajan en uno
+  solo), tabla paginada con columna **Detalle** (resumen del cambio) y
+  exportación CSV. La columna "Modelo" sigue mostrando qué modelo cambió.
+  Perfil (`/perfil`): modo lectura, edición en modal y cambio de contraseña
+  propio (todos los roles).
 - Empleados (`/empleados`, AD/GE): listado (legajo, nombre, DNI, teléfono,
   roles, sucursales, acceso, estado), alta con acceso opcional (usuario +
   contraseña con letras+números+símbolo, sin mínimo fijo de longitud), edición

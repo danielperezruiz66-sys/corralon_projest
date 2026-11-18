@@ -30,6 +30,7 @@ import { descargarCsv, numeroCsv } from '../utils/csv'
 import { nuevaClave } from '../utils/clave'
 import { formatearFecha, formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/components/comercial/Cobro.css'
 
 const PAGINA_VACIA = {
   count: 0,
@@ -1393,7 +1394,7 @@ export default function Compras() {
         <FormularioCompra
           key={sucursalActiva || 'todas'}
           sucursalActiva={sucursalActiva}
-          puedeOperar={puedeOperar}
+          puedeGestionar={puedeGestionar}
           onCerrar={() => setModalAbierto(false)}
           onGuardado={() => setRefresco((valor) => valor + 1)}
         />

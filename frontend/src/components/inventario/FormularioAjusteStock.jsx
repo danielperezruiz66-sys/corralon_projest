@@ -17,6 +17,7 @@ import {
 } from '../../utils/validaciones'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 import MensajeError from '../common/MensajeError.jsx'
+import '../../styles/components/comercial/Cobro.css'
 
 let ingresoSeq = 0
 function nuevoIngreso() {

@@ -57,6 +57,7 @@ from .models import (
     Provincia,
     Proveedor,
     ProveedorXSucursal,
+    RegistroActividad,
     Rol,
     SeccionCaja,
     SolicitudCompra,
@@ -778,6 +779,24 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     search_fields = ['username', 'email', 'empleado__legajo']
     ordering_fields = ['username', 'date_joined']
 
+    def get_permissions(self):
+        """El usuario autenticado puede editar su propio perfil; el resto
+        requiere ser administrador."""
+        if self.action in ('partial_update', 'update') and str(
+            self.kwargs.get('pk')
+        ) == str(self.request.user.id):
+            self.permission_classes = [IsAuthenticated]
+        return super().get_permissions()
+
+    def get_serializer_class(self):
+        """Para la edición del propio perfil se usa UsuarioPerfilSerializer,
+        que acepta email y datos anidados del empleado."""
+        if self.action in ('partial_update', 'update') and str(
+            self.kwargs.get('pk')
+        ) == str(self.request.user.id):
+            return serializers.UsuarioPerfilSerializer
+        return super().get_serializer_class()
+
 
 class EmpleadoViewSet(viewsets.ModelViewSet):
     queryset = Empleado.objects.select_related(
@@ -792,6 +811,16 @@ class EmpleadoViewSet(viewsets.ModelViewSet):
     filterset_fields = ['estado', 'usuario']
     search_fields = ['legajo', 'dni', 'apellido', 'nombre']
     ordering_fields = ['apellido', 'nombre', 'legajo']
+
+    def get_permissions(self):
+        """Cualquier usuario autenticado puede cambiar su propia contraseña.
+
+        La accion `cambiar_password` verifica dentro si es el propio empleado
+        o si es un administrador cambiando la de otro.
+        """
+        if self.action == 'cambiar_password':
+            return [IsAuthenticated()]
+        return super().get_permissions()
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -829,27 +858,56 @@ class EmpleadoViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='cambiar-password')
     def cambiar_password(self, request, pk=None):
-        """Restablece la contraseña del empleado (solo AD).
+        """Cambia la contraseña del empleado.
 
-        Invalida los refresh tokens del usuario, cerrando sus sesiones.
+        Si el usuario autenticado es el dueño del empleado, valida
+        `password_actual` (o `password_admin` enviado por el frontend) como su
+        contraseña actual. Si es un administrador sobre otro empleado, valida
+        `password_admin` como su propia contraseña. Invalida los refresh tokens
+        del empleado, cerrando sus sesiones.
         """
-        if not es_admin(request.user):
+        empleado = self.get_object()
+        usuario_autenticado = request.user
+        es_propio = empleado.usuario_id == usuario_autenticado.id
+
+        if not es_propio and not es_admin(usuario_autenticado):
             raise PermissionDenied(
                 'Solo un administrador puede cambiar la contraseña '
                 'de otro empleado.'
             )
-        empleado = self.get_object()
+
         entrada = serializers.CambiarPasswordSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
-        if not request.user.check_password(
-            entrada.validated_data['password_admin']
-        ):
-            raise ValidationError(
-                {'password_admin': 'Tu contraseña actual no es correcta.'}
+        datos = entrada.validated_data
+
+        if es_propio:
+            # El usuario cambia su propia contraseña.
+            password_actual = datos.get('password_actual') or datos.get(
+                'password_admin', ''
             )
+            if not password_actual:
+                raise ValidationError(
+                    {'password_actual': 'Ingresá tu contraseña actual.'}
+                )
+            if not usuario_autenticado.check_password(password_actual):
+                raise ValidationError(
+                    {'password_actual': 'Tu contraseña actual no es correcta.'}
+                )
+        else:
+            # Administrador cambia la de otro empleado.
+            password_admin = datos.get('password_admin', '')
+            if not password_admin:
+                raise ValidationError(
+                    {'password_admin': 'Ingresá tu contraseña de administrador.'}
+                )
+            if not usuario_autenticado.check_password(password_admin):
+                raise ValidationError(
+                    {'password_admin': 'Tu contraseña actual no es correcta.'}
+                )
+
         empleados_service.cambiar_password(
             empleado,
-            entrada.validated_data['password'],
+            datos['password'],
         )
         return Response(
             {
@@ -2137,3 +2195,103 @@ class MetodoPagoXCompraViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelVi
         )
         salida = serializers.MetodoPagoXCompraSerializer(pago)
         return Response(salida.data, status=status.HTTP_201_CREATED)
+
+
+class RegistroActividadViewSet(viewsets.ReadOnlyModelViewSet):
+    """Registro de cambios del sistema (auditoria).
+
+    Solo lectura. Se alimenta automaticamente desde el historial de
+    simple-history de los modelos con `history = HistoricalRecords()`.
+    """
+
+    queryset = RegistroActividad.objects.select_related('usuario').all()
+    serializer_class = serializers.RegistroActividadSerializer
+    permission_classes = [PermisoPorRol]
+    roles_escritura = ()
+    search_fields = ['modelo', 'objeto', 'usuario__username']
+    ordering_fields = ['fecha', 'modelo', 'accion']
+    ordering = ['-fecha']
+
+    ACCIONES_VALIDAS = {
+        RegistroActividad.TipoAccion.CREAR,
+        RegistroActividad.TipoAccion.EDITAR,
+        RegistroActividad.TipoAccion.ELIMINAR,
+    }
+
+    def _filtrar(self, queryset):
+        """Aplica los filtros de la vista (modelo, accion, usuario y fechas).
+
+        Usa `iexact` para que el slug del modelo y la accion se puedan enviar
+        en cualquier capitalizacion.
+        """
+        modelo = self.request.query_params.get('modelo', '').strip()
+        accion = self.request.query_params.get('accion', '').strip().upper()
+        usuario = self.request.query_params.get('usuario', '').strip()
+        fecha_desde = self.request.query_params.get('fecha_desde', '').strip()
+        fecha_hasta = self.request.query_params.get('fecha_hasta', '').strip()
+
+        if modelo:
+            queryset = queryset.filter(modelo__iexact=modelo)
+
+        if accion:
+            if accion not in self.ACCIONES_VALIDAS:
+                raise ValidationError(
+                    {
+                        'accion': (
+                            'La acción debe ser CREAR, EDITAR o ELIMINAR.'
+                        )
+                    }
+                )
+            queryset = queryset.filter(accion__iexact=accion)
+
+        if usuario:
+            try:
+                usuario_id = int(usuario)
+            except (TypeError, ValueError):
+                raise ValidationError(
+                    {'usuario': 'El usuario debe ser un id válido.'}
+                ) from None
+            queryset = queryset.filter(usuario_id=usuario_id)
+
+        if fecha_desde:
+            queryset = queryset.filter(fecha__date__gte=fecha_desde)
+        if fecha_hasta:
+            queryset = queryset.filter(fecha__date__lte=fecha_hasta)
+
+        return queryset
+
+    def get_queryset(self):
+        return self._filtrar(super().get_queryset())
+
+    @action(detail=False, methods=['get'])
+    def resumen(self, request):
+        """Totales por accion y por modelo con los filtros aplicados.
+
+        Se calcula sobre todo el conjunto filtrado (sin paginar) para que los
+        KPIs del frontend reflejen el filtro real.
+        """
+        queryset = self.filter_queryset(
+            self._filtrar(super().get_queryset())
+        )
+        # Sin ordering: el ORDER BY se suma al GROUP BY de values().annotate()
+        # y devuelve una fila por fecha en lugar de una por accion/modelo.
+        base = queryset.order_by()
+        por_accion = {
+            fila['accion']: fila['cantidad']
+            for fila in base.values('accion').annotate(
+                cantidad=Count('id')
+            )
+        }
+        por_modelo = {
+            fila['modelo']: fila['cantidad']
+            for fila in base.values('modelo').annotate(
+                cantidad=Count('id')
+            )
+        }
+        return Response(
+            {
+                'total': queryset.count(),
+                'por_accion': por_accion,
+                'por_modelo': por_modelo,
+            }
+        )

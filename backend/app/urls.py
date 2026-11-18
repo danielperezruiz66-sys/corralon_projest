@@ -107,6 +107,8 @@ router.register(
     basename='solicitud-compra',
 )
 
+router.register('actividad', views.RegistroActividadViewSet, basename='actividad')
+
 urlpatterns = [
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),

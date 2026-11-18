@@ -13,6 +13,7 @@ import { formatearMoneda } from '../../utils/formato'
 import { validarNumero } from '../../utils/validaciones'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 import MensajeError from '../common/MensajeError.jsx'
+import '../../styles/components/proveedores/FormularioProductosProveedor.css'
 
 let siguienteFila = 0
 

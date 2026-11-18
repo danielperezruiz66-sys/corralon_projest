@@ -30,6 +30,7 @@ import { descargarCsv, numeroCsv } from '../utils/csv'
 import { nuevaClave } from '../utils/clave'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/components/comercial/Cobro.css'
 
 const PAGINA_VACIA = {
   count: 0,

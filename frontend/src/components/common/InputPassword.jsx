@@ -16,7 +16,7 @@ export default function InputPassword({
   return (
     <div className="grupo-input">
       <div className="contenedor-input-interno">
-        {Icon && <Icon className="icono-campo" size={20} />}
+        {Icon && <Icon className="icono-campo" size={22} />}
 
         <input
           type={verPassword ? 'text' : 'password'}
@@ -33,7 +33,7 @@ export default function InputPassword({
           aria-label={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
           tabIndex={-1}
         >
-          {verPassword ? <IconEye size={20} /> : <IconEyeOff size={20} />}
+          {verPassword ? <IconEye size={22} /> : <IconEyeOff size={22} />}
         </button>
       </div>
 

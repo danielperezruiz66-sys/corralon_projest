@@ -2,24 +2,18 @@
 
 > Solo lo pendiente (lo terminado se borra). Contexto: `AGENTS.md`.
 
-**Última actualización:** 2026-11-14
+**Última actualización:** 2026-11-18
 
-**Qué se hizo (2026-11-14):** **matriz de roles** — el cajero y el vendedor
-gestionan también **Compras**; el cajero y el vendedor ven **Proveedores e
-Inventario en consulta**; el cajero entra a **Facturación**; el vendedor no ve
-Administración; **pagar y anular compras es solo de `AD`/`GE`** (el resto deja
-una solicitud). **Solicitudes de compra** (`SolicitudCompra`): crear, listar y
-resolver (pagar/anular/rechazar); una sola solicitud pendiente por compra; con
-una solicitud abierta la compra no se puede volver a solicitar, pagar ni anular;
-resolver = pagar en la misma transacción. **Idempotencia** con clave única en
-pagos de compra/venta y cierre de caja (un doble clic o un reintento no cobra
-dos veces). **Caja en pausa** (`PA`): pausar con motivo obligatorio (queda
-auditado en el historial), reanudar solo el dueño con su contraseña; en pausa no
-hay ventas, pagos ni arqueo. **No se puede cerrar sesión con la caja abierta**
-(`GET /api/secciones-caja/mia/` + aviso en el sidebar). **Dashboard por rol**
-(`vista`, `codigos`, `bloques`; datos limitados a las sucursales del usuario).
-**Facturación**: cascarón con emitir (deshabilitado), comprobantes emitidos y
-datos de emisión (solo `AD`/`GE`). Seed con usuario `GE` (`gerente.salta`).
+**Qué se hizo (2026-11-18):** **Perfil** (`/perfil`) con modo lectura, edición
+en modal, cambio de contraseña propio (todos los roles con empleado) y
+validaciones. **Actividad** (`/actividad`, `AD`/`GE`): modelo
+`RegistroActividad` alimentado por simple-history, slugs de modelo, filtros por
+tipo de tarea (acción), usuario y fechas (sin filtro por módulo), y
+`GET /api/actividad/resumen/` para KPIs reales; el signal se corrigió para
+simple-history 3.x (`history_instance` en kwargs). La tabla usa una columna
+**Detalle** con el motivo o el diff legible de los campos cambiados (sin
+passwords), en lugar de Campo/Valor anterior/Valor nuevo. Se agregó historial
+a `ProductoXProveedor` para auditar el precio de costo.
 
 ## Pendientes
 
@@ -51,6 +45,13 @@ datos de emisión (solo `AD`/`GE`). Seed con usuario `GE` (`gerente.salta`).
       comprobantes) y `AD`/`GE` además los datos de emisión.
 - [ ] **Dashboard**: que cada rol vea solo sus bloques (ventas, compras,
       stock, caja, equipo) y los avisos por rol.
+- [ ] **Actividad**: editar un producto/venta/compra y verificar que aparezca
+      el registro con modelo, objeto, acción y usuario (incluye modelos
+      relacionados, ej. pago de venta); probar los filtros por tipo de tarea,
+      usuario y fechas, y que los KPIs coincidan con el total.
+- [ ] **Perfil**: editar datos (con empleado y con superuser sin empleado),
+      cambiar la propia contraseña desde roles `CA`/`VE`/`ED`/`AD`/`GE` y que un
+      no-admin no pueda cambiar la de otro.
 - [ ] **Caja** (QA previo): selector "A nombre de" solo con habilitados en la
       sucursal; apertura propia y a nombre de otro; sugerencia de monto inicial;
       observación de apertura obligatoria al diferir; contado precargado al
@@ -61,18 +62,12 @@ datos de emisión (solo `AD`/`GE`). Seed con usuario `GE` (`gerente.salta`).
       alta con y sin acceso; duplicados rechazados; sync de roles/sucursales;
       creación de acceso desde la edición; contraseña solo `AD`; suspensión
       bloquea acceso.
-- [ ] **General**: rutas `/login`, `/caja`, ventas, compras, dashboard; usuarios
-      de prueba (`admin`/`admin1234`; `*_salta`, `*_quijano` y `gerente.salta`
-      con `test1234`); sin rol → solo Inicio y Perfil.
-
-### Módulos nuevos
-- [ ] **Perfil** (personal).
-- [ ] **Actividad** (historial de cambios del sistema). Puede apoyarse en
-      `django-simple-history` (ya está en 19 modelos) sin crear tabla nueva.
-- [ ] Reemplazar `EnDesarrollo` en `App.jsx`.
+- [ ] **General**: rutas `/login`, `/caja`, ventas, compras, dashboard, perfil,
+      actividad; usuarios de prueba (`admin`/`admin1234`; `*_salta`,
+      `*_quijano` y `gerente.salta` con `test1234`); sin rol → solo Inicio y
+      Perfil.
 
 ### Backend
-- [ ] Endpoint de cambio de contraseña del propio usuario (`/cambiar-contrasena`).
 - [ ] Restringir datos por sucursal en el resto de la API (hoy solo el
       dashboard lo hace).
 - [ ] Reversión de pagos: hoy una compra con pagos no se puede anular; hace

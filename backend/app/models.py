@@ -1,8 +1,13 @@
+import re
+from decimal import Decimal
+
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.dispatch import receiver
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
+from simple_history.signals import pre_create_historical_record
 
 
 # =============================================================================
@@ -788,6 +793,8 @@ class ProductoXProveedor(models.Model):
     precio_lista = models.DecimalField(max_digits=10, decimal_places=2)
     estado = models.BooleanField(default=True)
 
+    history = HistoricalRecords()
+
     class Meta:
         db_table = 'PRODUCTOS_X_PROVEEDORES'
         verbose_name = 'Producto por Proveedor'
@@ -1341,3 +1348,212 @@ class TransferenciaStock(models.Model):
             f'{self.producto} · {self.deposito_origen} → '
             f'{self.deposito_destino}'
         )
+
+
+class RegistroActividad(models.Model):
+    """Registro consolidado de cambios del sistema.
+
+    Se alimenta automaticamente desde el historial de simple-history
+    (pre_create_historical_record) de todos los modelos con `history = HistoricalRecords()`.
+    """
+
+    class TipoAccion(models.TextChoices):
+        CREAR = 'CREAR', 'Creación'
+        EDITAR = 'EDITAR', 'Edición'
+        ELIMINAR = 'ELIMINAR', 'Eliminación'
+
+    fecha = models.DateTimeField(auto_now_add=True)
+    usuario = models.ForeignKey(
+        'Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='registros_actividad',
+    )
+    modelo = models.CharField(max_length=100, blank=True)
+    objeto_id = models.PositiveIntegerField(null=True, blank=True)
+    objeto = models.CharField(max_length=255, blank=True)
+    accion = models.CharField(
+        max_length=10,
+        choices=TipoAccion.choices,
+        default=TipoAccion.EDITAR,
+    )
+    campo = models.CharField(max_length=100, blank=True, default='')
+    valor_anterior = models.TextField(blank=True, default='')
+    valor_nuevo = models.TextField(blank=True, default='')
+    detalle = models.TextField(blank=True, default='')
+
+    class Meta:
+        db_table = 'REGISTROS_ACTIVIDAD'
+        ordering = ['-fecha']
+        verbose_name = 'Registro de actividad'
+        verbose_name_plural = 'Registros de actividad'
+
+    def __str__(self):
+        return f'{self.fecha} · {self.modelo} · {self.get_accion_display()}'
+
+
+def _slug_modelo(nombre):
+    """Convierte un nombre de modelo CamelCase a slug kebab-case.
+
+    Ejemplos: `Producto` -> `producto`, `SeccionCaja` -> `seccion-caja`,
+    `SolicitudCompra` -> `solicitud-compra`, `ProductoXProveedor` ->
+    `producto-proveedor`.
+    """
+    # Separa minuscula/mayuscula y mayuscula/minuscula.
+    slug = re.sub(r'([a-z0-9])([A-Z])', r'\1-\2', nombre)
+    slug = re.sub(r'([A-Z])([A-Z][a-z])', r'\1-\2', slug)
+    return slug.lower().replace('-x-', '-')
+
+
+# Campos que no forman parte del diff legible de un cambio.
+_CAMPOS_NO_DETALLE = {
+    'history_id',
+    'history_date',
+    'history_change_reason',
+    'history_type',
+    'history_user',
+    'password',
+}
+
+
+def _formatear_valor_actividad(valor):
+    """Formatea un valor para mostrarlo en el detalle de actividad."""
+    if valor is None or valor == '':
+        return '—'
+    if isinstance(valor, bool):
+        return 'Sí' if valor else 'No'
+    if isinstance(valor, Decimal):
+        return f'{valor:.2f}'
+    if hasattr(valor, 'isoformat'):
+        return valor.isoformat()
+    texto = str(valor)
+    return texto if len(texto) <= 60 else f'{texto[:60]}…'
+
+
+def _detalle_actividad(history_instance, history_type, motivo, objeto_txt):
+    """Arma el resumen legible de un cambio de actividad.
+
+    Prioriza el motivo cargado por el flujo; si no hay, para altas/bajas usa
+    la etiqueta del objeto y para ediciones compara con el historico anterior
+    del mismo objeto (solo los campos que cambiaron, sin datos sensibles).
+    """
+    if motivo:
+        return motivo[:500]
+
+    if history_type == '+':
+        return f'Alta: {objeto_txt}'[:500]
+    if history_type == '-':
+        return f'Baja: {objeto_txt}'[:500]
+
+    # Edicion: comparar con el ultimo historico guardado del mismo objeto.
+    anterior = (
+        history_instance.__class__.objects.filter(id=history_instance.id)
+        .order_by('-history_date')
+        .first()
+    )
+    if anterior is None:
+        return 'Sin cambios'
+
+    cambios = []
+    for field in history_instance._meta.fields:
+        nombre = field.name
+        if nombre in _CAMPOS_NO_DETALLE:
+            continue
+        if getattr(field, 'auto_now', False) or getattr(
+            field, 'auto_now_add', False
+        ):
+            continue
+        valor_anterior = getattr(anterior, nombre, None)
+        valor_nuevo = getattr(history_instance, nombre, None)
+        if valor_anterior == valor_nuevo:
+            continue
+        etiqueta = str(field.verbose_name or nombre).replace('_', ' ')
+        etiqueta = etiqueta[:1].upper() + etiqueta[1:]
+        cambios.append(
+            f'{etiqueta}: {_formatear_valor_actividad(valor_anterior)} → '
+            f'{_formatear_valor_actividad(valor_nuevo)}'
+        )
+        if len(cambios) >= 5:
+            break
+
+    if not cambios:
+        return 'Sin cambios'
+    texto = ' · '.join(cambios)
+    if len(cambios) >= 5:
+        texto += ' …'
+    return texto[:500]
+
+
+@receiver(pre_create_historical_record)
+def _registrar_actividad_desde_historial(sender, instance, **kwargs):
+    """Crea un RegistroActividad cada vez que simple-history graba un cambio.
+
+    En simple-history 3.x el signal entrega el objeto original en `instance`
+    y el registro historico en `kwargs['history_instance']`. El `sender` es el
+    modelo historico.
+    """
+    # Evitar registrar cambios del propio modelo de actividad.
+    if sender.__name__ == 'HistoricalRegistroActividad':
+        return
+
+    history_instance = kwargs.get('history_instance')
+    if history_instance is None:
+        return
+
+    history_type = history_instance.history_type
+    if history_type is None:
+        return
+
+    modelo_nombre = sender.__name__
+    if modelo_nombre.startswith('Historical'):
+        modelo_nombre = modelo_nombre[len('Historical'):]
+    modelo_slug = _slug_modelo(modelo_nombre)
+
+    tipo_map = {
+        '+': RegistroActividad.TipoAccion.CREAR,
+        '~': RegistroActividad.TipoAccion.EDITAR,
+        '-': RegistroActividad.TipoAccion.ELIMINAR,
+    }
+
+    # El pk del objeto original.
+    objeto_id = getattr(instance, 'pk', None)
+
+    # Intentar obtener una etiqueta legible del objeto.
+    objeto_txt = ''
+    for campo_texto in (
+        'nombre', 'razon_social', 'ocupacion', 'legajo', 'cuit',
+        'descripcion', 'codigo',
+    ):
+        valor = getattr(instance, campo_texto, None)
+        if valor:
+            objeto_txt = str(valor)[:255]
+            break
+    if not objeto_txt:
+        objeto_txt = str(instance)[:255]
+
+    detalle = _detalle_actividad(
+        history_instance,
+        history_type,
+        kwargs.get('history_change_reason'),
+        objeto_txt,
+    )
+
+    # Un guardado sin cambios reales no aporta a la auditoria.
+    if history_type == '~' and detalle == 'Sin cambios':
+        return
+
+    try:
+        RegistroActividad.objects.create(
+            usuario=kwargs.get('history_user'),
+            modelo=modelo_slug,
+            objeto_id=objeto_id,
+            objeto=objeto_txt,
+            accion=tipo_map.get(
+                history_type, RegistroActividad.TipoAccion.EDITAR
+            ),
+            detalle=detalle,
+        )
+    except Exception:
+        # Nunca debe romper el flujo de la aplicacion si falla la auditoria.
+        pass

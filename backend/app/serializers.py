@@ -45,6 +45,7 @@ from .models import (
     Provincia,
     Proveedor,
     ProveedorXSucursal,
+    RegistroActividad,
     Rol,
     SeccionCaja,
     SolicitudCompra,
@@ -250,6 +251,16 @@ class CambiarPasswordSerializer(serializers.Serializer):
     password_admin = serializers.CharField(
         max_length=128,
         style={'input_type': 'password'},
+        required=False,
+        allow_blank=True,
+        default='',
+    )
+    password_actual = serializers.CharField(
+        max_length=128,
+        style={'input_type': 'password'},
+        required=False,
+        allow_blank=True,
+        default='',
     )
 
     def validate(self, attrs):
@@ -258,6 +269,70 @@ class CambiarPasswordSerializer(serializers.Serializer):
                 {'password_confirmacion': 'Las contraseñas no coinciden.'}
             )
         return attrs
+
+
+class EmpleadoPerfilSerializer(serializers.Serializer):
+    """Datos personales que el usuario puede editar de su propio empleado."""
+
+    nombre = serializers.CharField(max_length=50, required=False)
+    apellido = serializers.CharField(max_length=50, required=False)
+    dni = serializers.CharField(max_length=15, required=False)
+    telefono = serializers.CharField(
+        max_length=30,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+
+
+class UsuarioPerfilSerializer(serializers.Serializer):
+    """Serializer para que el usuario autenticado edite su propio perfil.
+
+    Acepta `email` y un objeto `empleado` con `nombre`, `apellido`, `dni`
+    y `telefono`. No permite cambiar username, roles ni estado.
+    """
+    email = serializers.EmailField(required=False, allow_blank=True)
+    empleado = EmpleadoPerfilSerializer(required=False)
+
+    def validate_empleado(self, value):
+        """Evita DNI duplicado con otro empleado."""
+        dni = value.get('dni')
+        if not dni:
+            return value
+        existentes = Empleado.objects.filter(dni=dni)
+        if self.instance is not None:
+            empleado = getattr(self.instance, 'empleado', None)
+            if empleado is not None:
+                existentes = existentes.exclude(pk=empleado.pk)
+        if existentes.exists():
+            raise serializers.ValidationError(
+                {'dni': 'El DNI ya está en uso por otro empleado.'}
+            )
+        return value
+
+    def update(self, instance, validated_data):
+        empleado_data = validated_data.pop('empleado', None)
+        email = validated_data.get('email')
+
+        if email is not None:
+            instance.email = email
+            instance.save(update_fields=['email'])
+
+        if empleado_data is not None:
+            empleado = getattr(instance, 'empleado', None)
+            if empleado is None:
+                raise serializers.ValidationError(
+                    {'empleado': 'El usuario no tiene un empleado asociado.'}
+                )
+            empleado.nombre = empleado_data.get('nombre', empleado.nombre)
+            empleado.apellido = empleado_data.get('apellido', empleado.apellido)
+            if 'dni' in empleado_data:
+                empleado.dni = empleado_data['dni']
+            if 'telefono' in empleado_data:
+                empleado.telefono = empleado_data['telefono'] or None
+            empleado.save()
+
+        return instance
 
 
 class EmpleadoSerializer(serializers.ModelSerializer):
@@ -2534,6 +2609,36 @@ class ResolverSolicitudSerializer(serializers.Serializer):
 # =============================================================================
 # STOCK — MOVIMIENTOS
 # =============================================================================
+
+class RegistroActividadSerializer(serializers.ModelSerializer):
+    usuario_detalle = serializers.CharField(
+        source='usuario.username', read_only=True, allow_null=True
+    )
+    accion_detalle = serializers.CharField(
+        source='get_accion_display', read_only=True
+    )
+    modelo_detalle = serializers.SerializerMethodField()
+
+    def get_modelo_detalle(self, obj):
+        return (obj.modelo or '').replace('-', ' ').title()
+
+    class Meta:
+        model = RegistroActividad
+        fields = [
+            'id',
+            'fecha',
+            'usuario',
+            'usuario_detalle',
+            'modelo',
+            'modelo_detalle',
+            'objeto_id',
+            'objeto',
+            'accion',
+            'accion_detalle',
+            'detalle',
+        ]
+        read_only_fields = fields
+
 
 class MovimientoStockSerializer(serializers.ModelSerializer):
     stock_detalle = serializers.StringRelatedField(source='stock', read_only=True)

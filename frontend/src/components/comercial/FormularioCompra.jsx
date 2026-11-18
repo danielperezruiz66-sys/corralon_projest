@@ -20,6 +20,7 @@ import MensajeError from '../common/MensajeError.jsx'
 import FormularioProductosProveedor from '../proveedores/FormularioProductosProveedor.jsx'
 import FormularioProveedor from '../proveedores/FormularioProveedor.jsx'
 import SelectorProductos from './SelectorProductos'
+import '../../styles/components/comercial/FormularioCompra.css'
 
 function fechaHoyLocal() {
   const hoy = new Date()
@@ -35,7 +36,7 @@ export default function FormularioCompra({
   proveedorInicialId = '',
   proveedorInicialDetalle = null,
   productoInicialId = '',
-  puedeOperar = true,
+  puedeGestionar = true,
   onCerrar,
   onGuardado,
 }) {
@@ -393,8 +394,8 @@ export default function FormularioCompra({
     if (!proveedor) {
       nuevos.proveedor = 'Seleccioná un proveedor activo.'
     }
-    const entregaFinal = puedeOperar ? estadoEntrega : 'PE'
-    const fechaLlegadaFinal = puedeOperar ? fechaLlegada : ''
+    const entregaFinal = puedeGestionar ? estadoEntrega : 'PE'
+    const fechaLlegadaFinal = puedeGestionar ? fechaLlegada : ''
     if (entregaFinal === 'EC') {
       if (!fechaLlegadaFinal) {
         nuevos.fechaLlegada = 'Indicá la fecha estimada de llegada.'

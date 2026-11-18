@@ -9,7 +9,7 @@ export default function InputField({
   return (
     <div className="grupo-input">
       <div className="contenedor-input-interno">
-        {Icon && <Icon size={22} className="icono-campo" />}
+        {Icon && <Icon size={24} className="icono-campo" />}
         <input
           type={type}
           placeholder={placeholder}
