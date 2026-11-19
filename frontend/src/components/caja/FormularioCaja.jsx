@@ -3,7 +3,7 @@ import Swal from 'sweetalert2'
 import { IconCash, IconLoader2, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
 import MensajeError from '../common/MensajeError.jsx'
-import { validarTexto } from '../../utils/validaciones'
+import { validarNumero } from '../../utils/validaciones'
 
 const ESTADOS = [
   { id: 'AC', etiqueta: 'Activa' },
@@ -11,9 +11,24 @@ const ESTADOS = [
   { id: 'MT', etiqueta: 'En mantenimiento' },
 ]
 
-export default function FormularioCaja({ caja = null, onCerrar, onGuardado }) {
+export default function FormularioCaja({
+  caja = null,
+  sucursales = [],
+  sucursalPorDefecto = '',
+  onCerrar,
+  onGuardado,
+}) {
   const esEdicion = Boolean(caja?.id)
-  const [nombre, setNombre] = useState(caja?.nombre || '')
+  const [sucursal, setSucursal] = useState(
+    caja?.sucursal
+      ? String(caja.sucursal)
+      : String(sucursalPorDefecto || sucursales[0]?.id || ''),
+  )
+  const [numeroCaja, setNumeroCaja] = useState(
+    caja?.numero_caja !== undefined && caja?.numero_caja !== null
+      ? String(caja.numero_caja)
+      : '',
+  )
   const [estado, setEstado] = useState(caja?.estado || 'AC')
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
@@ -22,9 +37,18 @@ export default function FormularioCaja({ caja = null, onCerrar, onGuardado }) {
     evento.preventDefault()
     const nuevos = {}
 
-    const errorNombre = validarTexto(nombre, 'El nombre', { min: 1, max: 50 })
-    if (errorNombre) {
-      nuevos.nombre = errorNombre
+    if (!sucursal) {
+      nuevos.sucursal = 'Elegí la sucursal de la caja.'
+    }
+
+    const errorNumero = validarNumero(numeroCaja, {
+      etiqueta: 'El número de caja',
+      mayorQueCero: true,
+      decimales: 0,
+      maximo: 999999,
+    })
+    if (errorNumero) {
+      nuevos.numero_caja = errorNumero
     }
 
     if (Object.keys(nuevos).length > 0) {
@@ -43,7 +67,8 @@ export default function FormularioCaja({ caja = null, onCerrar, onGuardado }) {
         {
           method: esEdicion ? 'PATCH' : 'POST',
           body: JSON.stringify({
-            nombre: nombre.trim(),
+            sucursal: Number(sucursal),
+            numero_caja: Number(numeroCaja),
             estado,
           }),
         },
@@ -74,7 +99,7 @@ export default function FormularioCaja({ caja = null, onCerrar, onGuardado }) {
         <div className="comercial-modal-cabecera">
           <h2>
             <IconCash size={24} />
-            {esEdicion ? 'Editar caja física' : 'Nueva caja física'}
+            {esEdicion ? 'Editar caja' : 'Nueva caja'}
           </h2>
           <button
             type="button"
@@ -88,21 +113,44 @@ export default function FormularioCaja({ caja = null, onCerrar, onGuardado }) {
 
         <form onSubmit={guardar} className="comercial-grid" noValidate>
           <p className="caja-nota-total ancho-completo">
-            Una caja física puede habilitarse en varias sucursales. El conteo
-            de dinero vive en cada seccion de caja.
+            Cada caja pertenece a una sucursal y se numera dentro de ella. El
+            número no se puede repetir en la misma sucursal.
           </p>
 
           <label className="campo-comercial ancho-completo">
-            <span>Nombre de la caja *</span>
+            <span>Sucursal *</span>
+            <select
+              className={errores.sucursal ? 'input-error' : ''}
+              value={sucursal}
+              onChange={(evento) => setSucursal(evento.target.value)}
+              disabled={sucursales.length === 0}
+            >
+              {sucursales.length === 0 ? (
+                <option value="">No hay sucursales</option>
+              ) : (
+                sucursales.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.nombre}
+                  </option>
+                ))
+              )}
+            </select>
+            <MensajeError>{errores.sucursal}</MensajeError>
+          </label>
+
+          <label className="campo-comercial ancho-completo">
+            <span>Número de caja *</span>
             <input
-              type="text"
-              className={errores.nombre ? 'input-error' : ''}
-              value={nombre}
-              onChange={(evento) => setNombre(evento.target.value)}
-              placeholder="Caja 1"
-              maxLength="50"
+              type="number"
+              inputMode="numeric"
+              min="1"
+              step="1"
+              className={errores.numero_caja ? 'input-error' : ''}
+              value={numeroCaja}
+              onChange={(evento) => setNumeroCaja(evento.target.value)}
+              placeholder="1"
             />
-            <MensajeError>{errores.nombre}</MensajeError>
+            <MensajeError>{errores.numero_caja}</MensajeError>
           </label>
 
           <label className="campo-comercial ancho-completo">

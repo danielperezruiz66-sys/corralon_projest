@@ -484,7 +484,7 @@ export default function Inicio() {
                         Venta #{venta.id} · {venta.cliente}
                       </strong>
                       <small>
-                        {venta.seccion_caja_detalle} · {venta.sucursal}
+                        {venta.movimiento_caja_detalle} · {venta.sucursal}
                       </small>
                     </div>
                     <div className="vencimiento-tiempo">

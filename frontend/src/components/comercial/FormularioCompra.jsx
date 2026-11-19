@@ -80,7 +80,7 @@ export default function FormularioCompra({
     let vigente = true
 
     Promise.all([
-      pedirTodas('/secciones-caja/?estado=AB'),
+      pedirTodas('/movimientos-caja/?estado=AB'),
       pedirTodas('/sucursales/'),
     ])
       .then(([seccionesData, sucursalesData]) => {
@@ -425,7 +425,7 @@ export default function FormularioCompra({
       await pedir('/compras/', {
         method: 'POST',
         body: JSON.stringify({
-          seccion_caja: Number(seccion),
+          movimiento_caja: Number(seccion),
           proveedor: Number(proveedor),
           estado_entrega: entregaFinal,
           fecha_estimada_llegada: fechaLlegadaFinal || null,
@@ -450,7 +450,7 @@ export default function FormularioCompra({
     } catch (e) {
       if (e.campos) {
         const mapa = {
-          seccion_caja: 'seccion',
+          movimiento_caja: 'seccion',
           fecha_estimada_llegada: 'fechaLlegada',
         }
         const nuevos = {}

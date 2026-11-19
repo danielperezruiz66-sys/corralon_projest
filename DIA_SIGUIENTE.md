@@ -1,59 +1,43 @@
-# Pendientes
+# Pendientes por fases
 
-> Solo lo pendiente (lo terminado se borra). Contexto: `AGENTS.md`.
+> Solo lo pendiente. Contexto: `AGENTS.md`. Backend cerrado en `524875e`
+> (más la restricción de una sola sucursal). Base local reseteada y sembrada.
 
-**Última actualización:** 2026-11-19
+## Fase 1 — Frontend Caja
 
-## Backend (rama `experimental/cambio-180`)
+- [ ] `Caja` con `sucursal` + `numero_caja`; eliminar `FormularioAsignacionCaja`
+      y la pestaña de asignaciones.
+- [ ] `/api/secciones-caja/` → `/api/movimientos-caja/` en página, componentes,
+      menú y CSV.
+- [ ] El cierre pide `password` del usuario autenticado.
+- [ ] Ajustar apertura, detalle y acciones (`pausar`, `reanudar`, `auditar`).
 
-- [ ] **Resetear la base local** (las migraciones se consolidaron en `0001`):
-      `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`, luego
-      `manage.py migrate` y `manage.py seed_data --reset`. Es destructivo.
-- [ ] Commitear el backend reestructurado (caja, bajas y migración consolidada).
+## Fase 2 — Frontend Ventas y Compras
 
-## Frontend — adaptación obligatoria a la nueva API
+- [ ] Selectores de sesión: `seccion_caja` → `movimiento_caja` en venta y compra.
+- [ ] Compra: selector de `deposito` y mostrar el depósito de la compra.
+- [ ] Quitar pestaña **Solicitudes**, badge y acciones de solicitud.
 
-- [ ] **Caja**: `Caja` ahora lleva `sucursal` + `numero_caja`;
-      `/api/secciones-caja/` → `/api/movimientos-caja/`; el cierre exige
-      `password` del usuario autenticado; quitar el selector/CRUD de
-      `sucursales-cajas`.
-- [ ] **Compras**: quitar pestaña **Solicitudes**, badge "Solicitud pendiente"
-      y botones de solicitud; agregar selector de **depósito** en el alta y
-      mostrar `Compra.deposito`.
-- [ ] **Inventario**: quitar pestañas **Movimientos** y **Transferencias**;
-      agregar acción **Mover lote** (`/api/detalles-stock/{id}/mover/`) entre
-      depósitos de la misma sucursal.
-- [ ] **Dashboard**: panel de cajas abiertas sobre `MovimientoCaja`
-      (`caja`, `caja.sucursal`).
+## Fase 3 — Frontend Inventario
 
-## QA visual manual (usuario)
+- [ ] Quitar pestañas **Movimientos** y **Transferencias** y
+      `FormularioTransferencia`.
+- [ ] Agregar acción **Mover lote** (`/api/detalles-stock/{id}/mover/`).
 
-- [ ] Caja: abrir propia y a nombre de otro, sugerencia de monto inicial,
-      observación obligatoria al diferir, cerrar con contraseña (correcta e
-      incorrecta), pausar/reanudar, auditoría, alcance por rol.
-- [ ] Compras: alta con depósito, recepción en ese depósito, pago/anulación
-      solo `AD/GE`, sin solicitudes.
-- [ ] Inventario: mover lote completo entre depósitos; rechazo a depósito de
-      otra sucursal; lote negativo no se mueve.
-- [ ] Ventas: anular una venta y verificar que el stock vuelve a los mismos
-      lotes.
+## Fase 4 — Dashboard, menú y QA
 
-## Backend pendientes
+- [ ] Panel de cajas abiertas sobre `MovimientoCaja`.
+- [ ] `npm run lint` y `npm run build`.
+- [ ] QA visual de las fases 1–3.
 
-- [ ] Restringir la operación a una sola sucursal (validación en serializer /
-      servicio, no constraint), manteniendo la estructura multi-sucursal.
-- [ ] Reversión de pagos: hoy una compra con pagos no se puede anular.
+## Backend (después del frontend)
+
+- [ ] Reversión de pagos para poder anular compras pagadas.
 - [ ] Dashboard V2: top productos, formas de pago, ventas por sucursal,
       diferencias de caja y actividad reciente.
-- [ ] El dashboard por rol ya devuelve `bloques`; falta que la API omita los
-      bloques que el rol no puede ver.
+- [ ] Omitir desde la API los bloques del dashboard que el rol no puede ver.
 
-## Facturación (ARCA)
+## Facturación y operación
 
-- [ ] Bloqueada por falta de CUIT del emisor, certificado `.crt`/`.key` y punto
-      de venta. Hoja de ruta en `AGENTS.md` §7.
-
-## Operación
-
-- [ ] El barrido de ventas vencidas es **manual**
-      (`cancelar_ventas_vencidas`). No programarlo automáticamente.
+- [ ] ARCA bloqueada (CUIT del emisor, certificado y punto de venta).
+- [ ] El barrido de ventas vencidas sigue siendo manual.

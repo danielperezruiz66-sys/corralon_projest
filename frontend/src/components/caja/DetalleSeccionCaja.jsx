@@ -164,7 +164,7 @@ export default function DetalleSeccionCaja({
       return
     }
     try {
-      await pedir(`/secciones-caja/${seccion.id}/auditar/`, {
+      await pedir(`/movimientos-caja/${seccion.id}/auditar/`, {
         method: 'POST',
       })
       Swal.fire({

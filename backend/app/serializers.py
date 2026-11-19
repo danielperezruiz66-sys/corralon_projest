@@ -145,6 +145,27 @@ class SucursalSerializer(serializers.ModelSerializer):
             'es_central',
         ]
 
+    def validate(self, attrs):
+        """El sistema opera con una sola sucursal por empresa."""
+        empresa = attrs.get('empresa')
+        if empresa is None and self.instance is not None:
+            empresa = self.instance.empresa
+        if empresa is None:
+            return attrs
+        existentes = Sucursal.objects.filter(empresa=empresa)
+        if self.instance is not None:
+            existentes = existentes.exclude(pk=self.instance.pk)
+        if existentes.exists():
+            raise serializers.ValidationError(
+                {
+                    'empresa': (
+                        'La empresa ya tiene una sucursal. El sistema opera con '
+                        'una sola sucursal.'
+                    )
+                }
+            )
+        return attrs
+
 
 class UsuarioSerializer(serializers.ModelSerializer):
     password = serializers.CharField(

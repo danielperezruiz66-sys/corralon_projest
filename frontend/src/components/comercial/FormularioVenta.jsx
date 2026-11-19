@@ -65,7 +65,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   useEffect(() => {
     let vigente = true
 
-    pedirTodas('/secciones-caja/?estado=AB')
+    pedirTodas('/movimientos-caja/?estado=AB')
       .then((seccionesData) => {
         if (!vigente) {
           return
@@ -308,7 +308,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
       await pedir('/ventas/', {
         method: 'POST',
         body: JSON.stringify({
-          seccion_caja: Number(seccion),
+          movimiento_caja: Number(seccion),
           cliente: cliente ? Number(cliente) : null,
           cliente_venta: cliente ? null : clienteVenta.trim() || null,
           items: items.map((item) => ({
@@ -329,7 +329,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
       onCerrar()
     } catch (e) {
       if (e.campos) {
-        const mapa = { seccion_caja: 'seccion' }
+        const mapa = { movimiento_caja: 'seccion' }
         const nuevos = {}
         Object.entries(e.campos).forEach(([campo, mensaje]) => {
           nuevos[mapa[campo] || campo] = mensaje

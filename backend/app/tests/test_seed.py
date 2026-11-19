@@ -98,18 +98,15 @@ class SeedStockTests(TestCase):
     def test_no_genera_detalles_negativos(self):
         self.assertFalse(DetalleStock.objects.filter(cantidad__lt=0).exists())
 
-    def test_dos_sucursales_en_salta(self):
+    def test_una_sucursal_por_empresa(self):
         sucursales = list(
             Sucursal.objects.select_related(
                 'ubicacion__localidad__provincia'
             )
         )
 
-        self.assertEqual(len(sucursales), 2)
-        self.assertEqual(
-            {sucursal.nombre for sucursal in sucursales},
-            {'Salta Capital', 'Campo Quijano'},
-        )
+        self.assertEqual(len(sucursales), 1)
+        self.assertEqual({sucursal.nombre for sucursal in sucursales}, {'Salta Capital'})
         for sucursal in sucursales:
             self.assertEqual(
                 sucursal.ubicacion.localidad.provincia.nombre,
@@ -132,7 +129,7 @@ class SeedStockTests(TestCase):
                 set(sucursal.cajas.values_list('numero_caja', flat=True)),
                 {1, 2},
             )
-        self.assertEqual(Caja.objects.count(), 4)
+        self.assertEqual(Caja.objects.count(), 2)
 
     def test_cada_sucursal_tiene_empleados_con_roles(self):
         for sucursal in Sucursal.objects.all():
@@ -149,8 +146,8 @@ class SeedStockTests(TestCase):
             )
             self.assertTrue({'AD', 'CA', 'VE', 'ED'}.issubset(codigos))
 
-        # Salta Capital suma un gerente de prueba.
-        self.assertEqual(Empleado.objects.count(), 9)
+        # El seed crea 4 empleados por sucursal y suma un gerente de prueba.
+        self.assertEqual(Empleado.objects.count(), 5)
         gerente = Empleado.objects.get(legajo='0009')
         self.assertEqual(
             set(
@@ -164,7 +161,7 @@ class SeedStockTests(TestCase):
 
     def test_productos_tienen_catalogo_costo_y_stock(self):
         self.assertEqual(Producto.objects.count(), 30)
-        self.assertEqual(Stock.objects.count(), 60)
+        self.assertEqual(Stock.objects.count(), 30)
 
         for producto in Producto.objects.select_related(
             'categoria',

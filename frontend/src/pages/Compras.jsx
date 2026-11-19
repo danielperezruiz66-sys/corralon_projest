@@ -7,7 +7,6 @@ import {
   IconCheck,
   IconChevronDown,
   IconChevronUp,
-  IconClipboardList,
   IconDownload,
   IconEye,
   IconLoader2,
@@ -64,11 +63,6 @@ const ESTADOS = [
 ]
 
 const ORDEN_INICIAL = '-fecha_compra'
-
-const TABS = [
-  { id: 'compras', etiqueta: 'Compras', icono: IconTruckDelivery },
-  { id: 'solicitudes', etiqueta: 'Solicitudes', icono: IconClipboardList },
-]
 
 function claseEstado(estado) {
   return `estado-badge estado-${estado.toLowerCase()}`
@@ -173,12 +167,7 @@ export default function Compras() {
   const [modalAbierto, setModalAbierto] = useState(
     () => searchParams.get('nueva') === '1',
   )
-  const [tab, setTab] = useState(() => searchParams.get('tab') || 'compras')
-  const [solicitudes, setSolicitudes] = useState([])
-  const [cargandoSolicitudes, setCargandoSolicitudes] = useState(true)
-  const [pagoSolicitud, setPagoSolicitud] = useState(null)
   const [clavePago, setClavePago] = useState('')
-  const [resolviendo, setResolviendo] = useState(false)
 
   const textoDiferido = useDebounce(texto.trim(), 350)
   const busqueda = textoDiferido
@@ -198,9 +187,6 @@ export default function Compras() {
   )
   const buscando = texto.trim() !== busqueda || actualizando
   const saldoPago = pago ? saldoCompra(pago) : 0
-  const solicitudesPendientes = solicitudes.filter(
-    (item) => item.estado === 'PE',
-  ).length
   const totalPago = pagosPago.reduce(
     (total, item) => total + montoPago(item.monto),
     0,
@@ -209,29 +195,6 @@ export default function Compras() {
   const pagosIncompletos = pagosPago.some(
     (item) => !item.metodo || montoPago(item.monto) <= 0,
   )
-
-  useEffect(() => {
-    let vigente = true
-    pedir('/solicitudes-compras/?page=1')
-      .then((respuesta) => {
-        if (vigente) {
-          setSolicitudes(respuesta.results ?? [])
-        }
-      })
-      .catch(() => {
-        if (vigente) {
-          setSolicitudes([])
-        }
-      })
-      .finally(() => {
-        if (vigente) {
-          setCargandoSolicitudes(false)
-        }
-      })
-    return () => {
-      vigente = false
-    }
-  }, [refresco])
 
   useEffect(() => {
     let vigente = true
@@ -275,11 +238,8 @@ export default function Compras() {
     if (pagina > 1) {
       parametros.set('page', String(pagina))
     }
-    if (tab !== 'compras') {
-      parametros.set('tab', tab)
-    }
     setSearchParams(parametros, { replace: true })
-  }, [busqueda, estado, entrega, fechas, orden, pagina, tab, setSearchParams])
+  }, [busqueda, estado, entrega, fechas, orden, pagina, setSearchParams])
 
   useEffect(() => {
     if (rangoInvalido) {
@@ -461,7 +421,7 @@ export default function Compras() {
         compra.id,
         formatearFechaHora(compra.fecha_compra),
         compra.proveedor_detalle || 'Sin proveedor',
-        compra.seccion_caja_detalle || '',
+        compra.movimiento_caja_detalle || '',
         numeroCsv(compra.monto_compra),
         compra.estado_detalle,
         etiquetaEntrega(compra),
@@ -634,7 +594,6 @@ export default function Compras() {
 
   function cerrarPago() {
     setPago(null)
-    setPagoSolicitud(null)
     setClavePago('')
   }
 
@@ -651,19 +610,10 @@ export default function Compras() {
       })),
     }
     try {
-      let actualizada
-      if (pagoSolicitud) {
-        await pedir(`/solicitudes-compras/${pagoSolicitud.id}/resolver/`, {
-          method: 'POST',
-          body: JSON.stringify({ accion: 'PAGAR', ...cuerpo }),
-        })
-        actualizada = await pedir(`/compras/${pago.id}/`)
-      } else {
-        actualizada = await pedir(`/compras/${pago.id}/pagar/`, {
-          method: 'POST',
-          body: JSON.stringify(cuerpo),
-        })
-      }
+      const actualizada = await pedir(`/compras/${pago.id}/pagar/`, {
+        method: 'POST',
+        body: JSON.stringify(cuerpo),
+      })
       cerrarPago()
       setDetalle((actual) =>
         actual && actual.id === actualizada.id ? actualizada : actual,
@@ -689,159 +639,6 @@ export default function Compras() {
     } finally {
       setPagando(false)
     }
-  }
-
-  async function enviarSolicitud(compra, tipo, motivo) {
-    try {
-      await pedir(`/compras/${compra.id}/solicitar/`, {
-        method: 'POST',
-        body: JSON.stringify({ tipo, motivo }),
-      })
-      Swal.fire({
-        icon: 'success',
-        title: 'Solicitud enviada',
-        text: 'Queda a la espera de que administración la resuelva.',
-        timer: 1900,
-        showConfirmButton: false,
-      })
-      setRefresco((valor) => valor + 1)
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo enviar la solicitud',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    }
-  }
-
-  async function solicitarPago(compra) {
-    const resultado = await Swal.fire({
-      title: `¿Solicitar el pago de la compra #${compra.id}?`,
-      text: 'Administración (AD/GE) tiene que resolverla. Mientras tanto la compra no se puede pagar.',
-      icon: 'question',
-      input: 'textarea',
-      inputLabel: 'Motivo de la solicitud *',
-      inputPlaceholder: 'Indicá por qué se necesita el pago',
-      inputAttributes: { maxlength: 500 },
-      showCancelButton: true,
-      confirmButtonColor: '#4a9da8',
-      cancelButtonColor: '#6c757d',
-      confirmButtonText: 'Sí, solicitar',
-      cancelButtonText: 'Cancelar',
-      inputValidator: (valor) => {
-        if (!valor || valor.trim().length < 10) {
-          return 'Explicá el motivo (10 caracteres o más).'
-        }
-        return null
-      },
-    })
-    if (!resultado.isConfirmed) {
-      return
-    }
-    await enviarSolicitud(compra, 'PG', resultado.value)
-  }
-
-  async function solicitarAnulacion(compra) {
-    const resultado = await Swal.fire({
-      title: `¿Solicitar la anulación de la compra #${compra.id}?`,
-      text: 'Administración (AD/GE) tiene que resolverla.',
-      icon: 'warning',
-      input: 'textarea',
-      inputLabel: 'Motivo de la solicitud *',
-      inputPlaceholder: 'Indicá por qué hay que anular la compra',
-      inputAttributes: { maxlength: 500 },
-      showCancelButton: true,
-      confirmButtonColor: '#c0392b',
-      cancelButtonColor: '#6c757d',
-      confirmButtonText: 'Sí, solicitar',
-      cancelButtonText: 'Cancelar',
-      inputValidator: (valor) => {
-        if (!valor || valor.trim().length < 10) {
-          return 'Explicá el motivo (10 caracteres o más).'
-        }
-        return null
-      },
-    })
-    if (!resultado.isConfirmed) {
-      return
-    }
-    await enviarSolicitud(compra, 'AN', resultado.value)
-  }
-
-  async function abrirPagoSolicitud(solicitud) {
-    setResolviendo(true)
-    try {
-      const compra = await pedir(`/compras/${solicitud.compra}/`)
-      setPagoSolicitud(solicitud)
-      setPago(compra)
-      setClavePago(nuevaClave())
-      setPagosPago([nuevoPago('', saldoCompra(compra).toFixed(2))])
-      if (metodos.length === 0) {
-        const datos = await pedirTodas('/metodos-pago/?estado=true')
-        setMetodos(datos)
-      }
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo abrir el pago',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    } finally {
-      setResolviendo(false)
-    }
-  }
-
-  async function resolverSolicitud(solicitud, accion, motivo = '') {
-    try {
-      await pedir(`/solicitudes-compras/${solicitud.id}/resolver/`, {
-        method: 'POST',
-        body: JSON.stringify({ accion, motivo }),
-      })
-      Swal.fire({
-        icon: 'success',
-        title:
-          accion === 'RECHAZAR' ? 'Solicitud rechazada' : 'Solicitud resuelta',
-        timer: 1800,
-        showConfirmButton: false,
-      })
-      setRefresco((valor) => valor + 1)
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo resolver la solicitud',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    }
-  }
-
-  async function rechazarSolicitud(solicitud) {
-    const resultado = await Swal.fire({
-      title: '¿Rechazar la solicitud?',
-      text: 'La compra queda como está y la solicitud queda registrada como rechazada.',
-      icon: 'question',
-      input: 'textarea',
-      inputLabel: 'Motivo del rechazo *',
-      inputPlaceholder: 'Indicá por qué no se aprueba',
-      inputAttributes: { maxlength: 500 },
-      showCancelButton: true,
-      confirmButtonColor: '#c0392b',
-      cancelButtonColor: '#6c757d',
-      confirmButtonText: 'Sí, rechazar',
-      cancelButtonText: 'Cancelar',
-      inputValidator: (valor) => {
-        if (!valor || valor.trim().length < 10) {
-          return 'Explicá el motivo (10 caracteres o más).'
-        }
-        return null
-      },
-    })
-    if (!resultado.isConfirmed) {
-      return
-    }
-    await resolverSolicitud(solicitud, 'RECHAZAR', resultado.value)
   }
 
   async function anularCompra(compra) {
@@ -902,30 +699,6 @@ export default function Compras() {
       />
 
       <div className="comercial">
-        <section className="compras-tabs">
-          {TABS.map((item) => {
-            const Icono = item.icono
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={tab === item.id ? 'activo' : ''}
-                onClick={() => setTab(item.id)}
-              >
-                <Icono size={18} />
-                {item.etiqueta}
-                {item.id === 'solicitudes' && solicitudesPendientes > 0 && (
-                  <span className="compras-tabs-contador">
-                    {solicitudesPendientes}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </section>
-
-        {tab === 'compras' && (
-          <>
             <section className="comercial-barra">
               <form
                 className="comercial-busqueda"
@@ -1120,7 +893,7 @@ export default function Compras() {
                             <strong>{compra.proveedor_detalle || 'Sin proveedor'}</strong>
                           </td>
                           <td className="texto-chico">
-                            {compra.seccion_caja_detalle || '—'}
+                            {compra.movimiento_caja_detalle || '—'}
                           </td>
                           <td className="numero">
                             <strong>{formatearMoneda(compra.monto_compra)}</strong>
@@ -1157,42 +930,8 @@ export default function Compras() {
                               >
                                 <IconEye size={17} />
                               </button>
-                              {compra.solicitud_pendiente && (
-                                <span className="estado-badge estado-pe">
-                                  Solicitud pendiente
-                                </span>
-                              )}
-                              {!puedeGestionar &&
-                                !compra.solicitud_pendiente &&
-                                compra.estado !== 'AN' &&
-                                saldoCompra(compra) > 0 && (
-                                  <button
-                                    type="button"
-                                    className="boton-icono"
-                                    onClick={() => solicitarPago(compra)}
-                                    title="Solicitar el pago de la compra"
-                                  >
-                                    <IconClipboardList size={17} />
-                                  </button>
-                                )}
-                              {!puedeGestionar &&
-                                !compra.solicitud_pendiente &&
-                                compra.estado !== 'AN' &&
-                                !compra.recibida && (
-                                  <button
-                                    type="button"
-                                    className="boton-icono"
-                                    onClick={() =>
-                                      solicitarAnulacion(compra)
-                                    }
-                                    title="Solicitar la anulación de la compra"
-                                  >
-                                    <IconBan size={17} />
-                                  </button>
-                                )}
                               {puedeGestionar &&
                                 compra.estado !== 'AN' &&
-                                !compra.solicitud_pendiente &&
                                 saldoCompra(compra) > 0 && (
                                   <button
                                     type="button"
@@ -1261,133 +1000,6 @@ export default function Compras() {
                 </div>
               </div>
             </section>
-          </>
-        )}
-
-        {tab === 'solicitudes' && (
-          <section className="comercial-panel">
-            <div className="comercial-panel-cabecera">
-              <h2>Solicitudes de pago y anulación</h2>
-              <p className="comercial-nota">
-                Las resuelve administración (AD/GE). Mientras hay una solicitud
-                pendiente, la compra no se puede volver a solicitar, pagar ni
-                anular.
-              </p>
-            </div>
-
-            {cargandoSolicitudes ? (
-              <p className="comercial-nota">Cargando solicitudes…</p>
-            ) : solicitudes.length === 0 ? (
-              <p className="comercial-nota">
-                No hay solicitudes registradas.
-              </p>
-            ) : (
-              <div className="comercial-tabla-scroll">
-                <table className="tabla-comercial tabla-lineas">
-                  <thead>
-                    <tr>
-                      <th>Solicitud</th>
-                      <th>Compra</th>
-                      <th>Tipo</th>
-                      <th>Solicitante</th>
-                      <th>Motivo</th>
-                      <th>Estado</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {solicitudes.map((solicitud) => (
-                      <tr key={solicitud.id}>
-                        <td>#{solicitud.id}</td>
-                        <td>
-                          <strong>#{solicitud.compra}</strong>
-                          <small>
-                            {solicitud.compra_detalle?.proveedor}
-                          </small>
-                        </td>
-                        <td>{solicitud.tipo_detalle}</td>
-                        <td>
-                          {solicitud.solicitante_detalle?.nombre || '—'}
-                        </td>
-                        <td>{solicitud.motivo}</td>
-                        <td>
-                          <span className={claseEstado(solicitud.estado)}>
-                            {solicitud.estado_detalle}
-                          </span>
-                          {solicitud.estado === 'PE' && (
-                            <small>
-                              {solicitud.dias_esperando} día
-                              {solicitud.dias_esperando === 1 ? '' : 's'}{' '}
-                              esperando
-                            </small>
-                          )}
-                          {solicitud.estado === 'RS' && (
-                            <small>
-                              por {solicitud.resuelto_por_detalle?.nombre} ·{' '}
-                              {formatearFechaHora(solicitud.fecha_resolucion)}
-                            </small>
-                          )}
-                          {solicitud.estado === 'RJ' && (
-                            <small>{solicitud.motivo_rechazo}</small>
-                          )}
-                        </td>
-                        <td>
-                          <div className="acciones-fila">
-                            {solicitud.estado === 'PE' && puedeGestionar && (
-                              <>
-                                <button
-                                  type="button"
-                                  className="boton-icono"
-                                  onClick={() =>
-                                    abrirPagoSolicitud(solicitud)
-                                  }
-                                  disabled={resolviendo}
-                                  title="Pagar la compra"
-                                >
-                                  <IconCash size={17} />
-                                </button>
-                                {solicitud.tipo === 'AN' && (
-                                  <button
-                                    type="button"
-                                    className="boton-icono boton-icono-exito"
-                                    onClick={() =>
-                                      resolverSolicitud(
-                                        solicitud,
-                                        'ANULAR',
-                                      )
-                                    }
-                                    disabled={resolviendo}
-                                    title="Anular la compra"
-                                  >
-                                    <IconCheck size={17} />
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  className="boton-icono"
-                                  onClick={() =>
-                                    rechazarSolicitud(solicitud)
-                                  }
-                                  disabled={resolviendo}
-                                  title="Rechazar la solicitud"
-                                >
-                                  <IconX size={17} />
-                                </button>
-                              </>
-                            )}
-                            {solicitud.estado === 'PE' && !puedeGestionar && (
-                              <small>Esperando a AD/GE</small>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        )}
       </div>
 
       {modalAbierto && (
@@ -1429,7 +1041,7 @@ export default function Compras() {
               </div>
               <div>
                 <span>Caja / Sección</span>
-                <strong>{detalle.seccion_caja_detalle || '—'}</strong>
+                <strong>{detalle.movimiento_caja_detalle || '—'}</strong>
               </div>
               <div>
                 <span>Pago</span>
@@ -1457,17 +1069,6 @@ export default function Compras() {
               <p className="comercial-nota">
                 <strong>Motivo de anulación:</strong>{' '}
                 {detalle.motivo_cancelacion}
-              </p>
-            )}
-
-            {detalle.solicitud_pendiente && (
-              <p className="comercial-nota">
-                <strong>
-                  Solicitud #{detalle.solicitud_pendiente.id} pendiente (
-                  {detalle.solicitud_pendiente.tipo_detalle}).
-                </strong>{' '}
-                Hasta que administración la resuelva, la compra no se puede
-                pagar ni anular.
               </p>
             )}
 
@@ -1533,7 +1134,6 @@ export default function Compras() {
               {puedeGestionar &&
                 !detalle.recibida &&
                 detalle.estado !== 'AN' &&
-                !detalle.solicitud_pendiente &&
                 totalPagado(detalle) === 0 && (
                   <button
                     type="button"
@@ -1546,7 +1146,6 @@ export default function Compras() {
                 )}
               {puedeGestionar &&
                 detalle.estado !== 'AN' &&
-                !detalle.solicitud_pendiente &&
                 saldoCompra(detalle) > 0 && (
                   <button
                     type="button"
@@ -1559,32 +1158,6 @@ export default function Compras() {
                   >
                     <IconCash size={18} />
                     Registrar pago
-                  </button>
-                )}
-              {!puedeGestionar &&
-                !detalle.solicitud_pendiente &&
-                detalle.estado !== 'AN' &&
-                saldoCompra(detalle) > 0 && (
-                  <button
-                    type="button"
-                    className="boton-comercial-secundario"
-                    onClick={() => solicitarPago(detalle)}
-                  >
-                    <IconClipboardList size={18} />
-                    Solicitar pago
-                  </button>
-                )}
-              {!puedeGestionar &&
-                !detalle.solicitud_pendiente &&
-                detalle.estado !== 'AN' &&
-                !detalle.recibida && (
-                  <button
-                    type="button"
-                    className="boton-comercial-secundario"
-                    onClick={() => solicitarAnulacion(detalle)}
-                  >
-                    <IconBan size={18} />
-                    Solicitar anulación
                   </button>
                 )}
               {puedeOperar &&
@@ -1630,9 +1203,7 @@ export default function Compras() {
             <div className="comercial-modal-cabecera">
               <h2>
                 <IconCash size={24} />
-                {pagoSolicitud
-                  ? `Resolver solicitud #${pagoSolicitud.id} · Compra #${pago.id}`
-                  : `Registrar pago · Compra #${pago.id}`}
+                {`Registrar pago · Compra #${pago.id}`}
               </h2>
               <button
                 type="button"

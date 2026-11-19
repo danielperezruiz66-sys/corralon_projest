@@ -147,6 +147,24 @@ class Sucursal(models.Model):
     def __str__(self):
         return self.nombre
 
+    def clean(self):
+        """Una empresa opera con una sola sucursal (estructura multi lista)."""
+        super().clean()
+        if self.empresa_id is None:
+            return
+        existentes = Sucursal.objects.filter(empresa_id=self.empresa_id)
+        if self.pk is not None:
+            existentes = existentes.exclude(pk=self.pk)
+        if existentes.exists():
+            raise ValidationError(
+                {
+                    'empresa': (
+                        'La empresa ya tiene una sucursal. El sistema opera con '
+                        'una sola sucursal.'
+                    )
+                }
+            )
+
 
 class Usuario(AbstractUser):
     # Datos de login unicamente. La informacion personal/laboral vive en Empleado.

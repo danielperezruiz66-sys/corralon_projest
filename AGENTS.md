@@ -21,9 +21,10 @@ Arquitectura desacoplada:
 - `.env` en la raíz (no se commitea); plantilla en `.env.example`.
 
 Estado: backend consolidado (34 viewsets, suite en `app.tests`) con caja
-basada en `Caja` + `MovimientoCaja` por sucursal (sin `SucursalXCaja`) y sin
-`MovimientoStock`, `TransferenciaStock` ni `SolicitudCompra`. El frontend
-todavía usa los endpoints viejos de caja y debe adaptarse. Frontend con
+basada en `Caja` + `MovimientoCaja` por sucursal (sin `SucursalXCaja`), sin
+`MovimientoStock`, `TransferenciaStock` ni `SolicitudCompra` y con **una sola
+sucursal operativa por empresa** (validada, sin constraint de base). El
+frontend todavía usa los endpoints viejos de caja y debe adaptarse. Frontend con
 Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores, Caja,
 **Empleados**, **Perfil**, **Actividad** y **Facturación** (cascarón); falta el
 **QA visual manual** en navegador. Pendiente: las métricas del Dashboard V2.
@@ -52,6 +53,9 @@ scripts/               # utilidad manual (cancelación de ventas vencidas; sin t
 Reglas fijas:
 
 - Una sola app Django (`app`). **No** crear apps por dominio.
+- Una sola `Sucursal` por `Empresa`: se valida en `SucursalSerializer` y
+  `Sucursal.clean()`. La estructura multi-sucursal se conserva para una
+  actualización futura; no agregar constraint de base.
 - `models.py` es un solo archivo: no dividirlo en un paquete `models/`.
 - `backends.py` es solo autenticación; no mover allí lógica de modelos/vistas.
 - No cambiar `AUTH_USER_MODEL` (`app.Usuario`) ni los `db_table`.
@@ -420,7 +424,7 @@ cd backend
 ../venv/Scripts/python.exe manage.py check                 # 0 issues
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 233 tests
+../venv/Scripts/python.exe manage.py test app              # 235 tests
 ../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 
@@ -431,9 +435,9 @@ npm run build
 
 Antes de cerrar un cambio: check, makemigrations --check, migrate, tests, lint y
 build. Si se tocaron modelos, generar la migración; no editar migraciones a mano.
-El seed es determinista (`random.seed(42)`), crea las sucursales Salta Capital y
-Campo Quijano, `admin`/`admin1234`, 8 empleados demo (4 por sucursal con roles
-AD/CA/VE/ED) con `test1234` y 6 meses de compras y ventas. El barrido de ventas
+El seed es determinista (`random.seed(42)`), crea **una** sucursal (Salta
+Capital), `admin`/`admin1234`, 4 empleados demo con roles AD/CA/VE/ED más
+`gerente.salta`, todos con `test1234`, y 6 meses de compras y ventas. El barrido de ventas
 vencidas es manual (no automático); el comando `cancelar_ventas_vencidas` puede
 ejecutarse manualmente si se requiere. No programar la tarea
 `Corralon\CancelarVentasVencidas`.
@@ -441,7 +445,7 @@ ejecutarse manualmente si se requiere. No programar la tarea
 ## 9. Convenciones
 
 - Nombres de modelos, campos, `db_table` y `verbose_name` en español.
-- `db_table` en MAYÚSCULAS y plural (`USUARIOS`, `SECCIONES_CAJA`).
+- `db_table` en MAYÚSCULAS y plural (`USUARIOS`, `MOVIMIENTOS_CAJA`).
 - `Meta` con `ordering`, `verbose_name` y `verbose_name_plural`.
 - Comillas simples en Python; `TextChoices` para estados.
 - Frontend: JavaScript y `.jsx` (no TypeScript).

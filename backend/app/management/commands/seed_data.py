@@ -109,31 +109,12 @@ SUCURSALES = [
         'email_suc': 'salta@fer-cons.com.ar',
         'es_central': True,
     },
-    {
-        'nombre': 'Campo Quijano',
-        'codigo': 'CQJ',
-        'localidad': 'Campo Quijano',
-        'codigo_postal': '4407',
-        'calle': 'Ruta Nacional 51',
-        'nro_calle': 12,
-        'latitud': Decimal('-24.916667'),
-        'longitud': Decimal('-65.633333'),
-        'hora_ap': '08:00:00',
-        'hora_c': '17:00:00',
-        'contacto': '3875551002',
-        'email_suc': 'campoquijano@fer-cons.com.ar',
-        'es_central': False,
-    },
 ]
 
 DEPOSITOS = {
     'Salta Capital': [
         ('Depósito Principal Salta', True),
         ('Depósito Anexo Salta', False),
-    ],
-    'Campo Quijano': [
-        ('Depósito Principal Campo Quijano', True),
-        ('Depósito Anexo Campo Quijano', False),
     ],
 }
 
@@ -181,42 +162,6 @@ EMPLEADOS = [
         'ED',
         'Salta Capital',
         'deposito.salta',
-    ),
-    (
-        '30123456',
-        '0005',
-        'Ana',
-        'Alderete',
-        'AD',
-        'Campo Quijano',
-        'admin.quijano',
-    ),
-    (
-        '32456789',
-        '0006',
-        'José',
-        'Vega',
-        'CA',
-        'Campo Quijano',
-        'cajero.quijano',
-    ),
-    (
-        '34678901',
-        '0007',
-        'Camila',
-        'Rodríguez',
-        'VE',
-        'Campo Quijano',
-        'vendedor.quijano',
-    ),
-    (
-        '27890123',
-        '0008',
-        'Miguel Ángel',
-        'Quispe',
-        'ED',
-        'Campo Quijano',
-        'deposito.quijano',
     ),
     (
         '29182736',
@@ -1561,7 +1506,7 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS('\nDatos cargados correctamente.\n')
         )
-        self.stdout.write('Sucursales: Salta Capital y Campo Quijano')
+        self.stdout.write('Sucursal: Salta Capital')
         self.stdout.write(
             f'Productos: {Producto.objects.count()} | '
             f'Stocks: {Stock.objects.count()} | '

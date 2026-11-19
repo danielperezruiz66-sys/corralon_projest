@@ -388,7 +388,7 @@ export default function Ventas() {
         venta.id,
         formatearFechaHora(venta.fecha_venta),
         nombreCliente(venta),
-        venta.seccion_caja_detalle || '',
+        venta.movimiento_caja_detalle || '',
         numeroCsv(venta.monto_venta),
         numeroCsv(totalPagado(venta)),
         numeroCsv(saldoVenta(venta)),
@@ -849,7 +849,7 @@ export default function Ventas() {
                         <strong>{nombreCliente(venta)}</strong>
                       </td>
                       <td className="texto-chico">
-                        {venta.seccion_caja_detalle || '—'}
+                        {venta.movimiento_caja_detalle || '—'}
                       </td>
                       <td className="numero">
                         <strong>{formatearMoneda(venta.monto_venta)}</strong>
@@ -985,7 +985,7 @@ export default function Ventas() {
               </div>
               <div>
                 <span>Caja / Sección</span>
-                <strong>{detalle.seccion_caja_detalle || '—'}</strong>
+                <strong>{detalle.movimiento_caja_detalle || '—'}</strong>
               </div>
               <div>
                 <span>Estado</span>

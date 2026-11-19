@@ -449,3 +449,40 @@ class PermisoEscrituraTests(BaseCorralonTestCase):
             format='json',
         )
         self.assertEqual(anular.status_code, 403)
+
+
+class RestriccionSucursalTests(BaseCorralonTestCase):
+    """El sistema opera con una sola sucursal por empresa."""
+
+    def test_no_permite_una_segunda_sucursal_en_la_empresa(self):
+        self.autenticar(self.user_gerente)
+
+        respuesta = self.client.post(
+            '/api/sucursales/',
+            {
+                'empresa': self.empresa.id,
+                'ubicacion': self.ubicacion.id,
+                'nombre': 'Otra sucursal',
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('empresa', respuesta.data)
+        self.assertEqual(
+            Sucursal.objects.filter(empresa=self.empresa).count(),
+            1,
+        )
+
+    def test_permite_editar_la_sucursal_existente(self):
+        self.autenticar(self.user_gerente)
+
+        respuesta = self.client.patch(
+            f'/api/sucursales/{self.sucursal.id}/',
+            {'nombre': 'Salta Capital Centro'},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.sucursal.refresh_from_db()
+        self.assertEqual(self.sucursal.nombre, 'Salta Capital Centro')

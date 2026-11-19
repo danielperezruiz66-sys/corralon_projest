@@ -38,7 +38,7 @@ export default function MenuDesplegable() {
     let vigente = true
 
     const consultar = () => {
-      pedir('/secciones-caja/mia/')
+      pedir('/movimientos-caja/mia/')
         .then((respuesta) => {
           if (vigente) {
             setCajaAbierta(respuesta.tiene_caja_abierta ? respuesta.seccion : null)
@@ -87,7 +87,7 @@ export default function MenuDesplegable() {
 
     let caja = null
     try {
-      const respuesta = await pedir('/secciones-caja/mia/')
+      const respuesta = await pedir('/movimientos-caja/mia/')
       caja = respuesta.tiene_caja_abierta ? respuesta.seccion : null
     } catch {
       caja = null
