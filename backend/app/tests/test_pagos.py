@@ -24,7 +24,7 @@ class PagoVentaTests(BaseCorralonTestCase):
             format='json',
         )
 
-    def test_cobro_con_dos_metodos_queda_pendiente(self):
+    def test_cobro_con_dos_metodos_confirma_al_cubrir_el_total(self):
         venta = self.crear_venta(cantidad='1.000')
         venta_id = venta.data['id']
 
@@ -37,7 +37,8 @@ class PagoVentaTests(BaseCorralonTestCase):
         )
 
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(respuesta.data['estado'], 'PE')
+        # Pagada y confirmada son el mismo estado.
+        self.assertEqual(respuesta.data['estado'], 'CO')
         self.assertEqual(len(respuesta.data['pagos']), 2)
         self.assertEqual(
             sum(
@@ -77,7 +78,7 @@ class PagoVentaTests(BaseCorralonTestCase):
         )
 
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(respuesta.data['estado'], 'PE')
+        self.assertEqual(respuesta.data['estado'], 'PC')
         self.assertEqual(len(respuesta.data['pagos']), 2)
         self.assertEqual(
             sum(
@@ -150,8 +151,8 @@ class PagoVentaTests(BaseCorralonTestCase):
 
         parcial = self._pagar(venta_id, '40.00')
         self.assertEqual(parcial.status_code, 201)
-        # La venta sigue pendiente y no se confirma con saldo.
-        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'PE')
+        # Un pago parcial deja la venta en Parcial.
+        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'PC')
 
         no_confirma = self.client.post(f'/api/ventas/{venta_id}/confirmar/')
         self.assertEqual(no_confirma.status_code, 400)
@@ -159,8 +160,8 @@ class PagoVentaTests(BaseCorralonTestCase):
 
         total = self._pagar(venta_id, '60.00')
         self.assertEqual(total.status_code, 201)
-        # El pago no confirma la venta: lo hace el cajero manualmente.
-        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'PE')
+        # Al cubrir el total queda confirmada automaticamente.
+        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'CO')
 
         confirmada = self.client.post(f'/api/ventas/{venta_id}/confirmar/')
         self.assertEqual(confirmada.status_code, 200)
@@ -173,13 +174,13 @@ class PagoVentaTests(BaseCorralonTestCase):
 
         total = self._pagar(venta_id, '100.00')
         self.assertEqual(total.status_code, 201)
-        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'PE')
+        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'CO')
 
         confirmada = self.client.post(f'/api/ventas/{venta_id}/confirmar/')
         self.assertEqual(confirmada.status_code, 200)
         self.assertEqual(confirmada.data['estado'], 'CO')
 
-    def test_no_permite_anular_venta_pendiente_con_pago_parcial(self):
+    def test_no_permite_anular_venta_parcial(self):
         venta = self.crear_venta(cantidad='1.000')
         venta_id = venta.data['id']
         self._pagar(venta_id, '40.00')
@@ -191,8 +192,8 @@ class PagoVentaTests(BaseCorralonTestCase):
         )
 
         self.assertEqual(respuesta.status_code, 400)
-        self.assertIn('pagos registrados', respuesta.data['detail'])
-        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'PE')
+        self.assertIn('pendiente sin pagos', respuesta.data['detail'])
+        self.assertEqual(Venta.objects.get(pk=venta_id).estado, 'PC')
 
     def test_no_permite_pagar_de_mas(self):
         venta = self.crear_venta(cantidad='1.000')
@@ -234,6 +235,8 @@ class PagoCompraTests(BaseCorralonTestCase):
         compra = self.crear_compra(cantidad='10.000')
         compra_id = compra.data['id']
         self.assertEqual(Decimal(compra.data['monto_compra']), Decimal('1000.00'))
+        # Pagar compras es de administracion (AD/GE).
+        self.autenticar(self.user_gerente)
 
         parcial = self.client.post(
             '/api/metodos-pago-compras/',

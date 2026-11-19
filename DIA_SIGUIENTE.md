@@ -1,67 +1,55 @@
 # Pendientes
 
-> Solo lo pendiente (lo terminado se borra). Contexto: `AGENTS.md`.
+> Único lugar de pendientes. Contexto y reglas en `AGENTS.md`; instalación en
+> `INSTRUCCIONES.md`; credenciales demo en `contraseñas.md`.
+> Se trabaja módulo por módulo, sin fases cerradas: al terminar uno se corrige,
+> se verifica y se actualizan estos pendientes.
 
-**Última actualización:** 2026-11-13
+## Próximo módulo: Ventas
 
-**Qué se hizo (2026-11-13):** módulo **Caja** completo — cajas físicas
-reutilizables entre sucursales; `SeccionCaja` con apertura propia o a nombre
-de otro habilitado (`AD`/`GE`); sugerencia de monto inicial del último cierre;
-cierre con el campo Contado precargado al teórico por método; nota del sistema
-inborrable en observaciones si hay diferencia; "Imprimir arqueo"; un empleado no
-puede tener dos secciones abiertas (constraint `una_seccion_abierta_por_empleado`);
-apertura a nombre de otro queda en el historial. Módulo **Empleados** completo
-(`/empleados`, solo `AD`/`GE`) — listado con búsqueda viva, filtro de estado,
-paginación, export CSV y filtro por sucursal del encabezado; alta con acceso
-opcional (usuario + contraseña letras+números+símbolo, sin mínimo fijo);
-edición con sync de roles/sucursales (AC↔IN); creación de acceso desde la
-edición para empleados sin usuario; cambio de contraseña solo `AD` con doble
-verificación (Swal + modal con tu contraseña); suspensión/inactividad cierra
-sesiones; API devuelve 401 a no-`AC`; validación en tiempo real en alta y
-edición; suite backend **218/218** y build/lint en verde.
+- [ ] Revisar pantalla, estados `PE`/`PC`/`CO`/`AN`, pestañas, acciones de
+      cobro/confirmación/anulación, filtro Vencidas y atajos.
+- [ ] Confirmar que “Por vencer” ya no existe en la UI y que la alerta de
+      vencidas enruta a `/ventas?alerta=vencida`.
+- [ ] Aplicar cache en memoria + actualización en segundo plano (patrón de
+      Inicio) al módulo.
 
-## Pendientes
+## Revisión módulo por módulo
 
-### QA visual manual (usuario)
-- [ ] **Caja**: selector "A nombre de" solo con habilitados en la sucursal
-      (CA asignado o AD/GE); apertura propia y a nombre de otro; sugerencia
-      de monto inicial; observación de apertura obligatoria al diferir;
-      contado precargado al teórico; nota inborrable del arqueo; **Imprimir
-      arqueo**; auditoría desde el detalle (sin botón duplicado); historial
-      con filtros/URL/CSV.
-- [ ] **Empleados**: `/empleados` para `AD`/`GE` (no para `CA/VE/ED`);
-      búsqueda viva, filtro de estado/sucursal, paginación, CSV; alta con y
-      sin acceso; duplicados rechazados; sync de roles/sucursales; creación
-      de acceso desde la edición para empleados huérfanos; contraseña solo
-      `AD` (doble verificación, cierra sesiones); suspensión bloquea acceso.
-- [ ] **General QA (previos)**: seed determinista y consistente; flujo
-     Ventas/Compras/Clientes/Inventario verificado con el selector de sucursal;
-      búsqueda viva remota; validaciones congruentes en cada formulario.
-- [ ] **General**: rutas `/login`, `/caja`, ventas, compras, dashboard; el
-      usuario de prueba `admin`/`admin1234` y los de sucursal (`*_salta`,
-      `*_quijano`) con contraseña `test1234` login OK; sin rol → solo Inicio y
-      Perfil.
-- [ ] Cuando ambos QA OK → **commit** de los módulos.
+- [ ] Caja.
+- [ ] Compras.
+- [ ] Clientes.
+- [ ] Inventario.
+- [ ] Proveedores.
+- [ ] Empleados.
+- [ ] Perfil y Actividad.
+- [ ] Menú/encabezado y navegación general.
+- [ ] En cada módulo revisado: cache en memoria, refresco en segundo plano,
+      filtros/atajos correctos y coherencia con la API.
+- [ ] QA visual final con `admin`, `gerente.salta`, `cajero.salta`,
+      `vendedor.salta` y `deposito.salta`.
 
-### Módulos nuevos
-- [ ] **Perfil** (personal).
-- [ ] **Actividad** (historial de cambios del sistema).
-- [ ] Reemplazar `EnDesarrollo` en `App.jsx`.
+## Dashboard
 
-### Backend
-- [ ] Endpoint de cambio de contraseña del propio usuario (`/cambiar-contrasena`).
-- [ ] Restringir datos por sucursal en la API para usuarios no-admin.
-- [ ] Evaluar reversión de pagos para anular ventas pendientes con pago parcial.
-- [ ] Aplicar `puedeEscribir` a los módulos que falten.
+- [ ] Verificar las 4 tarjetas (hoy, últimos 7 días, mes calendario, parciales).
+- [ ] Verificar alertas: vencidas, stock negativo/bajo y compras por recibir;
+      enrutamientos a las tarjetas secundarias y desde allí a los módulos.
+- [ ] Verificar cache en memoria (15 s + foco de ventana) y el refresco al
+      volver desde otro módulo.
 
-### Dashboard V2
-- [ ] Definir métricas: top productos, formas de pago, ventas por sucursal,
-      diferencias de caja, actividad reciente.
+## Backend
 
-### Facturación (ARCA)
-- [ ] Sigue bloqueada por falta de CUIT del emisor, certificado y punto de venta
-      habilitado. La hoja de ruta (homologación, WSAA, WSFEv1) está en `AGENTS.md`.
+- [ ] Reversión de pagos para poder anular ventas `PC`/`CO` y compras pagadas.
+- [ ] Dashboard V2: top productos, formas de pago, ventas por sucursal,
+      diferencias de caja y actividad reciente.
+- [ ] Omitir desde la API los bloques del dashboard que el rol no puede ver.
 
-### Operación
-- [ ] El barrido de ventas vencidas es **manual** (`cancelar_ventas_vencidas`).
-      No programarlo automáticamente en el servidor.
+## Documentación
+
+- [ ] Sincronizar `INSTRUCCIONES.md` con la base actual: una sucursal, sin
+      usuarios de Campo Quijano.
+
+## Facturación y operación
+
+- [ ] ARCA bloqueada: CUIT del emisor, certificado y punto de venta.
+- [ ] El barrido de ventas vencidas sigue siendo manual.

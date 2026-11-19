@@ -45,6 +45,15 @@ const ETIQUETA_ESTADO = {
   IN: 'Inactivo',
 }
 
+const ROLES = [
+  { id: '', etiqueta: 'Todos los roles' },
+  { id: 'AD', etiqueta: 'Admin' },
+  { id: 'GE', etiqueta: 'Gerente' },
+  { id: 'CA', etiqueta: 'Cajero' },
+  { id: 'VE', etiqueta: 'Vendedor' },
+  { id: 'ED', etiqueta: 'Depósito' },
+]
+
 export default function Empleados() {
   const { user, puedeEscribir } = useAuth()
   const { sucursalActiva } = useSucursal()
@@ -56,6 +65,7 @@ export default function Empleados() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [texto, setTexto] = useState(() => searchParams.get('search') || '')
   const [estado, setEstado] = useState(() => searchParams.get('estado') || '')
+  const [rol, setRol] = useState(() => searchParams.get('rol') || '')
   const [pagina, setPagina] = useState(
     () => Number(searchParams.get('page')) || 1,
   )
@@ -81,11 +91,14 @@ export default function Empleados() {
     if (estado) {
       parametros.set('estado', estado)
     }
+    if (rol) {
+      parametros.set('rol', rol)
+    }
     if (pagina > 1) {
       parametros.set('page', String(pagina))
     }
     setSearchParams(parametros, { replace: true })
-  }, [busqueda, estado, pagina, setSearchParams])
+  }, [busqueda, estado, rol, pagina, setSearchParams])
 
   useEffect(() => {
     let vigente = true
@@ -95,6 +108,9 @@ export default function Empleados() {
     }
     if (estado) {
       parametros.set('estado', estado)
+    }
+    if (rol) {
+      parametros.set('rol', rol)
     }
     if (sucursalActiva) {
       parametros.set('sucursal', sucursalActiva)
@@ -120,7 +136,7 @@ export default function Empleados() {
     return () => {
       vigente = false
     }
-  }, [busqueda, estado, pagina, refresco, sucursalActiva])
+  }, [busqueda, estado, rol, pagina, refresco, sucursalActiva])
 
   function irAPagina(numero) {
     setPagina(numero)
@@ -129,6 +145,12 @@ export default function Empleados() {
 
   function cambiarEstado(nuevo) {
     setEstado((actual) => (actual === nuevo ? '' : nuevo))
+    setPagina(1)
+    setActualizando(true)
+  }
+
+  function cambiarRol(nuevo) {
+    setRol((actual) => (actual === nuevo ? '' : nuevo))
     setPagina(1)
     setActualizando(true)
   }
@@ -153,6 +175,9 @@ export default function Empleados() {
       }
       if (estado) {
         parametros.set('estado', estado)
+      }
+      if (rol) {
+        parametros.set('rol', rol)
       }
       if (sucursalActiva) {
         parametros.set('sucursal', sucursalActiva)
@@ -269,6 +294,19 @@ export default function Empleados() {
               type="button"
               className={estado === opcion.id ? 'activo' : ''}
               onClick={() => cambiarEstado(opcion.id)}
+            >
+              {opcion.etiqueta}
+            </button>
+          ))}
+        </section>
+
+        <section className="inventario-filtros">
+          {ROLES.map((opcion) => (
+            <button
+              key={opcion.id || 'todos-roles'}
+              type="button"
+              className={rol === opcion.id ? 'activo' : ''}
+              onClick={() => cambiarRol(opcion.id)}
             >
               {opcion.etiqueta}
             </button>

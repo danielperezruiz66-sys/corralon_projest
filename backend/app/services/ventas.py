@@ -2,12 +2,14 @@
 
 Reglas:
 
-- La venta nace en `PENDIENTE` y descuenta stock en ese momento.
-- Si no se confirma dentro de `VENTAS_MINUTOS_PARA_CONFIRMAR` (30 por defecto),
-  se cancela y el stock se restaura sobre los mismos lotes.
+- La venta nace en `PENDIENTE` y descuenta stock en ese momento. Sin pagos,
+  vence a los `VENTAS_MINUTOS_PARA_CONFIRMAR` (30 por defecto).
+- Un pago parcial la deja `PARCIAL`; no vence y no se puede anular hasta
+  revertir los pagos.
+- Cuando los pagos cubren el total, la venta queda `CONFIRMADA`: pagada y
+  confirmada son el mismo estado.
 - Se permite stock negativo hasta `Stock.cant_negativa_max`; mas alla, la venta
   se rechaza con `StockInsuficiente`.
-- Una venta con pagos registrados no se puede cancelar sin revertir los pagos.
 """
 
 from datetime import timedelta
@@ -18,7 +20,7 @@ from django.db import transaction
 from django.db.models import Max, Sum
 from django.utils import timezone
 
-from ..models import Cliente, DetalleVenta, Producto, SeccionCaja, Venta
+from ..models import Cliente, DetalleVenta, MovimientoCaja, Producto, Venta
 from ..utils import validar_cantidad_por_unidad, validar_nombre_consumidor
 from . import stock as stock_service
 
@@ -35,7 +37,7 @@ def _decimal(valor):
 
 
 @transaction.atomic
-def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
+def crear_venta(movimiento_caja, items, cliente=None, cliente_venta=None):
     """Crea una venta pendiente y descuenta el stock.
 
     `items` es una lista de diccionarios:
@@ -59,16 +61,20 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
         if error_consumidor:
             raise ValueError(error_consumidor)
 
-    seccion_caja = (
-        SeccionCaja.objects.select_for_update()
-        .select_related('sucursal_caja__sucursal')
-        .get(pk=seccion_caja.pk)
+    movimiento_caja = (
+        MovimientoCaja.objects.select_for_update()
+        .select_related('caja__sucursal')
+        .get(pk=movimiento_caja.pk)
     )
-    if seccion_caja.estado != SeccionCaja.EstadoSeccion.ABIERTA:
-        raise ValueError('La seccion de caja no esta abierta.')
+    if movimiento_caja.estado == MovimientoCaja.EstadoMovimiento.PAUSADA:
+        raise ValueError(
+            'La sección de caja está en pausa: primero hay que reanudarla.'
+        )
+    if movimiento_caja.estado != MovimientoCaja.EstadoMovimiento.ABIERTA:
+        raise ValueError('El movimiento de caja no esta abierto.')
 
     venta = Venta.objects.create(
-        seccion_caja=seccion_caja,
+        movimiento_caja=movimiento_caja,
         cliente=cliente,
         cliente_venta=cliente_venta,
         estado=Venta.EstadoVenta.PENDIENTE,
@@ -109,7 +115,7 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
             )
         subtotal = (cantidad * precio).quantize(Decimal('0.01'))
 
-        DetalleVenta.objects.create(
+        detalle_venta = DetalleVenta.objects.create(
             venta=venta,
             producto=producto,
             cantidad_venta=cantidad,
@@ -119,14 +125,11 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
 
         stock = stock_service.obtener_stock(
             producto,
-            seccion_caja.sucursal_caja.sucursal,
+            movimiento_caja.caja.sucursal,
         )
-        stock_service.consumir_stock(
-            stock,
-            cantidad,
-            referencia=f'venta:{venta.id}',
-            venta=venta,
-        )
+        consumos = stock_service.consumir_stock(stock, cantidad)
+        detalle_venta.consumos = consumos
+        detalle_venta.save(update_fields=['consumos'])
         total += subtotal
 
     venta.monto_venta = total
@@ -137,8 +140,10 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
 @transaction.atomic
 def confirmar_venta(venta):
     venta = Venta.objects.select_for_update().get(pk=venta.pk)
-    if venta.estado != Venta.EstadoVenta.PENDIENTE:
-        raise ValueError('Solo se puede confirmar una venta pendiente.')
+    if venta.estado == Venta.EstadoVenta.ANULADA:
+        raise ValueError('No se puede confirmar una venta anulada.')
+    if venta.estado == Venta.EstadoVenta.CONFIRMADA:
+        return venta
 
     pagado = venta.pagos.aggregate(total=Sum('monto_pagado'))['total']
     pagado = pagado if pagado is not None else Decimal('0.00')
@@ -165,13 +170,14 @@ def cancelar_venta(venta, motivo=''):
     venta = Venta.objects.select_for_update().get(pk=venta.pk)
     if venta.estado == Venta.EstadoVenta.ANULADA:
         return venta
+    if venta.estado != Venta.EstadoVenta.PENDIENTE:
+        raise ValueError(
+            'Solo se puede anular una venta pendiente sin pagos.'
+        )
     if venta.pagos.exists():
         raise ValueError('No se puede anular una venta con pagos registrados.')
 
-    stock_service.restaurar_stock(
-        venta,
-        referencia=f'cancelacion:venta:{venta.id}',
-    )
+    stock_service.restaurar_stock(venta)
     venta._change_reason = motivo
     venta.estado = Venta.EstadoVenta.ANULADA
     venta.save(update_fields=['estado'])
@@ -181,8 +187,8 @@ def cancelar_venta(venta, motivo=''):
 def cancelar_ventas_vencidas(minutos=None):
     """Cancela las ventas pendientes sin pagos mas antiguas que `minutos`.
 
-    Una venta pendiente que ya tiene un pago parcial no se cancela: sigue
-    pendiente hasta que el cajero complete el saldo y la confirme.
+    Una venta parcial ya no vence: queda en `PARCIAL` hasta que el cajero
+    complete el saldo (y pasa a `CONFIRMADA`).
     """
     minutos = _minutos_para_confirmar() if minutos is None else minutos
     limite = timezone.now() - timedelta(minutes=minutos)

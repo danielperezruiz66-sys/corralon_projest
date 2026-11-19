@@ -20,6 +20,7 @@ import MensajeError from '../common/MensajeError.jsx'
 import FormularioProductosProveedor from '../proveedores/FormularioProductosProveedor.jsx'
 import FormularioProveedor from '../proveedores/FormularioProveedor.jsx'
 import SelectorProductos from './SelectorProductos'
+import '../../styles/components/comercial/FormularioCompra.css'
 
 function fechaHoyLocal() {
   const hoy = new Date()
@@ -43,6 +44,8 @@ export default function FormularioCompra({
   const [sucursales, setSucursales] = useState([])
   const [productosProveedorData, setProductosProveedorData] = useState([])
   const [seccion, setSeccion] = useState('')
+  const [depositos, setDepositos] = useState([])
+  const [deposito, setDeposito] = useState('')
   const [proveedor, setProveedor] = useState(
     proveedorInicialId ? String(proveedorInicialId) : '',
   )
@@ -79,7 +82,7 @@ export default function FormularioCompra({
     let vigente = true
 
     Promise.all([
-      pedirTodas('/secciones-caja/?estado=AB'),
+      pedirTodas('/movimientos-caja/?estado=AB'),
       pedirTodas('/sucursales/'),
     ])
       .then(([seccionesData, sucursalesData]) => {
@@ -177,6 +180,37 @@ export default function FormularioCompra({
         if (vigente) {
           setStocks({})
         }
+      })
+
+    return () => {
+      vigente = false
+    }
+  }, [sucursalActual])
+
+  useEffect(() => {
+    if (!sucursalActual) {
+      setDepositos([])
+      setDeposito('')
+      return undefined
+    }
+
+    let vigente = true
+    pedirTodas(`/depositos/?sucursal=${sucursalActual}`)
+      .then((datos) => {
+        if (!vigente) {
+          return
+        }
+        setDepositos(datos)
+        const predeterminado = datos.find((item) => item.es_predeterminado)
+        const primero = predeterminado || datos[0]
+        setDeposito(primero ? String(primero.id) : '')
+      })
+      .catch(() => {
+        if (!vigente) {
+          return
+        }
+        setDepositos([])
+        setDeposito('')
       })
 
     return () => {
@@ -393,8 +427,8 @@ export default function FormularioCompra({
     if (!proveedor) {
       nuevos.proveedor = 'Seleccioná un proveedor activo.'
     }
-    const entregaFinal = puedeGestionar ? estadoEntrega : 'PE'
-    const fechaLlegadaFinal = puedeGestionar ? fechaLlegada : ''
+    const entregaFinal = estadoEntrega
+    const fechaLlegadaFinal = fechaLlegada
     if (entregaFinal === 'EC') {
       if (!fechaLlegadaFinal) {
         nuevos.fechaLlegada = 'Indicá la fecha estimada de llegada.'
@@ -424,8 +458,9 @@ export default function FormularioCompra({
       await pedir('/compras/', {
         method: 'POST',
         body: JSON.stringify({
-          seccion_caja: Number(seccion),
+          movimiento_caja: Number(seccion),
           proveedor: Number(proveedor),
+          deposito: deposito ? Number(deposito) : null,
           estado_entrega: entregaFinal,
           fecha_estimada_llegada: fechaLlegadaFinal || null,
           items: items.map((item) => ({
@@ -437,12 +472,10 @@ export default function FormularioCompra({
       })
       Swal.fire({
         icon: 'success',
-        title: puedeGestionar ? 'Compra registrada' : 'Compra solicitada',
-        text: !puedeGestionar
-          ? 'Quedó pendiente para que la gestione un encargado o administrador. Todavía no repuso stock.'
-          : entregaFinal === 'EC'
-            ? 'Quedó en camino. El stock se repone cuando la recibas.'
-            : 'Quedó pendiente de recepción y todavía no repuso stock.',
+        title: 'Compra registrada',
+        text: entregaFinal === 'EC'
+          ? 'Quedó en camino. El stock se repone cuando la recibas.'
+          : 'Quedó pendiente de recepción y todavía no repuso stock.',
         timer: 2200,
         showConfirmButton: false,
       })
@@ -451,7 +484,7 @@ export default function FormularioCompra({
     } catch (e) {
       if (e.campos) {
         const mapa = {
-          seccion_caja: 'seccion',
+          movimiento_caja: 'seccion',
           fecha_estimada_llegada: 'fechaLlegada',
         }
         const nuevos = {}
@@ -504,9 +537,8 @@ export default function FormularioCompra({
         ) : (
           <>
             <p className="comercial-nota">
-              {puedeGestionar
-                ? 'La compra se registra sin reponer stock. El stock entra cuando la recibís desde el listado.'
-                : 'La compra se solicita sin reponer stock. Queda pendiente para que la gestione un encargado o administrador.'}
+              La compra se registra sin reponer stock. El stock entra en el
+              depósito de destino cuando la recibís desde el listado.
             </p>
 
             <div className="comercial-grid">
@@ -526,6 +558,26 @@ export default function FormularioCompra({
                 error={Boolean(errores.seccion)}
                 mensajeError={errores.seccion}
               />
+
+              <label className="campo-comercial">
+                <span>Depósito destino</span>
+                <select
+                  className={errores.deposito ? 'input-error' : ''}
+                  value={deposito}
+                  onChange={(evento) => setDeposito(evento.target.value)}
+                >
+                  {depositos.length === 0 && (
+                    <option value="">Sin depósitos en la sucursal</option>
+                  )}
+                  {depositos.map((item) => (
+                    <option key={item.id} value={String(item.id)}>
+                      {item.nombre}
+                      {item.es_predeterminado ? ' (predeterminado)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <MensajeError>{errores.deposito}</MensajeError>
+              </label>
 
               <CampoSelectorBuscable
                 etiqueta="Proveedor"
@@ -583,8 +635,8 @@ export default function FormularioCompra({
                 </>
               ) : (
                 <p className="comercial-nota">
-                  La compra quedará solicitada como pendiente. El encargado o
-                  administrador definirá la entrega y la fecha estimada.
+                  La compra se registra como pendiente de recepción. La
+                  entrega y la fecha estimada las define administración.
                 </p>
               )}
             </div>
@@ -762,12 +814,10 @@ export default function FormularioCompra({
                 {guardando ? (
                   <>
                     <IconLoader2 className="icono-girando" size={18} />
-                    {puedeGestionar ? 'Registrando…' : 'Solicitando…'}
+                    Registrando…
                   </>
-                ) : puedeGestionar ? (
-                  'Registrar compra'
                 ) : (
-                  'Solicitar compra'
+                  'Registrar compra'
                 )}
               </button>
             </div>

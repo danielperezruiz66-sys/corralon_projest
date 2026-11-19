@@ -2,7 +2,6 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import MenuDesplegable from './components/MenuDesplegable.jsx'
 import { useAuth } from './context/auth-context'
 import { modulosDelMenu } from './data/menuConfig.js'
-import CambiarContrasena from './pages/CambiarContrasena.jsx'
 import Caja from './pages/Caja.jsx'
 import Clientes from './pages/Clientes.jsx'
 import Compras from './pages/Compras.jsx'
@@ -12,6 +11,8 @@ import EnDesarrollo from './pages/EnDesarrollo.jsx'
 import Inicio from './pages/Inicio.jsx'
 import Inventario from './pages/Inventario.jsx'
 import Login from './pages/Login.jsx'
+import Perfil from './pages/Perfil.jsx'
+import Actividad from './pages/Actividad.jsx'
 import Proveedores from './pages/Proveedores.jsx'
 import Ventas from './pages/Ventas.jsx'
 
@@ -50,6 +51,12 @@ function contenidoModulo(modulo) {
   if (modulo.path === '/proveedores') {
     return <Proveedores />
   }
+  if (modulo.path === '/perfil') {
+    return <Perfil />
+  }
+  if (modulo.path === '/actividad') {
+    return <Actividad />
+  }
   return <EnDesarrollo titulo={modulo.name} detalle={modulo.detalle} />
 }
 
@@ -80,7 +87,6 @@ export default function App() {
       <Route element={<RutaProtegida />}>
         <Route index element={<Inicio />} />
         {rutasModulos}
-        <Route path="cambiar-contrasena" element={<CambiarContrasena />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

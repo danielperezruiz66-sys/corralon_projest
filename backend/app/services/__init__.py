@@ -8,7 +8,7 @@ Convencion: un modulo por dominio, con el mismo nombre que su modulo de
 modelos.
 
     services/ventas.py   -> registrar venta, calcular totales, aplicar pagos
-    services/caja.py     -> abrir y cerrar secciones de caja
+    services/caja.py     -> abrir y cerrar movimientos de caja
     services/stock.py    -> movimientos y actualizacion de stock
 
 Las vistas deben limitarse a validar la entrada y delegar en estos servicios,
