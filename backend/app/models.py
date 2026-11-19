@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.dispatch import receiver
 from django.utils import timezone
@@ -306,7 +307,7 @@ class SucursalXEmpleado(models.Model):
 
 
 # =============================================================================
-# CAJA — Caja, SucursalXCaja, SeccionCaja
+# CAJA — Caja, MovimientoCaja, DetalleCierreCaja
 # =============================================================================
 
 class Caja(models.Model):
@@ -315,10 +316,15 @@ class Caja(models.Model):
         INACTIVA = 'IN', 'Inactiva'
         MANTENIMIENTO = 'MT', 'En mantenimiento'
 
-    nombre = models.CharField(
-        max_length=50,
-        unique=True,
-        help_text='Identificador de la caja fisica (ej. Caja 1).',
+    sucursal = models.ForeignKey(
+        Sucursal,
+        on_delete=models.PROTECT,
+        related_name='cajas',
+        help_text='Sucursal a la que pertenece la caja fisica.',
+    )
+    numero_caja = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text='Numero de la caja fisica dentro de la sucursal (ej. 1).',
     )
     estado = models.CharField(
         max_length=2,
@@ -328,59 +334,36 @@ class Caja(models.Model):
 
     class Meta:
         db_table = 'CAJAS'
-        ordering = ['nombre']
+        ordering = ['sucursal__nombre', 'numero_caja']
         verbose_name = 'Caja'
         verbose_name_plural = 'Cajas'
-
-    def __str__(self):
-        return self.nombre
-
-
-class SucursalXCaja(models.Model):
-    sucursal = models.ForeignKey(
-        Sucursal,
-        on_delete=models.PROTECT,
-        related_name='cajas_asignadas',
-    )
-    caja = models.ForeignKey(
-        Caja,
-        on_delete=models.PROTECT,
-        related_name='sucursales_asignadas',
-    )
-    habilitada = models.BooleanField(default=True)
-
-    class Meta:
-        db_table = 'SUCURSALES_X_CAJAS'
-        ordering = ['sucursal__nombre', 'caja__nombre']
-        verbose_name = 'Sucursal por Caja'
-        verbose_name_plural = 'Sucursales por Cajas'
         constraints = [
             models.UniqueConstraint(
-                fields=['sucursal', 'caja'],
-                name='una_caja_por_sucursal',
+                fields=['sucursal', 'numero_caja'],
+                name='un_numero_de_caja_por_sucursal',
             ),
         ]
 
     def __str__(self):
-        return f'{self.caja} - {self.sucursal}'
+        return f'Caja {self.numero_caja} - {self.sucursal}'
 
 
-class SeccionCaja(models.Model):
-    class EstadoSeccion(models.TextChoices):
+class MovimientoCaja(models.Model):
+    class EstadoMovimiento(models.TextChoices):
         ABIERTA = 'AB', 'Abierta'
         PAUSADA = 'PA', 'Pausada'
         CERRADA = 'CE', 'Cerrada'
         AUDITADA = 'AU', 'Auditada'
 
-    sucursal_caja = models.ForeignKey(
-        SucursalXCaja,
+    caja = models.ForeignKey(
+        Caja,
         on_delete=models.PROTECT,
-        related_name='secciones',
+        related_name='movimientos',
     )
     empleado = models.ForeignKey(
         Empleado,
         on_delete=models.PROTECT,
-        related_name='secciones_caja',
+        related_name='movimientos_caja',
     )
     fecha_hora_apertura = models.DateTimeField()
     fecha_hora_cierre = models.DateTimeField(null=True, blank=True)
@@ -422,36 +405,39 @@ class SeccionCaja(models.Model):
     )
     estado = models.CharField(
         max_length=2,
-        choices=EstadoSeccion.choices,
-        default=EstadoSeccion.ABIERTA,
+        choices=EstadoMovimiento.choices,
+        default=EstadoMovimiento.ABIERTA,
     )
 
     history = HistoricalRecords()
 
     class Meta:
-        db_table = 'SECCIONES_CAJA'
-        verbose_name = 'Seccion de Caja'
-        verbose_name_plural = 'Secciones de Caja'
+        db_table = 'MOVIMIENTOS_CAJA'
+        verbose_name = 'Movimiento de Caja'
+        verbose_name_plural = 'Movimientos de Caja'
         constraints = [
             models.UniqueConstraint(
-                fields=['sucursal_caja'],
+                fields=['caja'],
                 condition=models.Q(estado__in=['AB', 'PA']),
-                name='una_seccion_abierta_por_caja_sucursal',
+                name='un_movimiento_abierto_por_caja',
             ),
             models.UniqueConstraint(
                 fields=['empleado'],
                 condition=models.Q(estado__in=['AB', 'PA']),
-                name='una_seccion_abierta_por_empleado',
+                name='un_movimiento_abierto_por_empleado',
             ),
         ]
 
     def __str__(self):
-        return f'Seccion {self.pk} - {self.sucursal_caja}'
+        return f'Movimiento {self.pk} - {self.caja}'
 
     def clean(self):
         from django.core.exceptions import ValidationError
 
-        if self.estado in (self.EstadoSeccion.CERRADA, self.EstadoSeccion.AUDITADA):
+        if self.estado in (
+            self.EstadoMovimiento.CERRADA,
+            self.EstadoMovimiento.AUDITADA,
+        ):
             if self.monto_final is None:
                 raise ValidationError(
                     {'monto_final': 'Debe registrar el monto final al cerrar la seccion.'}
@@ -471,8 +457,8 @@ class SeccionCaja(models.Model):
 
 
 class DetalleCierreCaja(models.Model):
-    seccion_caja = models.ForeignKey(
-        SeccionCaja,
+    movimiento_caja = models.ForeignKey(
+        MovimientoCaja,
         on_delete=models.CASCADE,
         related_name='detalles_cierre',
     )
@@ -493,7 +479,7 @@ class DetalleCierreCaja(models.Model):
         verbose_name_plural = 'Detalles de Cierre de Caja'
         constraints = [
             models.UniqueConstraint(
-                fields=['seccion_caja', 'metodo_pago'],
+                fields=['movimiento_caja', 'metodo_pago'],
                 name='un_metodo_por_cierre_caja',
             ),
         ]
@@ -503,7 +489,7 @@ class DetalleCierreCaja(models.Model):
         return self.monto_real - self.monto_sistema
 
     def __str__(self):
-        return f'{self.seccion_caja} - {self.metodo_pago}'
+        return f'{self.movimiento_caja} - {self.metodo_pago}'
 
 
 # =============================================================================
@@ -890,8 +876,8 @@ class Venta(models.Model):
         CONFIRMADA = 'CO', 'Confirmada'
         ANULADA = 'AN', 'Anulada'
 
-    seccion_caja = models.ForeignKey(
-        SeccionCaja,
+    movimiento_caja = models.ForeignKey(
+        MovimientoCaja,
         on_delete=models.PROTECT,
         related_name='ventas',
     )
@@ -942,6 +928,14 @@ class DetalleVenta(models.Model):
     cantidad_venta = models.DecimalField(max_digits=12, decimal_places=3)
     precio_venta = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    # Lotes consumidos por esta linea: [{'detalle_stock': id, 'cantidad': '...'}].
+    # Permite revertir la venta sobre los mismos lotes al anularla.
+    consumos = models.JSONField(
+        default=list,
+        blank=True,
+        editable=False,
+        help_text='Lotes consumidos por la linea para restaurar el stock al anular.',
+    )
 
     history = HistoricalRecords()
 
@@ -1027,10 +1021,18 @@ class Compra(models.Model):
         EN_CAMINO = 'EC', 'En camino'
         RECIBIDA = 'RE', 'Recibida'
 
-    seccion_caja = models.ForeignKey(
-        SeccionCaja,
+    movimiento_caja = models.ForeignKey(
+        MovimientoCaja,
         on_delete=models.PROTECT,
         related_name='compras',
+    )
+    # Deposito donde se repone el stock al recibir la compra.
+    deposito = models.ForeignKey(
+        'Deposito',
+        on_delete=models.PROTECT,
+        related_name='compras',
+        null=True,
+        blank=True,
     )
     # Nullable para no romper compras historicas; los servicios exigen
     # proveedor en toda compra nueva.
@@ -1154,202 +1156,6 @@ class MetodoPagoXCompra(models.Model):
         return f'{self.metodo_pago} - Compra {self.compra_id}'
 
 
-# =============================================================================
-# SOLICITUDES DE COMPRA
-# =============================================================================
-
-class SolicitudCompra(models.Model):
-    """Peticion de pago o anulacion de una compra.
-
-    La resuelve administracion (AD/GE). Mientras hay una solicitud pendiente
-    la compra queda bloqueada: no se puede volver a solicitar ni pagar.
-    """
-
-    class TipoSolicitud(models.TextChoices):
-        PAGO = 'PG', 'Pago'
-        ANULACION = 'AN', 'Anulacion'
-
-    class EstadoSolicitud(models.TextChoices):
-        PENDIENTE = 'PE', 'Pendiente'
-        RESUELTA = 'RS', 'Resuelta'
-        RECHAZADA = 'RJ', 'Rechazada'
-
-    compra = models.ForeignKey(
-        Compra,
-        on_delete=models.PROTECT,
-        related_name='solicitudes',
-    )
-    tipo = models.CharField(
-        max_length=2,
-        choices=TipoSolicitud.choices,
-        default=TipoSolicitud.PAGO,
-    )
-    estado = models.CharField(
-        max_length=2,
-        choices=EstadoSolicitud.choices,
-        default=EstadoSolicitud.PENDIENTE,
-    )
-    motivo = models.TextField(help_text='Motivo de la solicitud.')
-    solicitante = models.ForeignKey(
-        Usuario,
-        on_delete=models.PROTECT,
-        related_name='solicitudes_compra',
-    )
-    fecha_solicitud = models.DateTimeField(auto_now_add=True)
-    resuelto_por = models.ForeignKey(
-        Usuario,
-        on_delete=models.PROTECT,
-        related_name='solicitudes_compra_resueltas',
-        null=True,
-        blank=True,
-    )
-    fecha_resolucion = models.DateTimeField(null=True, blank=True)
-    motivo_rechazo = models.TextField(blank=True, default='')
-
-    history = HistoricalRecords()
-
-    class Meta:
-        db_table = 'SOLICITUDES_COMPRA'
-        ordering = ['-fecha_solicitud']
-        verbose_name = 'Solicitud de Compra'
-        verbose_name_plural = 'Solicitudes de Compras'
-        constraints = [
-            models.UniqueConstraint(
-                fields=['compra'],
-                condition=models.Q(estado='PE'),
-                name='una_solicitud_pendiente_por_compra',
-            ),
-        ]
-
-    def __str__(self):
-        return f'Solicitud #{self.pk} - Compra {self.compra_id} - {self.tipo}'
-
-    @property
-    def pendiente(self):
-        return self.estado == self.EstadoSolicitud.PENDIENTE
-
-
-# =============================================================================
-# STOCK — MovimientoStock (libro de movimientos)
-# =============================================================================
-
-class MovimientoStock(models.Model):
-    class TipoMovimiento(models.TextChoices):
-        VENTA = 'VE', 'Venta'
-        CANCELACION = 'CA', 'Cancelacion de venta'
-        COMPRA = 'CO', 'Compra'
-        AJUSTE = 'AJ', 'Ajuste'
-        TRANSFERENCIA = 'TR', 'Transferencia'
-
-    stock = models.ForeignKey(
-        Stock,
-        on_delete=models.CASCADE,
-        related_name='movimientos',
-    )
-    detalle_stock = models.ForeignKey(
-        DetalleStock,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='movimientos',
-    )
-    tipo = models.CharField(max_length=2, choices=TipoMovimiento.choices)
-    cantidad = models.DecimalField(max_digits=12, decimal_places=3)
-    venta = models.ForeignKey(
-        Venta,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='movimientos_stock',
-    )
-    compra = models.ForeignKey(
-        Compra,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='movimientos_stock',
-    )
-    referencia = models.CharField(max_length=100, blank=True)
-    fecha = models.DateTimeField(auto_now_add=True)
-
-    history = HistoricalRecords()
-
-    class Meta:
-        db_table = 'MOVIMIENTOS_STOCK'
-        ordering = ['-fecha', '-id']
-        verbose_name = 'Movimiento de Stock'
-        verbose_name_plural = 'Movimientos de Stock'
-
-    def __str__(self):
-        return f'{self.get_tipo_display()} {self.cantidad} - {self.stock}'
-
-
-class TransferenciaStock(models.Model):
-    class EstadoTransferencia(models.TextChoices):
-        EN_TRANSITO = 'ET', 'En transito'
-        RECIBIDA = 'RE', 'Recibida'
-        CANCELADA = 'CA', 'Cancelada'
-
-    producto = models.ForeignKey(
-        Producto,
-        on_delete=models.PROTECT,
-        related_name='transferencias_stock',
-    )
-    stock_origen = models.ForeignKey(
-        Stock,
-        on_delete=models.PROTECT,
-        related_name='transferencias_origen',
-    )
-    deposito_origen = models.ForeignKey(
-        Deposito,
-        on_delete=models.PROTECT,
-        related_name='transferencias_origen',
-    )
-    deposito_destino = models.ForeignKey(
-        Deposito,
-        on_delete=models.PROTECT,
-        related_name='transferencias_destino',
-    )
-    detalle_origen = models.ForeignKey(
-        'DetalleStock',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='transferencias_origen',
-        help_text='Detalle/lote de origen desde el que se transfirió.',
-    )
-    cantidad = models.DecimalField(max_digits=12, decimal_places=3)
-    lote = models.CharField(
-        max_length=30,
-        null=True,
-        blank=True,
-        help_text='Código de lote de origen (trazabilidad).',
-    )
-    estado = models.CharField(
-        max_length=2,
-        choices=EstadoTransferencia.choices,
-        default=EstadoTransferencia.EN_TRANSITO,
-    )
-    motivo = models.TextField(blank=True, default='')
-    fecha_creacion = models.DateTimeField(auto_now_add=True)
-    fecha_recepcion = models.DateTimeField(null=True, blank=True)
-    fecha_cancelacion = models.DateTimeField(null=True, blank=True)
-
-    history = HistoricalRecords()
-
-    class Meta:
-        db_table = 'TRANSFERENCIAS_STOCK'
-        ordering = ['-fecha_creacion']
-        verbose_name = 'Transferencia de Stock'
-        verbose_name_plural = 'Transferencias de Stock'
-
-    def __str__(self):
-        return (
-            f'{self.producto} · {self.deposito_origen} → '
-            f'{self.deposito_destino}'
-        )
-
-
 class RegistroActividad(models.Model):
     """Registro consolidado de cambios del sistema.
 
@@ -1396,9 +1202,8 @@ class RegistroActividad(models.Model):
 def _slug_modelo(nombre):
     """Convierte un nombre de modelo CamelCase a slug kebab-case.
 
-    Ejemplos: `Producto` -> `producto`, `SeccionCaja` -> `seccion-caja`,
-    `SolicitudCompra` -> `solicitud-compra`, `ProductoXProveedor` ->
-    `producto-proveedor`.
+    Ejemplos: `Producto` -> `producto`, `MovimientoCaja` -> `movimiento-caja`,
+    `ProductoXProveedor` -> `producto-proveedor`.
     """
     # Separa minuscula/mayuscula y mayuscula/minuscula.
     slug = re.sub(r'([a-z0-9])([A-Z])', r'\1-\2', nombre)

@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.utils import timezone
 
-from app.models import Caja, SeccionCaja, Sucursal, SucursalXCaja
+from app.models import Caja, MovimientoCaja, Sucursal
 
 from .base import BaseCorralonTestCase
 
@@ -39,13 +39,12 @@ class AlcanceCajaTests(BaseCorralonTestCase):
 
     def _seccion_de_un_colega(self):
         """Otra sección abierta en la misma sucursal, de otro empleado."""
-        otra_caja = Caja.objects.create(nombre='Caja 2')
-        asignacion = SucursalXCaja.objects.create(
+        otra_caja = Caja.objects.create(
             sucursal=self.sucursal,
-            caja=otra_caja,
+            numero_caja=2,
         )
-        SeccionCaja.objects.create(
-            sucursal_caja=asignacion,
+        MovimientoCaja.objects.create(
+            caja=otra_caja,
             empleado=self.emp_cajero,
             fecha_hora_apertura=timezone.now(),
             monto_inicial=Decimal('500.00'),
@@ -57,12 +56,12 @@ class AlcanceCajaTests(BaseCorralonTestCase):
             ubicacion=self.ubicacion,
             nombre='Sucursal Norte',
         )
-        asignacion = SucursalXCaja.objects.create(
+        otra_caja = Caja.objects.create(
             sucursal=otra,
-            caja=self.caja,
+            numero_caja=1,
         )
-        SeccionCaja.objects.create(
-            sucursal_caja=asignacion,
+        MovimientoCaja.objects.create(
+            caja=otra_caja,
             empleado=self.emp_vendedor,
             fecha_hora_apertura=timezone.now(),
             monto_inicial=Decimal('500.00'),
@@ -72,7 +71,7 @@ class AlcanceCajaTests(BaseCorralonTestCase):
     def test_el_cajero_solo_ve_sus_propias_secciones(self):
         self.autenticar(self.user_cajero2)
 
-        respuesta = self.client.get('/api/secciones-caja/')
+        respuesta = self.client.get('/api/movimientos-caja/')
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta.data['count'], 1)
@@ -85,7 +84,7 @@ class AlcanceCajaTests(BaseCorralonTestCase):
         self._seccion_de_un_colega()
         self.autenticar(self.user_cajero2)
 
-        respuesta = self.client.get('/api/secciones-caja/')
+        respuesta = self.client.get('/api/movimientos-caja/')
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta.data['count'], 1)
@@ -99,7 +98,7 @@ class AlcanceCajaTests(BaseCorralonTestCase):
         self.autenticar(self.user_cajero)
 
         respuesta = self.client.get(
-            '/api/secciones-caja/',
+            '/api/movimientos-caja/',
             {'sucursal': otra.id},
         )
 
@@ -109,7 +108,7 @@ class AlcanceCajaTests(BaseCorralonTestCase):
         self._seccion_en_otra_sucursal()
         self.autenticar(self.user_gerente)
 
-        respuesta = self.client.get('/api/secciones-caja/')
+        respuesta = self.client.get('/api/movimientos-caja/')
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta.data['count'], 1)
@@ -118,7 +117,7 @@ class AlcanceCajaTests(BaseCorralonTestCase):
         self._seccion_en_otra_sucursal()
         self.autenticar(self.admin)
 
-        respuesta = self.client.get('/api/secciones-caja/')
+        respuesta = self.client.get('/api/movimientos-caja/')
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta.data['count'], 2)
@@ -381,7 +380,7 @@ class PermisoEscrituraTests(BaseCorralonTestCase):
         )
         self.autenticar(self.user_vendedor)
         respuesta = self.client.post(
-            '/api/secciones-caja/',
+            '/api/movimientos-caja/',
             {'caja': self.caja.id, 'sucursal': self.sucursal.id, 'monto_inicial': '100.00'},
             format='json',
         )

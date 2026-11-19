@@ -26,7 +26,6 @@ from ..models import (
     MetodoPago,
     MetodoPagoXCompra,
     MetodoPagoXVenta,
-    SolicitudCompra,
     Venta,
 )
 
@@ -149,14 +148,11 @@ def registrar_pagos_venta(venta, pagos, confirmar=False, clave=''):
 
 
 @transaction.atomic
-def registrar_pagos_compra(compra, pagos, bypass_solicitud=False, clave=''):
+def registrar_pagos_compra(compra, pagos, clave=''):
     """Registra varios metodos de pago para una compra en una sola transaccion.
 
     La compra queda `PARCIAL` si los pagos no cubren el total y `PAGADA` cuando
     lo cubren. La recepcion de la mercaderia no interviene en este estado.
-
-    Si la compra tiene una solicitud de pago pendiente, el pago directo queda
-    bloqueado: hay que resolver o rechazar la solicitud primero.
 
     `clave` es la clave de idempotencia: si la misma operacion se reintenta,
     se devuelven los pagos ya registrados en vez de pagarlos dos veces.
@@ -171,21 +167,6 @@ def registrar_pagos_compra(compra, pagos, bypass_solicitud=False, clave=''):
         )
         if existentes:
             return existentes, compra
-
-    if not bypass_solicitud:
-        pendiente = (
-            SolicitudCompra.objects.filter(
-                compra=compra,
-                estado=SolicitudCompra.EstadoSolicitud.PENDIENTE,
-            )
-            .order_by('fecha_solicitud')
-            .first()
-        )
-        if pendiente is not None:
-            raise ValueError(
-                f'La compra tiene la solicitud #{pendiente.id} pendiente. '
-                'Resolvela o rechazala antes de pagar.'
-            )
 
     if not pagos:
         raise ValueError('Registrá al menos un pago.')

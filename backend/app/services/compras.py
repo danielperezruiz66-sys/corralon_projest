@@ -1,9 +1,10 @@
 """Registro y recepcion de compras.
 
-- La compra se registra con su proveedor y sus detalles, pero **no** toca el
-  stock.
-- El stock se repone recien al recibirla, en el deposito predeterminado de la
-  sucursal de la caja.
+- La compra se registra con su proveedor, su deposito destino y sus detalles,
+  pero **no** toca el stock.
+- El stock se repone recien al recibirla, en el deposito elegido al registrar
+  la compra. Si la compra no tiene deposito (datos historicos), se usa el
+  deposito predeterminado de la sucursal del movimiento de caja.
 """
 
 from decimal import Decimal
@@ -13,16 +14,14 @@ from django.utils import timezone
 
 from ..models import (
     Compra,
+    Deposito,
     DetalleCompra,
+    MovimientoCaja,
     Producto,
     ProductoXProveedor,
     Proveedor,
-    SeccionCaja,
-    SolicitudCompra,
-    Sucursal,
 )
 from ..utils import validar_cantidad_por_unidad
-from . import pagos as pagos_service
 from . import stock as stock_service
 
 
@@ -30,126 +29,11 @@ def _decimal(valor):
     return Decimal(str(valor))
 
 
-def _solicitud_pendiente(compra):
-    """Solicitud abierta de la compra, si la hay."""
-    return (
-        SolicitudCompra.objects.filter(
-            compra=compra,
-            estado=SolicitudCompra.EstadoSolicitud.PENDIENTE,
-        )
-        .order_by('fecha_solicitud')
-        .first()
-    )
-
-
-@transaction.atomic
-def solicitar_compra(compra, tipo, motivo, usuario):
-    """Crea la solicitud de pago o anulacion de una compra.
-
-    Queda a la espera de que administracion (AD/GE) la resuelva. Mientras
-    exista una solicitud pendiente la compra no se puede volver a solicitar,
-    pagar ni anular.
-    """
-    motivo = (motivo or '').strip()
-    if len(motivo) < 10:
-        raise ValueError(
-            'Explicá el motivo de la solicitud (10 caracteres o más).'
-        )
-
-    compra = Compra.objects.select_for_update().get(pk=compra.pk)
-    if compra.estado == Compra.EstadoCompra.ANULADA:
-        raise ValueError('La compra está anulada.')
-
-    if tipo == SolicitudCompra.TipoSolicitud.ANULACION:
-        if compra.estado_entrega == Compra.EstadoEntrega.RECIBIDA:
-            raise ValueError('No se puede anular una compra recibida.')
-        if compra.pagos.exists():
-            raise ValueError(
-                'No se puede anular una compra con pagos registrados.'
-            )
-    else:
-        tipo = SolicitudCompra.TipoSolicitud.PAGO
-
-    pendiente = _solicitud_pendiente(compra)
-    if pendiente is not None:
-        raise ValueError(
-            f'La compra ya tiene la solicitud #{pendiente.id} pendiente.'
-        )
-
-    return SolicitudCompra.objects.create(
-        compra=compra,
-        tipo=tipo,
-        estado=SolicitudCompra.EstadoSolicitud.PENDIENTE,
-        motivo=motivo,
-        solicitante=usuario,
-    )
-
-
-@transaction.atomic
-def resolver_solicitud(
-    solicitud,
-    accion,
-    usuario,
-    pagos=None,
-    motivo_rechazo='',
-    clave='',
-):
-    """Resuelve la solicitud: paga, anula o rechaza.
-
-    Pagar y anular ocurren en la misma transaccion que marcar la solicitud
-    como resuelta: si el pago falla, la solicitud sigue pendiente.
-    """
-    solicitud = (
-        SolicitudCompra.objects.select_for_update()
-        .select_related('compra')
-        .get(pk=solicitud.pk)
-    )
-    if solicitud.estado != SolicitudCompra.EstadoSolicitud.PENDIENTE:
-        raise ValueError('La solicitud ya fue resuelta.')
-
-    if accion == 'RECHAZAR':
-        motivo = (motivo_rechazo or '').strip()
-        if len(motivo) < 10:
-            raise ValueError(
-                'Explicá por qué se rechaza (10 caracteres o más).'
-            )
-        solicitud.estado = SolicitudCompra.EstadoSolicitud.RECHAZADA
-        solicitud.motivo_rechazo = motivo
-    elif accion == 'PAGAR':
-        pagos_service.registrar_pagos_compra(
-            solicitud.compra,
-            pagos or [],
-            bypass_solicitud=True,
-            clave=clave,
-        )
-        solicitud.estado = SolicitudCompra.EstadoSolicitud.RESUELTA
-    elif accion == 'ANULAR':
-        anular_compra(
-            solicitud.compra,
-            solicitud.motivo,
-            bypass_solicitud=True,
-        )
-        solicitud.estado = SolicitudCompra.EstadoSolicitud.RESUELTA
-    else:
-        raise ValueError('Acción de resolución inválida.')
-
-    solicitud.resuelto_por = usuario
-    solicitud.fecha_resolucion = timezone.now()
-    solicitud.save(
-        update_fields=[
-            'estado',
-            'resuelto_por',
-            'fecha_resolucion',
-            'motivo_rechazo',
-        ]
-    )
-    return solicitud
-
-
 @transaction.atomic
 def registrar_compra(
-    seccion_caja,
+    movimiento_caja,
     proveedor,
+    deposito,
     items,
     estado_entrega=Compra.EstadoEntrega.PENDIENTE,
     fecha_estimada_llegada=None,
@@ -161,18 +45,29 @@ def registrar_compra(
     if estado_entrega == Compra.EstadoEntrega.RECIBIDA:
         raise ValueError('La compra no puede nacer recibida.')
 
-    seccion_caja = (
-        SeccionCaja.objects.select_for_update()
-        .select_related('sucursal_caja__sucursal')
-        .get(pk=seccion_caja.pk)
+    movimiento_caja = (
+        MovimientoCaja.objects.select_for_update()
+        .select_related('caja__sucursal')
+        .get(pk=movimiento_caja.pk)
     )
-    if seccion_caja.estado != SeccionCaja.EstadoSeccion.ABIERTA:
-        raise ValueError('La seccion de caja no esta abierta.')
+    if movimiento_caja.estado != MovimientoCaja.EstadoMovimiento.ABIERTA:
+        raise ValueError('El movimiento de caja no esta abierto.')
 
     if not isinstance(proveedor, Proveedor):
         proveedor = Proveedor.objects.get(pk=proveedor)
     if not proveedor.estado_prov:
         raise ValueError('El proveedor esta inactivo.')
+
+    if deposito is None:
+        deposito = stock_service.deposito_predeterminado(
+            movimiento_caja.caja.sucursal
+        )
+    elif not isinstance(deposito, Deposito):
+        deposito = Deposito.objects.get(pk=deposito)
+    if deposito.sucursal_id != movimiento_caja.caja.sucursal_id:
+        raise ValueError(
+            'El depósito de la compra debe pertenecer a la sucursal de la caja.'
+        )
 
     productos_habilitados = set(
         ProductoXProveedor.objects.filter(
@@ -182,7 +77,8 @@ def registrar_compra(
     )
 
     compra = Compra(
-        seccion_caja=seccion_caja,
+        movimiento_caja=movimiento_caja,
+        deposito=deposito,
         proveedor=proveedor,
         estado=Compra.EstadoCompra.PENDIENTE,
         estado_entrega=estado_entrega,
@@ -242,20 +138,13 @@ def registrar_compra(
 
 
 @transaction.atomic
-def anular_compra(compra, motivo='', bypass_solicitud=False):
+def anular_compra(compra, motivo=''):
     """Anula una compra que todavia no fue recibida ni tiene pagos."""
     motivo = (motivo or '').strip()
     if not motivo:
         raise ValueError('Indicá el motivo de la anulación.')
 
     compra = Compra.objects.select_for_update().get(pk=compra.pk)
-    if not bypass_solicitud:
-        pendiente = _solicitud_pendiente(compra)
-        if pendiente is not None:
-            raise ValueError(
-                f'La compra tiene la solicitud #{pendiente.id} pendiente. '
-                'Resolvela o rechazala antes de anular.'
-            )
     if compra.estado == Compra.EstadoCompra.ANULADA:
         raise ValueError('La compra ya está anulada.')
     if compra.estado_entrega == Compra.EstadoEntrega.RECIBIDA:
@@ -263,6 +152,7 @@ def anular_compra(compra, motivo='', bypass_solicitud=False):
     if compra.pagos.exists():
         raise ValueError('No se puede anular una compra con pagos registrados.')
 
+    compra._change_reason = f'Anulación de compra: {motivo}'[:100]
     compra.estado = Compra.EstadoCompra.ANULADA
     compra.motivo_cancelacion = motivo
     compra.save(update_fields=['estado', 'motivo_cancelacion'])
@@ -294,16 +184,19 @@ def marcar_en_camino(compra, fecha_estimada_llegada=None):
 
 
 @transaction.atomic
-def recibir_compra(compra, deposito=None):
+def recibir_compra(compra):
     """Repone el stock de todos los detalles de la compra.
 
-    Si no se indica deposito, usa el deposito predeterminado de la sucursal
-    central. Si no hay sucursal central marcada, usa el de la sucursal de la
-    caja de la compra.
+    Usa el deposito definido en la compra. Si la compra es historica y no
+    tiene deposito, usa el predeterminado de la sucursal de su movimiento.
     """
     compra = (
         Compra.objects.select_for_update(of=('self',))
-        .select_related('seccion_caja__sucursal_caja__sucursal', 'proveedor')
+        .select_related(
+            'movimiento_caja__caja__sucursal',
+            'proveedor',
+            'deposito',
+        )
         .get(pk=compra.pk)
     )
     if compra.fecha_recepcion is not None:
@@ -313,17 +206,18 @@ def recibir_compra(compra, deposito=None):
     if compra.proveedor_id is None:
         raise ValueError('La compra no tiene proveedor.')
 
+    deposito = compra.deposito
     if deposito is None:
-        sucursal_caja = compra.seccion_caja.sucursal_caja.sucursal
-        central = Sucursal.objects.filter(
-            es_central=True,
-            empresa=sucursal_caja.empresa,
-        ).first()
-        sucursal = central if central is not None else sucursal_caja
-        deposito = stock_service.deposito_predeterminado(sucursal)
-
-    if deposito.sucursal_id is None:
-        raise ValueError('El deposito de recepcion no tiene sucursal.')
+        deposito = stock_service.deposito_predeterminado(
+            compra.movimiento_caja.caja.sucursal
+        )
+    if (
+        deposito.sucursal_id
+        != compra.movimiento_caja.caja.sucursal_id
+    ):
+        raise ValueError(
+            'El depósito de recepción no pertenece a la sucursal de la compra.'
+        )
 
     for detalle in compra.detalles.select_related('producto'):
         stock = stock_service.obtener_stock(
@@ -335,8 +229,7 @@ def recibir_compra(compra, deposito=None):
             detalle.cantidad_compra,
             deposito,
             lote=None,
-            referencia=f'compra:{compra.id}',
-            compra=compra,
+            observaciones=f'Compra #{compra.id}',
         )
 
     compra.fecha_recepcion = timezone.now()

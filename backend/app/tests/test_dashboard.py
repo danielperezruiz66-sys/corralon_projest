@@ -5,10 +5,9 @@ from django.utils import timezone
 
 from app.models import (
     Caja,
-    SeccionCaja,
+    MovimientoCaja,
     Stock,
     Sucursal,
-    SucursalXCaja,
     Venta,
 )
 
@@ -250,24 +249,23 @@ class DashboardApiTests(BaseCorralonTestCase):
             nombre='Sucursal Norte',
         )
         # Una sección del cajero en su sucursal...
-        caja_salta = Caja.objects.create(nombre='Caja 2')
-        asignacion_salta = SucursalXCaja.objects.create(
+        caja_salta = Caja.objects.create(
             sucursal=self.sucursal,
-            caja=caja_salta,
+            numero_caja=2,
         )
-        SeccionCaja.objects.create(
-            sucursal_caja=asignacion_salta,
+        MovimientoCaja.objects.create(
+            caja=caja_salta,
             empleado=self.emp_cajero,
             fecha_hora_apertura=timezone.now(),
             monto_inicial=Decimal('500.00'),
         )
         # ...y una de otro empleado en una sucursal que no le corresponde.
-        otra_caja = SucursalXCaja.objects.create(
+        otra_caja = Caja.objects.create(
             sucursal=otra,
-            caja=self.caja,
+            numero_caja=1,
         )
-        SeccionCaja.objects.create(
-            sucursal_caja=otra_caja,
+        MovimientoCaja.objects.create(
+            caja=otra_caja,
             empleado=self.emp_vendedor,
             fecha_hora_apertura=timezone.now(),
             monto_inicial=Decimal('500.00'),

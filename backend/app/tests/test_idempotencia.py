@@ -69,19 +69,27 @@ class IdempotenciaPagosTests(BaseCorralonTestCase):
         self.autenticar(self.user_cajero2)
 
         primera = self.client.post(
-            f'/api/secciones-caja/{seccion_id}/cerrar/',
-            {'montos_reales': montos, 'clave': 'clave-cierre-1'},
+            f'/api/movimientos-caja/{seccion_id}/cerrar/',
+            {
+                'montos_reales': montos,
+                'clave': 'clave-cierre-1',
+                'password': self.PASSWORD,
+            },
             format='json',
         )
         self.assertEqual(primera.status_code, 200)
 
         segunda = self.client.post(
-            f'/api/secciones-caja/{seccion_id}/cerrar/',
-            {'montos_reales': montos, 'clave': 'clave-cierre-1'},
+            f'/api/movimientos-caja/{seccion_id}/cerrar/',
+            {
+                'montos_reales': montos,
+                'clave': 'clave-cierre-1',
+                'password': self.PASSWORD,
+            },
             format='json',
         )
         self.assertEqual(segunda.status_code, 200)
 
-        seccion = self.client.get(f'/api/secciones-caja/{seccion_id}/').data
+        seccion = self.client.get(f'/api/movimientos-caja/{seccion_id}/').data
         self.assertEqual(seccion['estado'], 'CE')
         self.assertEqual(len(seccion['detalles_cierre']), 1)

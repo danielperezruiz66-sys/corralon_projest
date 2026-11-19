@@ -18,7 +18,7 @@ from django.db import transaction
 from django.db.models import Max, Sum
 from django.utils import timezone
 
-from ..models import Cliente, DetalleVenta, Producto, SeccionCaja, Venta
+from ..models import Cliente, DetalleVenta, MovimientoCaja, Producto, Venta
 from ..utils import validar_cantidad_por_unidad, validar_nombre_consumidor
 from . import stock as stock_service
 
@@ -35,7 +35,7 @@ def _decimal(valor):
 
 
 @transaction.atomic
-def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
+def crear_venta(movimiento_caja, items, cliente=None, cliente_venta=None):
     """Crea una venta pendiente y descuenta el stock.
 
     `items` es una lista de diccionarios:
@@ -59,20 +59,20 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
         if error_consumidor:
             raise ValueError(error_consumidor)
 
-    seccion_caja = (
-        SeccionCaja.objects.select_for_update()
-        .select_related('sucursal_caja__sucursal')
-        .get(pk=seccion_caja.pk)
+    movimiento_caja = (
+        MovimientoCaja.objects.select_for_update()
+        .select_related('caja__sucursal')
+        .get(pk=movimiento_caja.pk)
     )
-    if seccion_caja.estado == SeccionCaja.EstadoSeccion.PAUSADA:
+    if movimiento_caja.estado == MovimientoCaja.EstadoMovimiento.PAUSADA:
         raise ValueError(
             'La sección de caja está en pausa: primero hay que reanudarla.'
         )
-    if seccion_caja.estado != SeccionCaja.EstadoSeccion.ABIERTA:
-        raise ValueError('La seccion de caja no esta abierta.')
+    if movimiento_caja.estado != MovimientoCaja.EstadoMovimiento.ABIERTA:
+        raise ValueError('El movimiento de caja no esta abierto.')
 
     venta = Venta.objects.create(
-        seccion_caja=seccion_caja,
+        movimiento_caja=movimiento_caja,
         cliente=cliente,
         cliente_venta=cliente_venta,
         estado=Venta.EstadoVenta.PENDIENTE,
@@ -113,7 +113,7 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
             )
         subtotal = (cantidad * precio).quantize(Decimal('0.01'))
 
-        DetalleVenta.objects.create(
+        detalle_venta = DetalleVenta.objects.create(
             venta=venta,
             producto=producto,
             cantidad_venta=cantidad,
@@ -123,14 +123,11 @@ def crear_venta(seccion_caja, items, cliente=None, cliente_venta=None):
 
         stock = stock_service.obtener_stock(
             producto,
-            seccion_caja.sucursal_caja.sucursal,
+            movimiento_caja.caja.sucursal,
         )
-        stock_service.consumir_stock(
-            stock,
-            cantidad,
-            referencia=f'venta:{venta.id}',
-            venta=venta,
-        )
+        consumos = stock_service.consumir_stock(stock, cantidad)
+        detalle_venta.consumos = consumos
+        detalle_venta.save(update_fields=['consumos'])
         total += subtotal
 
     venta.monto_venta = total
@@ -172,10 +169,7 @@ def cancelar_venta(venta, motivo=''):
     if venta.pagos.exists():
         raise ValueError('No se puede anular una venta con pagos registrados.')
 
-    stock_service.restaurar_stock(
-        venta,
-        referencia=f'cancelacion:venta:{venta.id}',
-    )
+    stock_service.restaurar_stock(venta)
     venta._change_reason = motivo
     venta.estado = Venta.EstadoVenta.ANULADA
     venta.save(update_fields=['estado'])

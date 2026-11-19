@@ -5,7 +5,7 @@
 """
 
 from .base import BaseCorralonTestCase
-from app.models import SeccionCaja
+from app.models import MovimientoCaja
 
 
 class PausaCajaTests(BaseCorralonTestCase):
@@ -16,7 +16,7 @@ class PausaCajaTests(BaseCorralonTestCase):
     def _pausar(self, user=None, motivo=None):
         self.autenticar(user or self.user_cajero2)
         return self.client.post(
-            f'/api/secciones-caja/{self.seccion.id}/pausar/',
+            f'/api/movimientos-caja/{self.seccion.id}/pausar/',
             {'motivo': motivo or self.MOTIVO},
             format='json',
         )
@@ -24,7 +24,7 @@ class PausaCajaTests(BaseCorralonTestCase):
     def _reanudar(self, user=None, clave=None):
         self.autenticar(user or self.user_cajero2)
         return self.client.post(
-            f'/api/secciones-caja/{self.seccion.id}/reanudar/',
+            f'/api/movimientos-caja/{self.seccion.id}/reanudar/',
             {'clave': clave if clave is not None else self.PASSWORD},
             format='json',
         )
@@ -47,7 +47,7 @@ class PausaCajaTests(BaseCorralonTestCase):
         self._pausar()
 
         registro = (
-            SeccionCaja.objects.get(pk=self.seccion.pk)
+            MovimientoCaja.objects.get(pk=self.seccion.pk)
             .history.filter(history_change_reason__startswith='Pausa')
             .first()
         )
@@ -75,7 +75,7 @@ class PausaCajaTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('contraseña', respuesta.data['detail'])
         self.assertEqual(
-            SeccionCaja.objects.get(pk=self.seccion.pk).estado,
+            MovimientoCaja.objects.get(pk=self.seccion.pk).estado,
             'PA',
         )
 
@@ -107,8 +107,11 @@ class PausaCajaTests(BaseCorralonTestCase):
         self._pausar()
 
         respuesta = self.client.post(
-            f'/api/secciones-caja/{self.seccion.id}/cerrar/',
-            {'montos_reales': {str(self.efectivo.id): '1000.00'}},
+            f'/api/movimientos-caja/{self.seccion.id}/cerrar/',
+            {
+                'montos_reales': {str(self.efectivo.id): '1000.00'},
+                'password': self.PASSWORD,
+            },
             format='json',
         )
 
@@ -128,7 +131,7 @@ class PausaCajaTests(BaseCorralonTestCase):
 
         self.autenticar(self.user_cajero2)
         respuesta = self.client.post(
-            '/api/secciones-caja/',
+            '/api/movimientos-caja/',
             {
                 'caja': self.caja.id,
                 'sucursal': self.sucursal.id,
