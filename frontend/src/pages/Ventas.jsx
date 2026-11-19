@@ -24,7 +24,6 @@ import Encabezado from '../components/Encabezado.jsx'
 import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
 import FormularioVenta from '../components/comercial/FormularioVenta.jsx'
 import { useAuth } from '../context/auth-context'
-import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
 import { nuevaClave } from '../utils/clave'
@@ -92,7 +91,6 @@ function saldoVenta(venta) {
 
 export default function Ventas() {
   const { puedeEscribir } = useAuth()
-  const { sucursalActiva } = useSucursal()
   const puedeCobrar = puedeEscribir(['GE', 'CA'])
   const [searchParams, setSearchParams] = useSearchParams()
   const [clienteInicial] = useState(
@@ -218,9 +216,6 @@ export default function Ventas() {
     if (alerta) {
       parametros.set('alerta', alerta)
     }
-    if (sucursalActiva) {
-      parametros.set('sucursal', sucursalActiva)
-    }
     if (fechas.fecha) {
       parametros.set('fecha', fechas.fecha)
     }
@@ -269,7 +264,6 @@ export default function Ventas() {
     orden,
     refresco,
     rangoInvalido,
-    sucursalActiva,
   ])
 
   function abrirNueva(modoNuevo = 'venta') {
@@ -354,9 +348,6 @@ export default function Ventas() {
       }
       if (alerta) {
         parametros.set('alerta', alerta)
-      }
-      if (sucursalActiva) {
-        parametros.set('sucursal', sucursalActiva)
       }
       if (fechas.fecha) {
         parametros.set('fecha', fechas.fecha)
@@ -947,10 +938,8 @@ export default function Ventas() {
 
       {modalAbierto && (
         <FormularioVenta
-          key={sucursalActiva || 'todas'}
           modo={modo}
           clienteInicial={clienteInicial}
-          sucursalActiva={sucursalActiva}
           onCerrar={() => setModalAbierto(false)}
           onGuardado={() => setRefresco((valor) => valor + 1)}
         />

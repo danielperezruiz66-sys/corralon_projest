@@ -38,7 +38,7 @@ function fechaActual() {
   return new Date().toLocaleDateString('es-AR')
 }
 
-export default function FormularioVenta({ modo = 'venta', clienteInicial = '', sucursalActiva = '', onCerrar, onGuardado }) {
+export default function FormularioVenta({ modo = 'venta', clienteInicial = '', onCerrar, onGuardado }) {
   const [secciones, setSecciones] = useState([])
   const [seccion, setSeccion] = useState('')
   const [cliente, setCliente] = useState(
@@ -49,7 +49,6 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   const [modalCliente, setModalCliente] = useState(false)
   const [items, setItems] = useState([])
   const [stocks, setStocks] = useState({})
-  const [disponibilidad, setDisponibilidad] = useState({})
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -70,14 +69,9 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
         if (!vigente) {
           return
         }
-        const disponibles = sucursalActiva
-          ? seccionesData.filter(
-              (item) => String(item.sucursal) === String(sucursalActiva),
-            )
-          : seccionesData
-        setSecciones(disponibles)
-        if (disponibles.length > 0) {
-          setSeccion(String(disponibles[0].id))
+        setSecciones(seccionesData)
+        if (seccionesData.length > 0) {
+          setSeccion(String(seccionesData[0].id))
         }
       })
       .catch((e) => {
@@ -94,7 +88,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
     return () => {
       vigente = false
     }
-  }, [sucursalActiva])
+  }, [])
 
   useEffect(() => {
     if (!clienteInicial) {
@@ -113,77 +107,46 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
     }
   }, [clienteInicial])
 
-  const seccionActual = secciones.find(
-    (item) => String(item.id) === seccion,
-  )
-  const sucursalActual = seccionActual?.sucursal
   const total = items.reduce(
     (acumulado, item) => acumulado + Number(item.cantidad || 0) * Number(item.precio || 0),
     0,
   )
 
-  const buscarProductos = useCallback(
-    async (texto) => {
-      const parametros = new URLSearchParams({
-        search: texto,
-        page: '1',
-      })
-      if (sucursalActual) {
-        parametros.set('sucursal', sucursalActual)
-      }
-      const respuesta = await pedir(
-        `/productos/?${parametros.toString()}`,
-      )
-      return respuesta.results || []
-    },
-    [sucursalActual],
-  )
+  const buscarProductos = useCallback(async (texto) => {
+    const parametros = new URLSearchParams({
+      search: texto,
+      page: '1',
+    })
+    const respuesta = await pedir(
+      `/productos/?${parametros.toString()}`,
+    )
+    return respuesta.results || []
+  }, [])
 
   useEffect(() => {
     let vigente = true
 
-    const cargarStocks = async () => {
-      try {
-        const [propios, todos] = await Promise.all([
-          sucursalActual
-            ? pedirTodas(`/stocks/?sucursal=${sucursalActual}`)
-            : [],
-          pedirTodas('/stocks/'),
-        ])
+    pedirTodas('/stocks/')
+      .then((todos) => {
         if (!vigente) {
           return
         }
         const mapa = {}
-        propios.forEach((stock) => {
+        todos.forEach((stock) => {
           mapa[stock.producto] = stock
         })
         setStocks(mapa)
-        // Disponibilidad por producto en todas las sucursales: sirve para
-        // orientar al vendedor cuando no hay stock en la suya.
-        const porProducto = {}
-        todos.forEach((stock) => {
-          ;(porProducto[stock.producto] ??= []).push({
-            sucursal_id: stock.sucursal,
-            sucursal_detalle: stock.sucursal_detalle,
-            cantidad: stock.cantidad,
-          })
-        })
-        setDisponibilidad(porProducto)
-      } catch {
+      })
+      .catch(() => {
         if (vigente) {
           setStocks({})
-          setProductos([])
-          setDisponibilidad({})
         }
-      }
-    }
-
-    cargarStocks()
+      })
 
     return () => {
       vigente = false
     }
-  }, [sucursalActual])
+  }, [])
 
   function clienteCreado(nuevo) {
     setCliente(String(nuevo.id))
@@ -581,12 +544,9 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
             </div>
 
             <SelectorProductos
-              key={sucursalActual || 'todas'}
               productos={[]}
               onBuscar={buscarProductos}
               stocks={stocks}
-              disponibilidad={disponibilidad}
-              mostrarStock={Boolean(sucursalActual)}
               onAgregar={agregarProducto}
             />
 

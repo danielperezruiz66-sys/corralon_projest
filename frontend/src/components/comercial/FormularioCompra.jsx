@@ -32,7 +32,6 @@ function fechaHoyLocal() {
 }
 
 export default function FormularioCompra({
-  sucursalActiva = '',
   proveedorInicialId = '',
   proveedorInicialDetalle = null,
   productoInicialId = '',
@@ -41,7 +40,6 @@ export default function FormularioCompra({
   onGuardado,
 }) {
   const [secciones, setSecciones] = useState([])
-  const [sucursales, setSucursales] = useState([])
   const [productosProveedorData, setProductosProveedorData] = useState([])
   const [seccion, setSeccion] = useState('')
   const [proveedor, setProveedor] = useState(
@@ -79,23 +77,14 @@ export default function FormularioCompra({
   useEffect(() => {
     let vigente = true
 
-    Promise.all([
-      pedirTodas('/movimientos-caja/?estado=AB'),
-      pedirTodas('/sucursales/'),
-    ])
-      .then(([seccionesData, sucursalesData]) => {
+    pedirTodas('/movimientos-caja/?estado=AB')
+      .then((seccionesData) => {
         if (!vigente) {
           return
         }
-        const disponibles = sucursalActiva
-          ? seccionesData.filter(
-              (item) => String(item.sucursal) === String(sucursalActiva),
-            )
-          : seccionesData
-        setSecciones(disponibles)
-        setSucursales(sucursalesData)
-        if (disponibles.length > 0) {
-          setSeccion(String(disponibles[0].id))
+        setSecciones(seccionesData)
+        if (seccionesData.length > 0) {
+          setSeccion(String(seccionesData[0].id))
         }
         if (proveedorInicialId) {
           cargarProductosProveedor(proveedorInicialId, { mostrarError: true })
@@ -116,7 +105,7 @@ export default function FormularioCompra({
       vigente = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sucursalActiva, proveedorInicialId])
+  }, [proveedorInicialId])
 
   useEffect(() => {
     if (
@@ -145,10 +134,6 @@ export default function FormularioCompra({
     productosProveedorData,
   ])
 
-  const seccionActual = secciones.find(
-    (item) => String(item.id) === seccion,
-  )
-  const sucursalActual = seccionActual?.sucursal
   const fechaMinima = fechaHoyLocal()
   const productosDelProveedor = productosProveedorData
   const proveedorActual = proveedorSeleccionado
@@ -158,12 +143,8 @@ export default function FormularioCompra({
   )
 
   useEffect(() => {
-    if (!sucursalActual) {
-      return undefined
-    }
-
     let vigente = true
-    pedirTodas(`/stocks/?sucursal=${sucursalActual}`)
+    pedirTodas('/stocks/')
       .then((datos) => {
         if (!vigente) {
           return
@@ -183,7 +164,7 @@ export default function FormularioCompra({
     return () => {
       vigente = false
     }
-  }, [sucursalActual])
+  }, [])
 
   async function cargarProductosProveedor(id, opciones = {}) {
     const proveedorId = String(id || '')
@@ -504,8 +485,7 @@ export default function FormularioCompra({
           <>
             <p className="comercial-nota">
               La compra se registra sin reponer stock. El stock entra cuando la
-              recibís desde el listado. Si el pago o la anulación los lleva
-              administración, dejá la solicitud desde el detalle de la compra.
+              recibís desde el listado.
             </p>
 
             <div className="comercial-grid">
@@ -622,7 +602,6 @@ export default function FormularioCompra({
                   key={proveedor}
                   productos={productosDelProveedor}
                   stocks={stocks}
-                  mostrarStock={Boolean(sucursalActual)}
                   precios={costos}
                   tituloPrecio="Costo"
                   onAgregar={agregarProducto}
@@ -777,8 +756,6 @@ export default function FormularioCompra({
 
       {proveedorRapido && (
         <FormularioProveedor
-          sucursales={sucursales}
-          sucursalActiva={sucursalActiva}
           onCerrar={() => setProveedorRapido(false)}
           onGuardado={proveedorCreado}
         />

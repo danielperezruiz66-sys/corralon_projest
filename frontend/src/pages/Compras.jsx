@@ -23,7 +23,6 @@ import Encabezado from '../components/Encabezado.jsx'
 import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
 import FormularioCompra from '../components/comercial/FormularioCompra.jsx'
 import { useAuth } from '../context/auth-context'
-import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
 import { nuevaClave } from '../utils/clave'
@@ -126,7 +125,6 @@ function fechaMinimaLlegada() {
 
 export default function Compras() {
   const { puedeEscribir } = useAuth()
-  const { sucursalActiva } = useSucursal()
   const puedeCrear = puedeEscribir(['AD', 'GE', 'ED', 'CA', 'VE'])
   const puedeOperar = puedeEscribir(['AD', 'GE', 'ED', 'CA', 'VE'])
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
@@ -255,9 +253,6 @@ export default function Compras() {
     if (estado) {
       parametros.set('estado', estado)
     }
-    if (sucursalActiva) {
-      parametros.set('sucursal', sucursalActiva)
-    }
     if (entrega === 'por_recibir') {
       parametros.set('por_recibir', '1')
     } else if (entrega) {
@@ -302,7 +297,7 @@ export default function Compras() {
       vigente = false
       controlador.abort()
     }
-  }, [pagina, busqueda, estado, entrega, fechas, orden, refresco, rangoInvalido, sucursalActiva])
+  }, [pagina, busqueda, estado, entrega, fechas, orden, refresco, rangoInvalido])
 
   function limpiarTexto() {
     setTexto('')
@@ -382,9 +377,6 @@ export default function Compras() {
       }
       if (estado) {
         parametros.set('estado', estado)
-      }
-      if (sucursalActiva) {
-        parametros.set('sucursal', sucursalActiva)
       }
       if (entrega === 'por_recibir') {
         parametros.set('por_recibir', '1')
@@ -513,15 +505,12 @@ export default function Compras() {
     const opciones = {
       '': 'Depósito central (por defecto)',
       ...Object.fromEntries(
-        depositos.map((item) => [
-          String(item.id),
-          `${item.nombre}${item.sucursal_detalle ? ` · ${item.sucursal_detalle}` : ''}`,
-        ]),
+        depositos.map((item) => [String(item.id), item.nombre]),
       ),
     }
     const resultado = await Swal.fire({
       title: `¿Recibir compra #${compra.id}?`,
-      text: 'Elegí el depósito de recepción. Si no elegís, se usa el depósito principal de la sucursal central.',
+      text: 'Elegí el depósito de recepción. Si no elegís, se usa el depósito principal.',
       icon: 'question',
       input: 'select',
       inputOptions: opciones,
@@ -1004,8 +993,6 @@ export default function Compras() {
 
       {modalAbierto && (
         <FormularioCompra
-          key={sucursalActiva || 'todas'}
-          sucursalActiva={sucursalActiva}
           puedeGestionar={puedeGestionar}
           onCerrar={() => setModalAbierto(false)}
           onGuardado={() => setRefresco((valor) => valor + 1)}
