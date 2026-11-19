@@ -81,7 +81,7 @@ export const menuCategories = [
       {
         name: 'Proveedores',
         path: '/proveedores',
-        detalle: 'Información, sucursales y costos',
+        detalle: 'Información y costos',
         icono: IconTruck,
         roles: ['AD', 'GE', 'CA', 'VE', 'ED'],
       },

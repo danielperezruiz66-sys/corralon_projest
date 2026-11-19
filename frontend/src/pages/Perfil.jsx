@@ -321,9 +321,6 @@ export default function Perfil() {
   const rolesTexto = (datos?.roles ?? [])
     .map((rol) => `${rol.ocupacion} (${rol.codigo})`)
     .join(' · ') || 'Sin roles asignados'
-  const sucursalesTexto = (datos?.sucursales ?? [])
-    .map((s) => s.nombre)
-    .join(' · ') || 'Sin sucursales asignadas'
 
   return (
     <>
@@ -407,10 +404,6 @@ export default function Perfil() {
               <span className="perfil-dato-valor">
                 {esAdministrador ? 'Administrador (superusuario)' : user?.rol ?? '—'}
               </span>
-            </div>
-            <div className="perfil-dato perfil-dato-ancho">
-              <span className="perfil-dato-label">Sucursales asignadas</span>
-              <span className="perfil-dato-valor">{sucursalesTexto}</span>
             </div>
             <div className="perfil-dato perfil-dato-ancho">
               <span className="perfil-dato-label">Roles activos</span>

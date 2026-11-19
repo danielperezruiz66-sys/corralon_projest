@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../context/auth-context'
 import { pedir } from '../api/client'
 import { menuCategories } from '../data/menuConfig.js'
+import { sinSucursal } from '../utils/formato'
 import SidebarCategory from './sidebar/SidebarCategory'
 import SidebarFooter from './sidebar/SidebarFooter'
 import SidebarHeader from './sidebar/SidebarHeader'
@@ -94,11 +95,10 @@ export default function MenuDesplegable() {
     }
 
     if (caja) {
+      const cajaTexto = sinSucursal(caja.caja_detalle, caja.sucursal_detalle)
       Swal.fire({
         title: 'Tenés una caja abierta',
-        html: `La sección <strong>#${caja.id}</strong> (${caja.caja_detalle} · ${
-          caja.sucursal_detalle
-        }) sigue ${
+        html: `La sección <strong>#${caja.id}</strong> (${cajaTexto}) sigue ${
           caja.estado === 'PA' ? 'en pausa' : 'abierta'
         }.<br/>Cerrala o pausala antes de salir del sistema.`,
         icon: 'warning',

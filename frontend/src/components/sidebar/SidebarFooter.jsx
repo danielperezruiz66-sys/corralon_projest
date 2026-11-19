@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { IconCash, IconLogout } from '@tabler/icons-react'
+import { sinSucursal } from '../../utils/formato'
 
 export default function SidebarFooter({ abierto, cajaAbierta, onLogoutClick }) {
   return (
@@ -8,7 +9,10 @@ export default function SidebarFooter({ abierto, cajaAbierta, onLogoutClick }) {
         <NavLink
           to="/caja"
           className="sidebar-caja-abierta"
-          title={`Sección #${cajaAbierta.id} · ${cajaAbierta.caja_detalle}`}
+          title={`Sección #${cajaAbierta.id} · ${sinSucursal(
+            cajaAbierta.caja_detalle,
+            cajaAbierta.sucursal_detalle,
+          )}`}
         >
           <IconCash size={abierto ? 20 : 22} />
           {abierto && (
