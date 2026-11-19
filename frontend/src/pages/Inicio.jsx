@@ -19,7 +19,6 @@ import {
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import { useAuth } from '../context/auth-context'
-import { useSucursal } from '../context/sucursal-context'
 import {
   etiquetaDia,
   formatearFecha,
@@ -129,7 +128,6 @@ function EstadoVenta({ estado, etiqueta }) {
 
 export default function Inicio() {
   const { user } = useAuth()
-  const { sucursalActiva } = useSucursal()
   const location = useLocation()
   const [datos, setDatos] = useState(DATOS_VACIOS)
   const [cargando, setCargando] = useState(true)
@@ -139,14 +137,7 @@ export default function Inicio() {
   const [error, setError] = useState('')
   const solicitudRef = useRef(false)
 
-  const consultar = useCallback(() => {
-    const parametros = new URLSearchParams()
-    if (sucursalActiva) {
-      parametros.set('sucursal', sucursalActiva)
-    }
-    const consulta = parametros.toString()
-    return pedir(`/dashboard/${consulta ? `?${consulta}` : ''}`)
-  }, [sucursalActiva])
+  const consultar = useCallback(() => pedir('/dashboard/'), [])
 
   const cargar = useCallback(async () => {
     if (solicitudRef.current) {
@@ -483,9 +474,7 @@ export default function Inicio() {
                       <strong>
                         Venta #{venta.id} · {venta.cliente}
                       </strong>
-                      <small>
-                        {venta.movimiento_caja_detalle} · {venta.sucursal}
-                      </small>
+                      <small>{venta.movimiento_caja_detalle}</small>
                     </div>
                     <div className="vencimiento-tiempo">
                       <span
@@ -711,7 +700,7 @@ export default function Inicio() {
                     <div className="caja-item-info">
                       <strong>{item.caja}</strong>
                       <small>
-                        Sección #{item.id} · {item.sucursal} · {item.empleado}
+                        Sección #{item.id} · {item.empleado}
                       </small>
                     </div>
                     <div className="caja-item-horario">
@@ -818,7 +807,6 @@ export default function Inicio() {
                     >
                       <div>
                         <strong>{item.producto}</strong>
-                        <small>{item.sucursal}</small>
                       </div>
                       <div className="stock-cantidades">
                         <span className="stock-cantidad">
