@@ -42,6 +42,8 @@ export default function FormularioCompra({
   const [secciones, setSecciones] = useState([])
   const [productosProveedorData, setProductosProveedorData] = useState([])
   const [seccion, setSeccion] = useState('')
+  const [depositos, setDepositos] = useState([])
+  const [deposito, setDeposito] = useState('')
   const [proveedor, setProveedor] = useState(
     proveedorInicialId ? String(proveedorInicialId) : '',
   )
@@ -159,6 +161,31 @@ export default function FormularioCompra({
         if (vigente) {
           setStocks({})
         }
+      })
+
+    return () => {
+      vigente = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let vigente = true
+    pedirTodas('/depositos/')
+      .then((datos) => {
+        if (!vigente) {
+          return
+        }
+        setDepositos(datos)
+        const predeterminado = datos.find((item) => item.es_predeterminado)
+        const primero = predeterminado || datos[0]
+        setDeposito(primero ? String(primero.id) : '')
+      })
+      .catch(() => {
+        if (!vigente) {
+          return
+        }
+        setDepositos([])
+        setDeposito('')
       })
 
     return () => {
@@ -375,8 +402,8 @@ export default function FormularioCompra({
     if (!proveedor) {
       nuevos.proveedor = 'Seleccioná un proveedor activo.'
     }
-    const entregaFinal = puedeGestionar ? estadoEntrega : 'PE'
-    const fechaLlegadaFinal = puedeGestionar ? fechaLlegada : ''
+    const entregaFinal = estadoEntrega
+    const fechaLlegadaFinal = fechaLlegada
     if (entregaFinal === 'EC') {
       if (!fechaLlegadaFinal) {
         nuevos.fechaLlegada = 'Indicá la fecha estimada de llegada.'
@@ -408,6 +435,7 @@ export default function FormularioCompra({
         body: JSON.stringify({
           movimiento_caja: Number(seccion),
           proveedor: Number(proveedor),
+          deposito: deposito ? Number(deposito) : null,
           estado_entrega: entregaFinal,
           fecha_estimada_llegada: fechaLlegadaFinal || null,
           items: items.map((item) => ({
@@ -484,8 +512,8 @@ export default function FormularioCompra({
         ) : (
           <>
             <p className="comercial-nota">
-              La compra se registra sin reponer stock. El stock entra cuando la
-              recibís desde el listado.
+              La compra se registra sin reponer stock. El stock entra en el
+              depósito de destino cuando la recibís desde el listado.
             </p>
 
             <div className="comercial-grid">
@@ -505,6 +533,26 @@ export default function FormularioCompra({
                 error={Boolean(errores.seccion)}
                 mensajeError={errores.seccion}
               />
+
+              <label className="campo-comercial">
+                <span>Depósito destino</span>
+                <select
+                  className={errores.deposito ? 'input-error' : ''}
+                  value={deposito}
+                  onChange={(evento) => setDeposito(evento.target.value)}
+                >
+                  {depositos.length === 0 && (
+                    <option value="">Sin depósitos disponibles</option>
+                  )}
+                  {depositos.map((item) => (
+                    <option key={item.id} value={String(item.id)}>
+                      {item.nombre}
+                      {item.es_predeterminado ? ' (predeterminado)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <MensajeError>{errores.deposito}</MensajeError>
+              </label>
 
               <CampoSelectorBuscable
                 etiqueta="Proveedor"
@@ -562,8 +610,8 @@ export default function FormularioCompra({
                 </>
               ) : (
                 <p className="comercial-nota">
-                  La compra quedará solicitada como pendiente. El encargado o
-                  administrador definirá la entrega y la fecha estimada.
+                  La compra se registra como pendiente de recepción. La
+                  entrega y la fecha estimada las define administración.
                 </p>
               )}
             </div>
@@ -740,12 +788,10 @@ export default function FormularioCompra({
                 {guardando ? (
                   <>
                     <IconLoader2 className="icono-girando" size={18} />
-                    {puedeGestionar ? 'Registrando…' : 'Solicitando…'}
+                    Registrando…
                   </>
-                ) : puedeGestionar ? (
-                  'Registrar compra'
                 ) : (
-                  'Solicitar compra'
+                  'Registrar compra'
                 )}
               </button>
             </div>

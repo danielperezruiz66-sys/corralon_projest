@@ -74,7 +74,7 @@ export const menuCategories = [
       {
         name: 'Inventario',
         path: '/productos',
-        detalle: 'Productos, stock, movimientos y depósitos',
+        detalle: 'Productos, stock y depósitos',
         icono: IconBuildingWarehouse,
         roles: ['AD', 'GE', 'CA', 'VE', 'ED'],
       },

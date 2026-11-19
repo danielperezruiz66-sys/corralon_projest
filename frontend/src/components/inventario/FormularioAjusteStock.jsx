@@ -62,7 +62,6 @@ export default function FormularioAjusteStock({
 
   useEffect(() => {
     let vigente = true
-    setCargando(true)
     pedirTodas(`/detalles-stock/?stock=${stock.id}`)
       .then((datos) => {
         if (!vigente) return
@@ -110,10 +109,6 @@ export default function FormularioAjusteStock({
     setIngresos((prev) => prev.filter((item) => item.key !== key))
   }
 
-  const totalActualLotes = lotes.reduce(
-    (acc, l) => acc + aNumero(l.cantidad),
-    0,
-  )
   const totalResultanteLotes = lotes.reduce(
     (acc, l) => acc + aNumero(cantidades[l.id]),
     0,

@@ -2,12 +2,14 @@
 
 Reglas:
 
-- La venta nace en `PENDIENTE` y descuenta stock en ese momento.
-- Si no se confirma dentro de `VENTAS_MINUTOS_PARA_CONFIRMAR` (30 por defecto),
-  se cancela y el stock se restaura sobre los mismos lotes.
+- La venta nace en `PENDIENTE` y descuenta stock en ese momento. Sin pagos,
+  vence a los `VENTAS_MINUTOS_PARA_CONFIRMAR` (30 por defecto).
+- Un pago parcial la deja `PARCIAL`; no vence y no se puede anular hasta
+  revertir los pagos.
+- Cuando los pagos cubren el total, la venta queda `CONFIRMADA`: pagada y
+  confirmada son el mismo estado.
 - Se permite stock negativo hasta `Stock.cant_negativa_max`; mas alla, la venta
   se rechaza con `StockInsuficiente`.
-- Una venta con pagos registrados no se puede cancelar sin revertir los pagos.
 """
 
 from datetime import timedelta
@@ -138,8 +140,10 @@ def crear_venta(movimiento_caja, items, cliente=None, cliente_venta=None):
 @transaction.atomic
 def confirmar_venta(venta):
     venta = Venta.objects.select_for_update().get(pk=venta.pk)
-    if venta.estado != Venta.EstadoVenta.PENDIENTE:
-        raise ValueError('Solo se puede confirmar una venta pendiente.')
+    if venta.estado == Venta.EstadoVenta.ANULADA:
+        raise ValueError('No se puede confirmar una venta anulada.')
+    if venta.estado == Venta.EstadoVenta.CONFIRMADA:
+        return venta
 
     pagado = venta.pagos.aggregate(total=Sum('monto_pagado'))['total']
     pagado = pagado if pagado is not None else Decimal('0.00')
@@ -166,6 +170,10 @@ def cancelar_venta(venta, motivo=''):
     venta = Venta.objects.select_for_update().get(pk=venta.pk)
     if venta.estado == Venta.EstadoVenta.ANULADA:
         return venta
+    if venta.estado != Venta.EstadoVenta.PENDIENTE:
+        raise ValueError(
+            'Solo se puede anular una venta pendiente sin pagos.'
+        )
     if venta.pagos.exists():
         raise ValueError('No se puede anular una venta con pagos registrados.')
 
@@ -179,8 +187,8 @@ def cancelar_venta(venta, motivo=''):
 def cancelar_ventas_vencidas(minutos=None):
     """Cancela las ventas pendientes sin pagos mas antiguas que `minutos`.
 
-    Una venta pendiente que ya tiene un pago parcial no se cancela: sigue
-    pendiente hasta que el cajero complete el saldo y la confirme.
+    Una venta parcial ya no vence: queda en `PARCIAL` hasta que el cajero
+    complete el saldo (y pasa a `CONFIRMADA`).
     """
     minutos = _minutos_para_confirmar() if minutos is None else minutos
     limite = timezone.now() - timedelta(minutes=minutos)
