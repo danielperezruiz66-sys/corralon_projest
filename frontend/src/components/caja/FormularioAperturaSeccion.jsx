@@ -17,7 +17,6 @@ function nombreEmpleado(empleado) {
 
 export default function FormularioAperturaSeccion({
   sucursalActiva,
-  sucursalNombre,
   cajasDisponibles,
   onCerrar,
   onGuardado,
@@ -126,7 +125,7 @@ export default function FormularioAperturaSeccion({
 
   const notaCabecera = empleadoPropio
     ? esGestion
-      ? 'Se abre a tu nombre o a nombre de un empleado habilitado (AD/GE o cajero asignado a la sucursal). Queda registrado quien la abre.'
+      ? 'Se abre a tu nombre o a nombre de un empleado habilitado (AD/GE o cajero). Queda registrado quien la abre.'
       : 'La seccion se abre a tu nombre.'
     : esGestion
       ? 'Tu usuario no tiene un empleado asociado: elegi a nombre de quien se abre la seccion. Queda registrado quien la abre.'
@@ -152,7 +151,7 @@ export default function FormularioAperturaSeccion({
 
     if (seleccionInvalida || sinElegibles) {
       nuevos.empleado = sinElegibles
-        ? 'No hay empleados habilitados para abrir caja en esta sucursal.'
+        ? 'No hay empleados habilitados para abrir caja.'
         : 'Elegí a nombre de quién se abre la sección.'
     }
 
@@ -237,7 +236,7 @@ export default function FormularioAperturaSeccion({
 
         <form onSubmit={guardar} className="comercial-grid" noValidate>
           <p className="caja-nota-total ancho-completo">
-            Se abrirá en <strong>{sucursalNombre}</strong>. {notaCabecera}
+            {notaCabecera}
           </p>
 
           <label className="campo-comercial ancho-completo">
@@ -261,8 +260,8 @@ export default function FormularioAperturaSeccion({
             <MensajeError>{errores.caja}</MensajeError>
             {sinDisponibles && (
               <p className="caja-nota-total">
-                Todas las cajas de esta sucursal ya tienen una seccion
-                abierta o en pausa. Cerrá una para poder abrir otra.
+                Todas las cajas ya tienen una seccion abierta o en pausa. Cerrá una
+                para poder abrir otra.
               </p>
             )}
           </label>
@@ -330,9 +329,8 @@ export default function FormularioAperturaSeccion({
                   </select>
                   {sinElegibles && (
                     <p className="caja-nota-total">
-                      No hay empleados habilitados para abrir caja en esta
-                      sucursal (AD/GE en cualquiera; cajero asignado a la
-                      sucursal).
+                      No hay empleados habilitados para abrir caja (AD/GE
+                      en cualquiera; cajero habilitado).
                     </p>
                   )}
                   {errorElegibles && (
@@ -377,7 +375,7 @@ export default function FormularioAperturaSeccion({
                     : 'Podés modificarlo; si lo hacés, pediremos el motivo.'}
                 </>
               ) : (
-                'Primera apertura de la caja en esta sucursal o sin cierre previo: el monto base es 0.'
+                'Primera apertura de la caja o sin cierre previo: el monto base es 0.'
               )}
             </p>
           </label>

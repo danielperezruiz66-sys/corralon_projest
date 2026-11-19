@@ -3,7 +3,7 @@ import Swal from 'sweetalert2'
 import { IconCash, IconLoader2, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
 import { nuevaClave } from '../../utils/clave'
-import { formatearMoneda } from '../../utils/formato'
+import { formatearMoneda, sinSucursal } from '../../utils/formato'
 import MensajeError from '../common/MensajeError.jsx'
 import { validarNumero } from '../../utils/validaciones'
 
@@ -183,11 +183,9 @@ export default function FormularioCierreSeccion({
             <div className="caja-detalle-grid">
               <div>
                 <span>Caja fisica</span>
-                <strong>{seccion.caja_detalle}</strong>
-              </div>
-              <div>
-                <span>Sucursal</span>
-                <strong>{seccion.sucursal_detalle}</strong>
+                <strong>
+                  {sinSucursal(seccion.caja_detalle, seccion.sucursal_detalle)}
+                </strong>
               </div>
               <div>
                 <span>Empleado</span>

@@ -28,6 +28,7 @@ import { descargarCsv, numeroCsv } from '../utils/csv'
 import {
   formatearFechaHora,
   formatearMoneda,
+  sinSucursal,
 } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
@@ -62,7 +63,7 @@ const CLASE_ESTADO = {
 
 export default function Caja() {
   const { user, puedeEscribir } = useAuth()
-  const { sucursalActiva, sucursalDetalle } = useSucursal()
+  const { sucursalActiva } = useSucursal()
   const puedeOperar = puedeEscribir(['AD', 'GE', 'CA'])
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
 
@@ -78,7 +79,6 @@ export default function Caja() {
   // Movimientos AB/PA: bloquean la caja y se muestran como "cajas abiertas".
   const [abiertas, setAbiertas] = useState([])
   const [cajasSucursal, setCajasSucursal] = useState([])
-  const [sucursales, setSucursales] = useState([])
   const [cajasFisicas, setCajasFisicas] = useState([])
 
   const [cargando, setCargando] = useState(true)
@@ -112,22 +112,15 @@ export default function Caja() {
     setSearchParams(parametros, { replace: true })
   }, [tab, busqueda, estado, pagina, setSearchParams])
 
-  // Movimientos activos de la sucursal (abiertos o en pausa): bloquean la
-  // caja fisica y se muestran en el panel de cajas abiertas.
+  // Movimientos activos (abiertos o en pausa): bloquean la caja fisica y se
+  // muestran en el panel de cajas abiertas.
   useEffect(() => {
     if (tab !== 'listado') {
       return undefined
     }
     let vigente = true
-    const base = new URLSearchParams()
-    if (sucursalActiva) {
-      base.set('sucursal', sucursalActiva)
-    }
-    const conEstado = (estado) => {
-      const params = new URLSearchParams(base)
-      params.set('estado', estado)
-      return pedirTodas(`/movimientos-caja/?${params.toString()}`)
-    }
+    const conEstado = (estado) =>
+      pedirTodas(`/movimientos-caja/?estado=${estado}`)
 
     Promise.all([conEstado('AB'), conEstado('PA')])
       .then(([abiertos, pausados]) => {
@@ -144,9 +137,9 @@ export default function Caja() {
     return () => {
       vigente = false
     }
-  }, [tab, sucursalActiva, refresco])
+  }, [tab, refresco])
 
-  // Cajas fisicas de la sucursal elegida (para abrir un movimiento).
+  // Cajas fisicas disponibles para abrir un movimiento.
   useEffect(() => {
     if (tab !== 'listado' || !sucursalActiva) {
       return undefined
@@ -182,9 +175,6 @@ export default function Caja() {
     let vigente = true
     const controlador = new AbortController()
     const parametros = new URLSearchParams({ page: String(pagina) })
-    if (sucursalActiva) {
-      parametros.set('sucursal', sucursalActiva)
-    }
     if (busqueda) {
       parametros.set('search', busqueda)
     }
@@ -218,25 +208,21 @@ export default function Caja() {
       vigente = false
       controlador.abort()
     }
-  }, [tab, pagina, busqueda, estado, sucursalActiva, refresco])
+  }, [tab, pagina, busqueda, estado, refresco])
 
-  // Gestion: cajas fisicas y sucursales.
+  // Gestion: cajas fisicas.
   useEffect(() => {
     if (tab !== 'gestion') {
       return undefined
     }
     let vigente = true
 
-    Promise.all([
-      pedirTodas('/cajas/'),
-      pedirTodas('/sucursales/'),
-    ])
-      .then(([cajasData, sucursalesData]) => {
+    pedirTodas('/cajas/')
+      .then((cajasData) => {
         if (!vigente) {
           return
         }
         setCajasFisicas(cajasData)
-        setSucursales(sucursalesData)
         setError('')
       })
       .catch((e) => {
@@ -291,7 +277,7 @@ export default function Caja() {
     Swal.fire({
       icon: 'success',
       title: 'Seccion abierta',
-      text: `${seccion.caja_detalle} · Sección #${seccion.id} · a nombre de ${seccion.empleado_detalle}`,
+      text: `${sinSucursal(seccion.caja_detalle, seccion.sucursal_detalle)} · Sección #${seccion.id} · a nombre de ${seccion.empleado_detalle}`,
       timer: 1800,
       showConfirmButton: false,
     })
@@ -423,7 +409,6 @@ export default function Caja() {
     setExportando(true)
     try {
       const parametros = new URLSearchParams()
-      if (sucursalActiva) parametros.set('sucursal', sucursalActiva)
       if (busqueda) parametros.set('search', busqueda)
       if (estado) parametros.set('estado', estado)
       const todos = await pedirTodas(
@@ -444,7 +429,6 @@ export default function Caja() {
         `movimientos-caja-${new Date().toISOString().slice(0, 10)}.csv`,
         [
           'Caja física',
-          'Sucursal',
           'Sección',
           'Empleado',
           'Apertura',
@@ -456,8 +440,7 @@ export default function Caja() {
           'Estado',
         ],
         todos.map((item) => [
-          item.caja_detalle,
-          item.sucursal_detalle,
+          sinSucursal(item.caja_detalle, item.sucursal_detalle),
           item.id,
           item.empleado_detalle,
           item.fecha_hora_apertura ?? '',
@@ -519,11 +502,7 @@ export default function Caja() {
                     className="boton-comercial-primario"
                     disabled={!sucursalActiva}
                     onClick={() => setAperturaAbierta(true)}
-                    title={
-                      sucursalActiva
-                        ? 'Abrir una seccion de caja'
-                        : 'Elegí una sucursal en el encabezado'
-                    }
+                    title="Abrir una seccion de caja"
                   >
                     <IconPlus size={18} />
                     Abrir seccion
@@ -533,7 +512,8 @@ export default function Caja() {
 
               {!sucursalActiva && (
                 <p className="caja-nota-total">
-                  Elegí una sucursal en el encabezado para abrir una seccion.
+                  Faltan datos de configuración de tu usuario. Contactá al
+                  administrador.
                 </p>
               )}
 
@@ -547,10 +527,13 @@ export default function Caja() {
                   <article className="caja-abierta" key={seccion.id}>
                     <div className="caja-abierta-cabecera">
                       <div>
-                        <strong>{seccion.caja_detalle}</strong>
-                        <small>
-                          Sección #{seccion.id} · {seccion.sucursal_detalle}
-                        </small>
+                        <strong>
+                          {sinSucursal(
+                            seccion.caja_detalle,
+                            seccion.sucursal_detalle,
+                          )}
+                        </strong>
+                        <small>Sección #{seccion.id}</small>
                       </div>
                       <span className={`estado-badge ${CLASE_ESTADO[seccion.estado]}`}>
                         {seccion.estado_detalle}
@@ -612,7 +595,7 @@ export default function Caja() {
                 setTexto(evento.target.value)
                 setPagina(1)
               }}
-              placeholder="Buscar por sucursal, caja o empleado"
+              placeholder="Buscar por caja o empleado"
               aria-label="Buscar secciones de caja"
             />
             {buscando && (
@@ -690,7 +673,6 @@ export default function Caja() {
                   <tr>
                     <th>Sección</th>
                     <th>Caja</th>
-                    <th>Sucursal</th>
                     <th>Empleado</th>
                     <th>Apertura</th>
                     <th>Cierre</th>
@@ -705,14 +687,14 @@ export default function Caja() {
                 <tbody>
                   {cargando && (
                     <tr>
-                      <td colSpan="12" className="comercial-vacio">
+                      <td colSpan="11" className="comercial-vacio">
                         Cargando secciones…
                       </td>
                     </tr>
                   )}
                   {!cargando && datos.results.length === 0 && (
                     <tr>
-                      <td colSpan="12" className="comercial-vacio">
+                      <td colSpan="11" className="comercial-vacio">
                         No se encontraron secciones.
                       </td>
                     </tr>
@@ -725,8 +707,12 @@ export default function Caja() {
                     return (
                       <tr key={item.id}>
                         <td className="mono">#{item.id}</td>
-                        <td>{item.caja_detalle}</td>
-                        <td>{item.sucursal_detalle}</td>
+                        <td>
+                          {sinSucursal(
+                            item.caja_detalle,
+                            item.sucursal_detalle,
+                          )}
+                        </td>
                         <td>{item.empleado_detalle}</td>
                         <td className="mono">
                           {formatearFechaHora(item.fecha_hora_apertura)}
@@ -871,7 +857,6 @@ export default function Caja() {
                 <table className="tabla-comercial">
                   <thead>
                     <tr>
-                      <th>Sucursal</th>
                       <th>Número</th>
                       <th>Estado</th>
                       <th>Acciones</th>
@@ -880,21 +865,20 @@ export default function Caja() {
                   <tbody>
                     {cargando && (
                       <tr>
-                        <td colSpan="4" className="comercial-vacio">
+                        <td colSpan="3" className="comercial-vacio">
                           Cargando cajas…
                         </td>
                       </tr>
                     )}
                     {!cargando && cajasFisicas.length === 0 && (
                       <tr>
-                        <td colSpan="4" className="comercial-vacio">
+                        <td colSpan="3" className="comercial-vacio">
                           No hay cajas físicas.
                         </td>
                       </tr>
                     )}
                     {cajasFisicas.map((caja) => (
                       <tr key={caja.id}>
-                        <td>{caja.sucursal_detalle}</td>
                         <td className="mono">Caja {caja.numero_caja}</td>
                         <td>{caja.estado_detalle}</td>
                         <td>
@@ -920,7 +904,6 @@ export default function Caja() {
       {aperturaAbierta && sucursalActiva && (
         <FormularioAperturaSeccion
           sucursalActiva={sucursalActiva}
-          sucursalNombre={sucursalDetalle?.nombre ?? ''}
           cajasDisponibles={cajasDisponibles}
           onCerrar={() => setAperturaAbierta(false)}
           onGuardado={seccionAbiertaGuardada}
@@ -954,8 +937,6 @@ export default function Caja() {
       {cajaEditando !== null && (
         <FormularioCaja
           caja={cajaEditando}
-          sucursales={sucursales}
-          sucursalPorDefecto={sucursalActiva || ''}
           onCerrar={() => setCajaEditando(null)}
           onGuardado={guardadoCaja}
         />
