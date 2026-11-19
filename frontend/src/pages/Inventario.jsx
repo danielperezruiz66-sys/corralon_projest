@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -19,43 +19,20 @@ import {
   IconTrash,
   IconX,
 } from '@tabler/icons-react'
-import {
-  invalidarCatalogo,
-  pedirCatalogo,
-  pedirTodas,
-} from '../api/catalogos'
+import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import CampoSelectorBuscable from '../components/common/CampoSelectorBuscable.jsx'
 import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
-const FormularioCompra = lazy(
-  () => import('../components/comercial/FormularioCompra.jsx'),
-)
-const FormularioAjusteStock = lazy(
-  () => import('../components/inventario/FormularioAjusteStock.jsx'),
-)
-const FormularioCargaStock = lazy(
-  () => import('../components/inventario/FormularioCargaStock.jsx'),
-)
-const FormularioCatalogo = lazy(
-  () => import('../components/inventario/FormularioCatalogo.jsx'),
-)
-const FormularioDeposito = lazy(
-  () => import('../components/inventario/FormularioDeposito.jsx'),
-)
-const FormularioDetalleStock = lazy(
-  () => import('../components/inventario/FormularioDetalleStock.jsx'),
-)
-const FormularioProducto = lazy(
-  () => import('../components/inventario/FormularioProducto.jsx'),
-)
-const FormularioStock = lazy(
-  () => import('../components/inventario/FormularioStock.jsx'),
-)
-const FormularioTransferencia = lazy(
-  () => import('../components/inventario/FormularioTransferencia.jsx'),
-)
-import PanelCatalogo from '../components/inventario/PanelCatalogo.jsx'
+import FormularioCompra from '../components/comercial/FormularioCompra.jsx'
+import FormularioAjusteStock from '../components/inventario/FormularioAjusteStock.jsx'
+import FormularioCargaStock from '../components/inventario/FormularioCargaStock.jsx'
+import FormularioCatalogo from '../components/inventario/FormularioCatalogo.jsx'
+import FormularioDeposito from '../components/inventario/FormularioDeposito.jsx'
+import FormularioDetalleStock from '../components/inventario/FormularioDetalleStock.jsx'
+import FormularioProducto from '../components/inventario/FormularioProducto.jsx'
+import FormularioStock from '../components/inventario/FormularioStock.jsx'
+import FormularioTransferencia from '../components/inventario/FormularioTransferencia.jsx'
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
@@ -120,6 +97,9 @@ export default function Inventario() {
   const [alerta, setAlerta] = useState(
     () => searchParams.get('alerta') || '',
   )
+  // En la pestaña Stock: si está activo, muestra el stock de todas las
+  // sucursales (solo lectura; operar sigue siendo sobre la propia).
+  const [todasLasSucursales, setTodasLasSucursales] = useState(false)
   const [producto, setProducto] = useState(() => {
     const valor =
       searchParams.get('producto') ||
@@ -185,11 +165,11 @@ export default function Inventario() {
   useEffect(() => {
     let vigente = true
     Promise.all([
-      pedirCatalogo('/sucursales/'),
-      pedirCatalogo('/categorias/'),
-      pedirCatalogo('/marcas/'),
-      pedirCatalogo('/unidades/'),
-      pedirCatalogo('/depositos/'),
+      pedirTodas('/sucursales/'),
+      pedirTodas('/categorias/'),
+      pedirTodas('/marcas/'),
+      pedirTodas('/unidades/'),
+      pedirTodas('/depositos/'),
     ])
       .then(([sucursalesData, categoriasData, marcasData, unidadesData, depositosData]) => {
         if (!vigente) {
@@ -272,7 +252,10 @@ export default function Inventario() {
     if (busqueda) {
       parametros.set('search', busqueda)
     }
-    if (sucursalActiva) {
+    if (
+      sucursalActiva &&
+      !(tab === 'stock' && todasLasSucursales)
+    ) {
       parametros.set('sucursal', sucursalActiva)
     }
 
@@ -332,6 +315,7 @@ export default function Inventario() {
     pagina,
     busqueda,
     sucursalActiva,
+    todasLasSucursales,
     categoria,
     marca,
     unidad,
@@ -474,7 +458,6 @@ export default function Inventario() {
   }
 
   function catalogoCreado(tipo, item) {
-    invalidarCatalogo(`/${tipo}/`)
     if (tipo === 'categorias') {
       setCategorias((previos) => [...previos, item])
     } else if (tipo === 'marcas') {
@@ -492,8 +475,7 @@ export default function Inventario() {
       showConfirmButton: false,
     })
     setDepositoEditando(null)
-    invalidarCatalogo('/depositos/')
-    pedirCatalogo('/depositos/')
+    pedirTodas('/depositos/')
       .then(setDepositos)
       .catch(() => {})
     refrescarListado()
@@ -501,14 +483,11 @@ export default function Inventario() {
 
   async function guardadoCatalogo() {
     setCatalogoEditando(null)
-    invalidarCatalogo('/categorias/')
-    invalidarCatalogo('/marcas/')
-    invalidarCatalogo('/unidades/')
     try {
       const [categoriasData, marcasData, unidadesData] = await Promise.all([
-        pedirCatalogo('/categorias/'),
-        pedirCatalogo('/marcas/'),
-        pedirCatalogo('/unidades/'),
+        pedirTodas('/categorias/'),
+        pedirTodas('/marcas/'),
+        pedirTodas('/unidades/'),
       ])
       setCategorias(categoriasData)
       setMarcas(marcasData)
@@ -566,7 +545,6 @@ export default function Inventario() {
     }
     try {
       await pedir(`/depositos/${item.id}/`, { method: 'DELETE' })
-      invalidarCatalogo('/depositos/')
       setDepositos((actuales) =>
         actuales.filter((deposito) => deposito.id !== item.id),
       )
@@ -842,7 +820,9 @@ export default function Inventario() {
     try {
       const parametros = new URLSearchParams()
       if (busqueda) parametros.set('search', busqueda)
-      if (sucursalActiva) parametros.set('sucursal', sucursalActiva)
+      if (sucursalActiva && !(tab === 'stock' && todasLasSucursales)) {
+        parametros.set('sucursal', sucursalActiva)
+      }
 
       let encabezados = []
       let filas = []
@@ -1158,6 +1138,20 @@ export default function Inventario() {
                 <option value="minimo">Mínimo</option>
                 <option value="negativo">Negativo</option>
               </select>
+            </label>
+            <label className="inventario-check">
+              <input
+                type="checkbox"
+                checked={todasLasSucursales}
+                onChange={(evento) => {
+                  setTodasLasSucursales(evento.target.checked)
+                  setPagina(1)
+                }}
+              />
+              <span>
+                Ver el stock de{' '}
+                <strong>todas las sucursales</strong>
+              </span>
             </label>
           </section>
         )}
@@ -1734,7 +1728,6 @@ export default function Inventario() {
         )}
       </div>
 
-      <Suspense fallback={null}>
       {productoEditando !== null && (
         <FormularioProducto
           key={sucursalActiva || 'todas'}
@@ -2225,8 +2218,65 @@ export default function Inventario() {
           }}
         />
       )}
-      </Suspense>
     </>
   )
 }
 
+function PanelCatalogo({
+  titulo,
+  tipo,
+  campo,
+  items,
+  puedeEditar,
+  onNuevo,
+  onEditar,
+  onEliminar,
+}) {
+  return (
+    <section className="inventario-catalogo-panel">
+      <div className="inventario-catalogo-cabecera">
+        <h3>{titulo}</h3>
+        {puedeEditar && (
+          <button
+            type="button"
+            className="boton-comercial-secundario"
+            onClick={onNuevo}
+          >
+            <IconPlus size={16} />
+            Nuevo
+          </button>
+        )}
+      </div>
+      <div className="inventario-catalogo-lista">
+        {items.length === 0 && (
+          <p className="comercial-nota">No hay registros.</p>
+        )}
+        {items.map((item) => (
+          <div key={item.id} className="inventario-catalogo-item">
+            <span>{item[campo]}</span>
+            {puedeEditar && (
+              <div className="acciones-fila">
+                <button
+                  type="button"
+                  className="boton-icono"
+                  onClick={() => onEditar(item)}
+                  title={`Editar ${tipo}`}
+                >
+                  <IconPencil size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="boton-icono boton-icono-peligro"
+                  onClick={() => onEliminar(item)}
+                  title={`Eliminar ${tipo}`}
+                >
+                  <IconTrash size={15} />
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}

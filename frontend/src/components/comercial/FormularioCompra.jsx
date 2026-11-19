@@ -7,10 +7,9 @@ import {
   IconTruckDelivery,
   IconX,
 } from '@tabler/icons-react'
-import { pedirCatalogo, pedirTodas } from '../../api/catalogos'
+import { pedirTodas } from '../../api/catalogos'
 import { pedir } from '../../api/client'
 import { formatearMoneda } from '../../utils/formato'
-import { fechaHoyLocal } from '../../utils/fechas'
 import {
   unidadPermiteDecimales,
   validarCantidadPorUnidad,
@@ -22,6 +21,15 @@ import FormularioProductosProveedor from '../proveedores/FormularioProductosProv
 import FormularioProveedor from '../proveedores/FormularioProveedor.jsx'
 import SelectorProductos from './SelectorProductos'
 import '../../styles/components/comercial/FormularioCompra.css'
+
+function fechaHoyLocal() {
+  const hoy = new Date()
+  return [
+    hoy.getFullYear(),
+    String(hoy.getMonth() + 1).padStart(2, '0'),
+    String(hoy.getDate()).padStart(2, '0'),
+  ].join('-')
+}
 
 export default function FormularioCompra({
   sucursalActiva = '',
@@ -72,8 +80,8 @@ export default function FormularioCompra({
     let vigente = true
 
     Promise.all([
-      pedirTodas('/secciones-caja/?estado=AB'),
-      pedirCatalogo('/sucursales/'),
+      pedirTodas('/movimientos-caja/?estado=AB'),
+      pedirTodas('/sucursales/'),
     ])
       .then(([seccionesData, sucursalesData]) => {
         if (!vigente) {
@@ -417,7 +425,7 @@ export default function FormularioCompra({
       await pedir('/compras/', {
         method: 'POST',
         body: JSON.stringify({
-          seccion_caja: Number(seccion),
+          movimiento_caja: Number(seccion),
           proveedor: Number(proveedor),
           estado_entrega: entregaFinal,
           fecha_estimada_llegada: fechaLlegadaFinal || null,
@@ -430,12 +438,10 @@ export default function FormularioCompra({
       })
       Swal.fire({
         icon: 'success',
-        title: puedeGestionar ? 'Compra registrada' : 'Compra solicitada',
-        text: !puedeGestionar
-          ? 'Quedó pendiente para que la gestione un encargado o administrador. Todavía no repuso stock.'
-          : entregaFinal === 'EC'
-            ? 'Quedó en camino. El stock se repone cuando la recibas.'
-            : 'Quedó pendiente de recepción y todavía no repuso stock.',
+        title: 'Compra registrada',
+        text: entregaFinal === 'EC'
+          ? 'Quedó en camino. El stock se repone cuando la recibas.'
+          : 'Quedó pendiente de recepción y todavía no repuso stock.',
         timer: 2200,
         showConfirmButton: false,
       })
@@ -444,7 +450,7 @@ export default function FormularioCompra({
     } catch (e) {
       if (e.campos) {
         const mapa = {
-          seccion_caja: 'seccion',
+          movimiento_caja: 'seccion',
           fecha_estimada_llegada: 'fechaLlegada',
         }
         const nuevos = {}
@@ -497,9 +503,9 @@ export default function FormularioCompra({
         ) : (
           <>
             <p className="comercial-nota">
-              {puedeGestionar
-                ? 'La compra se registra sin reponer stock. El stock entra cuando la recibís desde el listado.'
-                : 'La compra se solicita sin reponer stock. Queda pendiente para que la gestione un encargado o administrador.'}
+              La compra se registra sin reponer stock. El stock entra cuando la
+              recibís desde el listado. Si el pago o la anulación los lleva
+              administración, dejá la solicitud desde el detalle de la compra.
             </p>
 
             <div className="comercial-grid">

@@ -18,9 +18,6 @@ import {
 } from '@tabler/icons-react'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
-import Comparacion from '../components/inicio/Comparacion.jsx'
-import EstadoVenta from '../components/inicio/EstadoVenta.jsx'
-import TarjetaKpi from '../components/inicio/TarjetaKpi.jsx'
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import {
@@ -91,6 +88,45 @@ const DATOS_VACIOS = {
   cajas_abiertas: [],
 }
 
+function TarjetaKpi({ icono: Icono, etiqueta, valor, detalle, tono = '' }) {
+  return (
+    <article className={`kpi-tarjeta ${tono}`}>
+      <span className="kpi-icono">
+        <Icono size={26} stroke={1.75} />
+      </span>
+      <div className="kpi-contenido">
+        <p className="kpi-etiqueta">{etiqueta}</p>
+        <p className="kpi-valor">{valor}</p>
+        {detalle && <div className="kpi-detalle">{detalle}</div>}
+      </div>
+    </article>
+  )
+}
+
+function Comparacion({ valor, etiqueta }) {
+  if (valor === null || valor === undefined) {
+    return (
+      <span className="kpi-comparacion kpi-comparacion-neutra">
+        Sin comparación <small>{etiqueta}</small>
+      </span>
+    )
+  }
+
+  const numero = Number(valor)
+  const clase = numero > 0 ? 'positiva' : numero < 0 ? 'negativa' : 'neutra'
+  const simbolo = numero > 0 ? '▲' : numero < 0 ? '▼' : '='
+
+  return (
+    <span className={`kpi-comparacion kpi-comparacion-${clase}`}>
+      {simbolo} {Math.abs(numero).toFixed(1)}% <small>{etiqueta}</small>
+    </span>
+  )
+}
+
+function EstadoVenta({ estado, etiqueta }) {
+  return <span className={`badge badge-${estado.toLowerCase()}`}>{etiqueta}</span>
+}
+
 export default function Inicio() {
   const { user } = useAuth()
   const { sucursalActiva } = useSucursal()
@@ -102,7 +138,6 @@ export default function Inicio() {
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null)
   const [error, setError] = useState('')
   const solicitudRef = useRef(false)
-  const ultimaCargaRef = useRef(0)
 
   const consultar = useCallback(() => {
     const parametros = new URLSearchParams()
@@ -125,7 +160,6 @@ export default function Inicio() {
       setError('')
       setTieneDatos(true)
       setUltimaActualizacion(new Date())
-      ultimaCargaRef.current = Date.now()
     } catch (e) {
       setError(e.message)
     } finally {
@@ -136,32 +170,31 @@ export default function Inicio() {
   }, [consultar])
 
   useEffect(() => {
-    const solicitud = { vigente: true }
+    let vigente = true
 
     consultar()
       .then((respuesta) => {
-        if (solicitud.vigente) {
+        if (vigente) {
           setDatos(respuesta)
           setError('')
           setTieneDatos(true)
           setUltimaActualizacion(new Date())
-          ultimaCargaRef.current = Date.now()
         }
       })
       .catch((e) => {
-        if (solicitud.vigente) {
+        if (vigente) {
           setError(e.message)
         }
       })
       .finally(() => {
-        if (solicitud.vigente) {
+        if (vigente) {
           setCargando(false)
           setActualizando(false)
         }
       })
 
     return () => {
-      solicitud.vigente = false
+      vigente = false
     }
   }, [consultar])
 
@@ -184,22 +217,15 @@ export default function Inicio() {
     }, 30000)
 
     const alEnfocar = () => {
-      if (Date.now() - ultimaCargaRef.current < 10_000) {
-        return
-      }
       setActualizando(true)
       cargar()
     }
 
     const alCambiarVisibilidad = () => {
-      if (document.visibilityState !== 'visible') {
-        return
+      if (document.visibilityState === 'visible') {
+        setActualizando(true)
+        cargar()
       }
-      if (Date.now() - ultimaCargaRef.current < 10_000) {
-        return
-      }
-      setActualizando(true)
-      cargar()
     }
 
     window.addEventListener('focus', alEnfocar)
@@ -458,7 +484,7 @@ export default function Inicio() {
                         Venta #{venta.id} · {venta.cliente}
                       </strong>
                       <small>
-                        {venta.seccion_caja_detalle} · {venta.sucursal}
+                        {venta.movimiento_caja_detalle} · {venta.sucursal}
                       </small>
                     </div>
                     <div className="vencimiento-tiempo">

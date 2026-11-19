@@ -49,6 +49,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   const [modalCliente, setModalCliente] = useState(false)
   const [items, setItems] = useState([])
   const [stocks, setStocks] = useState({})
+  const [disponibilidad, setDisponibilidad] = useState({})
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -64,7 +65,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   useEffect(() => {
     let vigente = true
 
-    pedirTodas('/secciones-caja/?estado=AB')
+    pedirTodas('/movimientos-caja/?estado=AB')
       .then((seccionesData) => {
         if (!vigente) {
           return
@@ -139,28 +140,45 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   )
 
   useEffect(() => {
-    if (!sucursalActual) {
-      return undefined
-    }
-
     let vigente = true
-    pedirTodas(`/stocks/?sucursal=${sucursalActual}`)
-      .then((datos) => {
+
+    const cargarStocks = async () => {
+      try {
+        const [propios, todos] = await Promise.all([
+          sucursalActual
+            ? pedirTodas(`/stocks/?sucursal=${sucursalActual}`)
+            : [],
+          pedirTodas('/stocks/'),
+        ])
         if (!vigente) {
           return
         }
         const mapa = {}
-        datos.forEach((stock) => {
+        propios.forEach((stock) => {
           mapa[stock.producto] = stock
         })
         setStocks(mapa)
-      })
-      .catch(() => {
+        // Disponibilidad por producto en todas las sucursales: sirve para
+        // orientar al vendedor cuando no hay stock en la suya.
+        const porProducto = {}
+        todos.forEach((stock) => {
+          ;(porProducto[stock.producto] ??= []).push({
+            sucursal_id: stock.sucursal,
+            sucursal_detalle: stock.sucursal_detalle,
+            cantidad: stock.cantidad,
+          })
+        })
+        setDisponibilidad(porProducto)
+      } catch {
         if (vigente) {
           setStocks({})
           setProductos([])
+          setDisponibilidad({})
         }
-      })
+      }
+    }
+
+    cargarStocks()
 
     return () => {
       vigente = false
@@ -290,7 +308,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
       await pedir('/ventas/', {
         method: 'POST',
         body: JSON.stringify({
-          seccion_caja: Number(seccion),
+          movimiento_caja: Number(seccion),
           cliente: cliente ? Number(cliente) : null,
           cliente_venta: cliente ? null : clienteVenta.trim() || null,
           items: items.map((item) => ({
@@ -311,7 +329,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
       onCerrar()
     } catch (e) {
       if (e.campos) {
-        const mapa = { seccion_caja: 'seccion' }
+        const mapa = { movimiento_caja: 'seccion' }
         const nuevos = {}
         Object.entries(e.campos).forEach(([campo, mensaje]) => {
           nuevos[mapa[campo] || campo] = mensaje
@@ -567,6 +585,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
               productos={[]}
               onBuscar={buscarProductos}
               stocks={stocks}
+              disponibilidad={disponibilidad}
               mostrarStock={Boolean(sucursalActual)}
               onAgregar={agregarProducto}
             />

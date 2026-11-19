@@ -1,6 +1,4 @@
-from decimal import Decimal
-
-from app.models import Producto, ProductoXProveedor, ProductoXSucursal
+from app.models import ProductoXProveedor, ProductoXSucursal
 
 from .base import BaseCorralonTestCase
 
@@ -39,22 +37,6 @@ class ProductoApiTests(BaseCorralonTestCase):
             respuesta.data['results'][0]['sucursales_activas'],
             [self.sucursal.id],
         )
-
-    def test_respeta_page_size_solicitado(self):
-        Producto.objects.create(
-            codigo='P999',
-            categoria=self.categoria,
-            marca=self.marca,
-            unidad=self.unidad,
-            nombre='Cal 25kg',
-            precio_unidad=Decimal('80.00'),
-        )
-        self.autenticar(self.user_gerente)
-
-        respuesta = self.client.get('/api/productos/', {'page_size': 1})
-
-        self.assertGreaterEqual(respuesta.data['count'], 2)
-        self.assertEqual(len(respuesta.data['results']), 1)
 
     def test_crea_producto_con_sucursal(self):
         self.autenticar(self.user_gerente)

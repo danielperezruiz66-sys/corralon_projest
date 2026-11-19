@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -15,12 +15,8 @@ import {
 import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
-const FormularioProductoProveedor = lazy(
-  () => import('../components/proveedores/FormularioProductoProveedor.jsx'),
-)
-const FormularioProveedor = lazy(
-  () => import('../components/proveedores/FormularioProveedor.jsx'),
-)
+import FormularioProductoProveedor from '../components/proveedores/FormularioProductoProveedor.jsx'
+import FormularioProveedor from '../components/proveedores/FormularioProveedor.jsx'
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
@@ -631,28 +627,26 @@ export default function Proveedores() {
         </section>
       </div>
 
-      <Suspense fallback={null}>
-        {proveedorEditando !== null && (
-          <FormularioProveedor
-            key={sucursalActiva || 'todas'}
-            proveedor={proveedorEditando}
-            sucursales={sucursales}
-            sucursalActiva={sucursalActiva}
-            onCerrar={() => setProveedorEditando(null)}
-            onGuardado={guardadoProveedor}
-          />
-        )}
+      {proveedorEditando !== null && (
+        <FormularioProveedor
+          key={sucursalActiva || 'todas'}
+          proveedor={proveedorEditando}
+          sucursales={sucursales}
+          sucursalActiva={sucursalActiva}
+          onCerrar={() => setProveedorEditando(null)}
+          onGuardado={guardadoProveedor}
+        />
+      )}
 
-        {costoEditando !== null && (
-          <FormularioProductoProveedor
-            asociacion={costoEditando}
-            sucursales={sucursales}
-            sucursalActiva={sucursalActiva}
-            onCerrar={() => setCostoEditando(null)}
-            onGuardado={guardadoCosto}
-          />
-        )}
-      </Suspense>
+      {costoEditando !== null && (
+        <FormularioProductoProveedor
+          asociacion={costoEditando}
+          sucursales={sucursales}
+          sucursalActiva={sucursalActiva}
+          onCerrar={() => setCostoEditando(null)}
+          onGuardado={guardadoCosto}
+        />
+      )}
 
       {detalleProveedor && (
         <div className="comercial-modal-fondo" role="dialog" aria-modal="true">

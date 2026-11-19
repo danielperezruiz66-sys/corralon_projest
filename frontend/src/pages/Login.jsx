@@ -56,7 +56,7 @@ export default function Login() {
       >
         <div className="encabezado-logo">
           <span className="caja-icono-logo">
-            <IconSettings size={34} stroke={1.75} />
+            <IconSettings size={40} stroke={1.75} />
           </span>
           <span>
             Fer-Cons

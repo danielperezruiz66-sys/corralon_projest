@@ -1,8 +1,25 @@
-import { IconLogout } from '@tabler/icons-react'
+import { NavLink } from 'react-router-dom'
+import { IconCash, IconLogout } from '@tabler/icons-react'
 
-export default function SidebarFooter({ abierto, onLogoutClick }) {
+export default function SidebarFooter({ abierto, cajaAbierta, onLogoutClick }) {
   return (
     <div className="layout-pie-sidebar">
+      {cajaAbierta && (
+        <NavLink
+          to="/caja"
+          className="sidebar-caja-abierta"
+          title={`Sección #${cajaAbierta.id} · ${cajaAbierta.caja_detalle}`}
+        >
+          <IconCash size={abierto ? 20 : 22} />
+          {abierto && (
+            <span>
+              {cajaAbierta.estado === 'PA' ? 'Caja en pausa' : 'Caja abierta'}
+              <small>Sección #{cajaAbierta.id}</small>
+            </span>
+          )}
+        </NavLink>
+      )}
+
       <button
         type="button"
         onClick={onLogoutClick}

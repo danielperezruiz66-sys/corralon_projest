@@ -11,11 +11,17 @@ export function SucursalProvider({ children }) {
     () => localStorage.getItem(CLAVE) || '',
   )
 
-  const sucursalActiva = sucursales.some(
-    (sucursal) => String(sucursal.id) === String(seleccionada),
-  )
-    ? String(seleccionada)
-    : ''
+  // Con una sola sucursal asignada queda siempre activa: asi los listados
+  // (cajas, ventas, stock) nunca muestran datos de otra sucursal.
+  const sucursalActiva = useMemo(() => {
+    if (sucursales.length === 1) {
+      return String(sucursales[0].id)
+    }
+    const existe = sucursales.some(
+      (sucursal) => String(sucursal.id) === String(seleccionada),
+    )
+    return existe ? String(seleccionada) : ''
+  }, [sucursales, seleccionada])
 
   const cambiarSucursal = useCallback((valor) => {
     const texto = valor ? String(valor) : ''

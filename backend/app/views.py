@@ -9,7 +9,7 @@ Regla de escritura:
   stock (ventas/compras), no con un PUT directo.
 - `Venta`, `Compra`, `Factura` y pagos: lectura general; la escritura pasa por
   acciones que delegan en `services/`.
-- `SeccionCaja`: se abre, cierra y audita con acciones; no se edita a mano.
+- `MovimientoCaja`: se abre, cierra y audita con acciones; no se edita a mano.
 
 Los permisos de escritura se declaran por viewset en `roles_escritura`
 (ver `app/permissions.py`).
@@ -49,7 +49,7 @@ from .models import (
     MetodoPago,
     MetodoPagoXCompra,
     MetodoPagoXVenta,
-    MovimientoStock,
+    MovimientoCaja,
     Pais,
     Producto,
     ProductoXProveedor,
@@ -57,13 +57,12 @@ from .models import (
     Provincia,
     Proveedor,
     ProveedorXSucursal,
+    RegistroActividad,
     Rol,
-    SeccionCaja,
+    MovimientoCaja,
     Stock,
     Sucursal,
-    SucursalXCaja,
     SucursalXEmpleado,
-    TransferenciaStock,
     Ubicacion,
     Unidad,
     Usuario,
@@ -275,7 +274,7 @@ def dashboard(request):
 
     bloques = {
         'ventas': gestion or cajero or vendedor,
-        'compras': gestion or deposito,
+        'compras': bool(codigos),
         'stock': bool(codigos),
         'caja': gestion or cajero,
         'equipo': gestion,
@@ -288,7 +287,7 @@ def dashboard(request):
     ventas = Venta.objects.exclude(estado=Venta.EstadoVenta.ANULADA)
     compras = Compra.objects.exclude(estado=Compra.EstadoCompra.ANULADA)
     stocks = Stock.objects.all()
-    secciones = SeccionCaja.objects.all()
+    secciones = MovimientoCaja.objects.all()
 
     permitidas = _sucursales_permitidas(request.user)
 
@@ -308,19 +307,27 @@ def dashboard(request):
             raise PermissionDenied(
                 'No tenés acceso a la sucursal indicada.'
             )
-        ventas = ventas.filter(seccion_caja__sucursal_caja__sucursal=sucursal)
-        compras = compras.filter(seccion_caja__sucursal_caja__sucursal=sucursal)
+        ventas = ventas.filter(movimiento_caja__caja__sucursal=sucursal)
+        compras = compras.filter(movimiento_caja__caja__sucursal=sucursal)
         stocks = stocks.filter(sucursal=sucursal)
-        secciones = secciones.filter(sucursal_caja__sucursal=sucursal)
+        secciones = secciones.filter(caja__sucursal=sucursal)
     elif permitidas is not None:
         ventas = ventas.filter(
-            seccion_caja__sucursal_caja__sucursal__in=permitidas
+            movimiento_caja__caja__sucursal__in=permitidas
         )
         compras = compras.filter(
-            seccion_caja__sucursal_caja__sucursal__in=permitidas
+            movimiento_caja__caja__sucursal__in=permitidas
         )
         stocks = stocks.filter(sucursal__in=permitidas)
-        secciones = secciones.filter(sucursal_caja__sucursal__in=permitidas)
+        secciones = secciones.filter(caja__sucursal__in=permitidas)
+
+    if not gestion:
+        # El cajero (y quien no es gestion) solo ve sus propias cajas abiertas.
+        empleado_usuario = getattr(request.user, 'empleado', None)
+        if empleado_usuario is None:
+            secciones = MovimientoCaja.objects.none()
+        else:
+            secciones = secciones.filter(empleado=empleado_usuario)
 
     def rango_actual_y_anterior():
         if periodo == 'hoy':
@@ -439,7 +446,7 @@ def dashboard(request):
     stock_critico_qs = stocks.filter(cantidad__lte=F('cant_min'))
     compras_pendientes_qs = compras.filter(fecha_recepcion__isnull=True)
     cajas_abiertas_qs = secciones.filter(
-        estado=SeccionCaja.EstadoSeccion.ABIERTA
+        estado=MovimientoCaja.EstadoMovimiento.ABIERTA
     )
 
     estados_venta_valida = [
@@ -450,8 +457,8 @@ def dashboard(request):
     cajas_abiertas = []
     for seccion in (
         cajas_abiertas_qs.select_related(
-            'sucursal_caja__caja',
-            'sucursal_caja__sucursal',
+            'caja',
+            'caja__sucursal',
             'empleado',
         )
         .annotate(
@@ -463,9 +470,9 @@ def dashboard(request):
         cajas_abiertas.append(
             {
                 'id': seccion.id,
-                'caja_id': seccion.sucursal_caja.caja_id,
-                'caja': str(seccion.sucursal_caja.caja),
-                'sucursal': str(seccion.sucursal_caja.sucursal),
+                'caja_id': seccion.caja_id,
+                'caja': str(seccion.caja),
+                'sucursal': str(seccion.caja.sucursal),
                 'empleado': str(seccion.empleado),
                 'fecha_hora_apertura': seccion.fecha_hora_apertura.isoformat(),
                 'monto_inicial': str(seccion.monto_inicial),
@@ -486,9 +493,9 @@ def dashboard(request):
                 else venta.cliente_venta or 'Consumidor final'
             ),
             'monto': str(venta.monto_venta),
-            'seccion_caja': venta.seccion_caja_id,
-            'seccion_caja_detalle': str(venta.seccion_caja),
-            'sucursal': str(venta.seccion_caja.sucursal_caja.sucursal),
+            'movimiento_caja': venta.movimiento_caja_id,
+            'movimiento_caja_detalle': str(venta.movimiento_caja),
+            'sucursal': str(venta.movimiento_caja.caja.sucursal),
             'minutos_restantes': max(
                 0,
                 round(
@@ -499,7 +506,7 @@ def dashboard(request):
         }
         for venta in por_vencer_qs.select_related(
             'cliente',
-            'seccion_caja__sucursal_caja__sucursal',
+            'movimiento_caja__caja__sucursal',
         )[:5]
     ]
 
@@ -769,6 +776,24 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     search_fields = ['username', 'email', 'empleado__legajo']
     ordering_fields = ['username', 'date_joined']
 
+    def get_permissions(self):
+        """El usuario autenticado puede editar su propio perfil; el resto
+        requiere ser administrador."""
+        if self.action in ('partial_update', 'update') and str(
+            self.kwargs.get('pk')
+        ) == str(self.request.user.id):
+            self.permission_classes = [IsAuthenticated]
+        return super().get_permissions()
+
+    def get_serializer_class(self):
+        """Para la edición del propio perfil se usa UsuarioPerfilSerializer,
+        que acepta email y datos anidados del empleado."""
+        if self.action in ('partial_update', 'update') and str(
+            self.kwargs.get('pk')
+        ) == str(self.request.user.id):
+            return serializers.UsuarioPerfilSerializer
+        return super().get_serializer_class()
+
 
 class EmpleadoViewSet(viewsets.ModelViewSet):
     queryset = Empleado.objects.select_related(
@@ -784,8 +809,24 @@ class EmpleadoViewSet(viewsets.ModelViewSet):
     search_fields = ['legajo', 'dni', 'apellido', 'nombre']
     ordering_fields = ['apellido', 'nombre', 'legajo']
 
+    def get_permissions(self):
+        """Cualquier usuario autenticado puede cambiar su propia contraseña.
+
+        La accion `cambiar_password` verifica dentro si es el propio empleado
+        o si es un administrador cambiando la de otro.
+        """
+        if self.action == 'cambiar_password':
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
     def get_queryset(self):
         queryset = super().get_queryset()
+        rol = self.request.query_params.get('rol', '').strip().upper()
+        if rol:
+            queryset = queryset.filter(
+                roles_asignados__estado='AC',
+                roles_asignados__rol__codigo=rol,
+            ).distinct()
         sucursal = self.request.query_params.get('sucursal', '').strip()
         if sucursal:
             try:
@@ -814,27 +855,56 @@ class EmpleadoViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='cambiar-password')
     def cambiar_password(self, request, pk=None):
-        """Restablece la contraseña del empleado (solo AD).
+        """Cambia la contraseña del empleado.
 
-        Invalida los refresh tokens del usuario, cerrando sus sesiones.
+        Si el usuario autenticado es el dueño del empleado, valida
+        `password_actual` (o `password_admin` enviado por el frontend) como su
+        contraseña actual. Si es un administrador sobre otro empleado, valida
+        `password_admin` como su propia contraseña. Invalida los refresh tokens
+        del empleado, cerrando sus sesiones.
         """
-        if not es_admin(request.user):
+        empleado = self.get_object()
+        usuario_autenticado = request.user
+        es_propio = empleado.usuario_id == usuario_autenticado.id
+
+        if not es_propio and not es_admin(usuario_autenticado):
             raise PermissionDenied(
                 'Solo un administrador puede cambiar la contraseña '
                 'de otro empleado.'
             )
-        empleado = self.get_object()
+
         entrada = serializers.CambiarPasswordSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
-        if not request.user.check_password(
-            entrada.validated_data['password_admin']
-        ):
-            raise ValidationError(
-                {'password_admin': 'Tu contraseña actual no es correcta.'}
+        datos = entrada.validated_data
+
+        if es_propio:
+            # El usuario cambia su propia contraseña.
+            password_actual = datos.get('password_actual') or datos.get(
+                'password_admin', ''
             )
+            if not password_actual:
+                raise ValidationError(
+                    {'password_actual': 'Ingresá tu contraseña actual.'}
+                )
+            if not usuario_autenticado.check_password(password_actual):
+                raise ValidationError(
+                    {'password_actual': 'Tu contraseña actual no es correcta.'}
+                )
+        else:
+            # Administrador cambia la de otro empleado.
+            password_admin = datos.get('password_admin', '')
+            if not password_admin:
+                raise ValidationError(
+                    {'password_admin': 'Ingresá tu contraseña de administrador.'}
+                )
+            if not usuario_autenticado.check_password(password_admin):
+                raise ValidationError(
+                    {'password_admin': 'Tu contraseña actual no es correcta.'}
+                )
+
         empleados_service.cambiar_password(
             empleado,
-            entrada.validated_data['password'],
+            datos['password'],
         )
         return Response(
             {
@@ -881,40 +951,29 @@ class SucursalXEmpleadoViewSet(viewsets.ModelViewSet):
 # =============================================================================
 
 class CajaViewSet(viewsets.ModelViewSet):
-    queryset = Caja.objects.all()
+    queryset = Caja.objects.select_related('sucursal')
     serializer_class = serializers.CajaSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = GESTION
-    filterset_fields = ['estado']
-    search_fields = ['nombre']
-    ordering_fields = ['nombre', 'estado']
+    filterset_fields = ['sucursal', 'estado']
+    search_fields = ['sucursal__nombre']
+    ordering_fields = ['sucursal__nombre', 'numero_caja', 'estado']
 
 
-class SucursalXCajaViewSet(viewsets.ModelViewSet):
-    queryset = SucursalXCaja.objects.select_related('sucursal', 'caja')
-    serializer_class = serializers.SucursalXCajaSerializer
-    permission_classes = [PermisoPorRol]
-    roles_escritura = GESTION
-    filterset_fields = ['sucursal', 'caja', 'habilitada']
-    search_fields = ['sucursal__nombre', 'caja__nombre']
-    ordering_fields = ['sucursal__nombre', 'caja__nombre']
-
-
-class SeccionCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
-    queryset = SeccionCaja.objects.select_related(
-        'sucursal_caja__caja',
-        'sucursal_caja__sucursal',
+class MovimientoCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
+    queryset = MovimientoCaja.objects.select_related(
+        'caja',
+        'caja__sucursal',
         'empleado',
     ).prefetch_related('detalles_cierre__metodo_pago').order_by(
         '-fecha_hora_apertura'
     )
-    serializer_class = serializers.SeccionCajaSerializer
+    serializer_class = serializers.MovimientoCajaSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, CAJERO)
-    filterset_fields = ['sucursal_caja', 'empleado', 'estado']
+    filterset_fields = ['caja', 'empleado', 'estado']
     search_fields = [
-        'sucursal_caja__sucursal__nombre',
-        'sucursal_caja__caja__nombre',
+        'caja__sucursal__nombre',
         'empleado__apellido',
         'empleado__nombre',
     ]
@@ -922,12 +981,38 @@ class SeccionCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        codigos = codigos_activos(self.request.user)
+        es_admin_total = self.request.user.is_superuser or ADMIN in codigos
+        gestion = es_admin_total or GERENTE in codigos
+        empleado = getattr(self.request.user, 'empleado', None)
+
+        # El cajero (y cualquier rol que no sea gestion) solo ve sus propias
+        # secciones: la caja está atada a la persona que la abrió.
+        if not gestion:
+            if empleado is None:
+                queryset = queryset.none()
+            else:
+                queryset = queryset.filter(empleado=empleado)
+
         caja = self.request.query_params.get('caja', '').strip()
         if caja:
-            queryset = queryset.filter(sucursal_caja__caja_id=caja)
+            queryset = queryset.filter(caja_id=caja)
+
         sucursal = self.request.query_params.get('sucursal', '').strip()
+        permitidas = _sucursales_permitidas(self.request.user)
         if sucursal:
-            queryset = queryset.filter(sucursal_caja__sucursal_id=sucursal)
+            if (
+                permitidas is not None
+                and not permitidas.filter(pk=sucursal).exists()
+            ):
+                raise PermissionDenied(
+                    'No tenés acceso a la sucursal indicada.'
+                )
+            queryset = queryset.filter(caja__sucursal_id=sucursal)
+        elif permitidas is not None:
+            queryset = queryset.filter(
+                caja__sucursal__in=permitidas
+            )
         return queryset
 
     def get_permissions(self):
@@ -965,14 +1050,13 @@ class SeccionCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
 
         seccion = caja_service.abrir_seccion(
             datos['caja'],
-            datos['sucursal'],
             empleado,
             datos['monto_inicial'],
             historial_motivo=historial_motivo,
             historial_usuario=request.user,
             observaciones_apertura=datos.get('observaciones_apertura'),
         )
-        salida = serializers.SeccionCajaSerializer(
+        salida = serializers.MovimientoCajaSerializer(
             seccion,
             context=self.get_serializer_context(),
         )
@@ -999,7 +1083,22 @@ class SeccionCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
                     'codigo': 'validacion',
                 }
             ) from None
-        sugerencia = caja_service.sugerir_apertura(caja_id, sucursal_id)
+        caja_obj = Caja.objects.filter(pk=caja_id).first()
+        if caja_obj is None:
+            raise ValidationError(
+                {
+                    'detail': 'La caja indicada no existe.',
+                    'codigo': 'no_encontrado',
+                }
+            )
+        if caja_obj.sucursal_id != sucursal_id:
+            raise ValidationError(
+                {
+                    'detail': 'La caja no pertenece a la sucursal indicada.',
+                    'codigo': 'validacion',
+                }
+            )
+        sugerencia = caja_service.sugerir_apertura(caja_obj)
         return Response(
             {
                 'monto_sugerido': str(sugerencia['monto_sugerido']),
@@ -1018,17 +1117,92 @@ class SeccionCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
             self.get_object(),
             entrada.validated_data['montos_reales'],
             entrada.validated_data.get('observaciones'),
+            clave=entrada.validated_data.get('clave', ''),
+            password=entrada.validated_data['password'],
+            usuario=request.user,
         )
-        salida = serializers.SeccionCajaSerializer(
+        salida = serializers.MovimientoCajaSerializer(
+            seccion,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
+
+    @action(detail=False, methods=['get'], url_path='mia')
+    def mia(self, request):
+        """Seccion abierta o pausada del usuario autenticado.
+
+        Sirve para no dejar salir a nadie con la caja abierta.
+        """
+        empleado = getattr(request.user, 'empleado', None)
+        if empleado is None:
+            return Response({'seccion': None, 'tiene_caja_abierta': False})
+
+        seccion = (
+            MovimientoCaja.objects.filter(
+                empleado=empleado,
+                estado__in=[
+                    MovimientoCaja.EstadoMovimiento.ABIERTA,
+                    MovimientoCaja.EstadoMovimiento.PAUSADA,
+                ],
+            )
+            .select_related(
+                'caja',
+                'caja__sucursal',
+            )
+            .order_by('-fecha_hora_apertura')
+            .first()
+        )
+        if seccion is None:
+            return Response({'seccion': None, 'tiene_caja_abierta': False})
+
+        return Response(
+            {
+                'seccion': serializers.MovimientoCajaSerializer(
+                    seccion,
+                    context=self.get_serializer_context(),
+                ).data,
+                'tiene_caja_abierta': True,
+            }
+        )
+
+    @action(detail=True, methods=['post'])
+    def auditar(self, request, pk=None):
+        seccion = caja_service.auditar_seccion(self.get_object())
+        salida = serializers.MovimientoCajaSerializer(
             seccion,
             context=self.get_serializer_context(),
         )
         return Response(salida.data)
 
     @action(detail=True, methods=['post'])
-    def auditar(self, request, pk=None):
-        seccion = caja_service.auditar_seccion(self.get_object())
-        salida = serializers.SeccionCajaSerializer(
+    def pausar(self, request, pk=None):
+        """Deja la seccion en pausa con un motivo obligatorio."""
+        entrada = serializers.PausaCajaSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+
+        seccion = caja_service.pausar_seccion(
+            self.get_object(),
+            entrada.validated_data['motivo'],
+            request.user,
+        )
+        salida = serializers.MovimientoCajaSerializer(
+            seccion,
+            context=self.get_serializer_context(),
+        )
+        return Response(salida.data)
+
+    @action(detail=True, methods=['post'])
+    def reanudar(self, request, pk=None):
+        """Vuelve a abrir la seccion; pide la contraseña del dueño."""
+        entrada = serializers.ReanudarCajaSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+
+        seccion = caja_service.reanudar_seccion(
+            self.get_object(),
+            entrada.validated_data['clave'],
+            request.user,
+        )
+        salida = serializers.MovimientoCajaSerializer(
             seccion,
             context=self.get_serializer_context(),
         )
@@ -1038,7 +1212,14 @@ class SeccionCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet)
     def teorico(self, request, pk=None):
         """Teorico por metodo de pago para preparar el cierre."""
         seccion = self.get_object()
-        if seccion.estado != SeccionCaja.EstadoSeccion.ABIERTA:
+        if seccion.estado == MovimientoCaja.EstadoMovimiento.PAUSADA:
+            raise ValidationError(
+                {
+                    'detail': 'La sección está en pausa: primero hay que reanudarla.',
+                    'codigo': 'error_de_negocio',
+                }
+            )
+        if seccion.estado != MovimientoCaja.EstadoMovimiento.ABIERTA:
             raise ValidationError(
                 {
                     'detail': 'La seccion de caja no esta abierta.',
@@ -1145,7 +1326,7 @@ class StockViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = Stock.objects.select_related('producto__unidad', 'sucursal')
+    queryset = Stock.objects.select_related('producto', 'sucursal')
     serializer_class = serializers.StockSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, DEPOSITO)
@@ -1250,118 +1431,23 @@ class DetalleStockViewSet(
     def get_serializer_class(self):
         if self.action in ('update', 'partial_update'):
             return serializers.DetalleStockUpdateSerializer
+        if self.action == 'mover':
+            return serializers.MoverLoteSerializer
         return super().get_serializer_class()
 
-
-class MovimientoStockViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = MovimientoStock.objects.select_related(
-        'stock__producto',
-        'detalle_stock__deposito',
-        'venta',
-        'compra',
-    )
-    serializer_class = serializers.MovimientoStockSerializer
-    permission_classes = [PermisoPorRol]
-    filterset_fields = ['stock', 'detalle_stock', 'tipo', 'venta', 'compra']
-    search_fields = ['referencia', 'stock__producto__nombre']
-    ordering_fields = ['fecha', 'cantidad']
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        sucursal = self.request.query_params.get('sucursal', '').strip()
-        producto = self.request.query_params.get('producto', '').strip()
-        if sucursal:
-            queryset = queryset.filter(stock__sucursal_id=sucursal)
-        if producto:
-            queryset = queryset.filter(stock__producto_id=producto)
-        return _filtrar_por_fecha(
-            queryset,
-            self.request.query_params,
-            'fecha',
-        )
-
-
-class TransferenciaStockViewSet(
-    mixins.CreateModelMixin,
-    mixins.ListModelMixin,
-    mixins.RetrieveModelMixin,
-    viewsets.GenericViewSet,
-):
-    queryset = TransferenciaStock.objects.select_related(
-        'producto',
-        'deposito_origen__sucursal',
-        'deposito_destino__sucursal',
-        'stock_origen',
-    )
-    serializer_class = serializers.TransferenciaStockSerializer
-    permission_classes = [PermisoPorRol]
-    roles_escritura = (ADMIN, GERENTE, DEPOSITO)
-    filterset_fields = [
-        'producto',
-        'deposito_origen',
-        'deposito_destino',
-        'estado',
-    ]
-    search_fields = [
-        'producto__nombre',
-        'producto__codigo',
-        'motivo',
-    ]
-    ordering_fields = ['fecha_creacion', 'cantidad']
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        sucursal = self.request.query_params.get('sucursal', '').strip()
-        if sucursal:
-            queryset = queryset.filter(
-                Q(deposito_origen__sucursal_id=sucursal)
-                | Q(deposito_destino__sucursal_id=sucursal)
-            ).distinct()
-        return queryset
-
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return serializers.TransferenciaStockCreateSerializer
-        return super().get_serializer_class()
-
-    def create(self, request, *args, **kwargs):
-        entrada = self.get_serializer(data=request.data)
+    @action(detail=True, methods=['post'])
+    def mover(self, request, pk=None):
+        """Mueve el lote completo a otro deposito de la misma sucursal."""
+        detalle = self.get_object()
+        entrada = serializers.MoverLoteSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
-        datos = entrada.validated_data
-
-        detalle = datos['detalle_origen']
-        transferencia = stock_service.crear_transferencia(
-            detalle.stock.producto,
-            detalle.deposito,
-            datos['deposito_destino'],
-            datos['cantidad'],
-            detalle_origen=detalle,
-            motivo=datos.get('motivo') or '',
+        detalle = stock_service.mover_lote(
+            detalle,
+            entrada.validated_data['deposito'],
+            entrada.validated_data['motivo'],
         )
-        salida = serializers.TransferenciaStockSerializer(
-            transferencia,
-            context=self.get_serializer_context(),
-        )
-        return Response(salida.data, status=status.HTTP_201_CREATED)
-
-    @action(detail=True, methods=['post'])
-    def recibir(self, request, pk=None):
-        transferencia = stock_service.recibir_transferencia(
-            self.get_object(),
-        )
-        salida = serializers.TransferenciaStockSerializer(
-            transferencia,
-            context=self.get_serializer_context(),
-        )
-        return Response(salida.data)
-
-    @action(detail=True, methods=['post'])
-    def cancelar(self, request, pk=None):
-        transferencia = stock_service.cancelar_transferencia(
-            self.get_object(),
-        )
-        salida = serializers.TransferenciaStockSerializer(
-            transferencia,
+        salida = serializers.DetalleStockSerializer(
+            detalle,
             context=self.get_serializer_context(),
         )
         return Response(salida.data)
@@ -1550,17 +1636,13 @@ class VentaViewSet(
     viewsets.GenericViewSet,
 ):
     queryset = (
-        Venta.objects.select_related(
-            'seccion_caja__sucursal_caja__caja',
-            'seccion_caja__sucursal_caja__sucursal',
-            'cliente',
-        )
+        Venta.objects.select_related('movimiento_caja__caja', 'cliente')
         .prefetch_related('detalles__producto', 'pagos__metodo_pago')
     )
     serializer_class = serializers.VentaSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, CAJERO, VENDEDOR)
-    filterset_fields = ['seccion_caja', 'cliente', 'estado']
+    filterset_fields = ['movimiento_caja', 'cliente', 'estado']
     ordering_fields = ['fecha_venta', 'monto_venta']
 
     def get_queryset(self):
@@ -1576,13 +1658,13 @@ class VentaViewSet(
             )
             if search.isdigit():
                 numero = int(search)
-                filtro |= Q(id=numero) | Q(seccion_caja_id=numero)
+                filtro |= Q(id=numero) | Q(movimiento_caja_id=numero)
             queryset = queryset.filter(filtro)
 
         sucursal = self.request.query_params.get('sucursal', '').strip()
         if sucursal:
             queryset = queryset.filter(
-                seccion_caja__sucursal_caja__sucursal_id=sucursal,
+                movimiento_caja__caja__sucursal_id=sucursal,
             )
 
         alerta = self.request.query_params.get('alerta', '').strip()
@@ -1632,7 +1714,7 @@ class VentaViewSet(
         datos = entrada.validated_data
 
         venta = ventas_service.crear_venta(
-            datos['seccion_caja'],
+            datos['movimiento_caja'],
             datos['items'],
             datos.get('cliente'),
             datos.get('cliente_venta'),
@@ -1662,6 +1744,7 @@ class VentaViewSet(
             self.get_object(),
             datos['pagos'],
             datos.get('confirmar', False),
+            clave=datos.get('clave', ''),
         )
         salida = serializers.VentaSerializer(
             venta,
@@ -1723,6 +1806,7 @@ class MetodoPagoXVentaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelVie
             datos['venta'],
             datos['metodo_pago'],
             datos['monto_pagado'],
+            clave=datos.get('clave', ''),
         )
         salida = serializers.MetodoPagoXVentaSerializer(pago)
         return Response(salida.data, status=status.HTTP_201_CREATED)
@@ -1739,24 +1823,38 @@ class CompraViewSet(
     viewsets.GenericViewSet,
 ):
     queryset = (
-        Compra.objects.select_related(
-            'seccion_caja__sucursal_caja__caja',
-            'seccion_caja__sucursal_caja__sucursal',
-            'proveedor',
+        Compra.objects.select_related('movimiento_caja__caja', 'proveedor')
+        .prefetch_related(
+            'detalles__producto',
+            'pagos__metodo_pago',
         )
-        .prefetch_related('detalles__producto', 'pagos__metodo_pago')
     )
     serializer_class = serializers.CompraSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, DEPOSITO)
-    filterset_fields = ['seccion_caja', 'proveedor', 'estado', 'estado_entrega']
+    filterset_fields = [
+        'movimiento_caja',
+        'deposito',
+        'proveedor',
+        'estado',
+        'estado_entrega',
+    ]
     ordering_fields = ['fecha_compra', 'monto_compra']
 
     def get_permissions(self):
-        if self.action in ('en_camino', 'recibir', 'pagar', 'anular'):
+        # Pagar y anular quedan en administracion (AD/GE).
+        # El resto (registrar, poner en camino, recibir) lo puede hacer
+        # cualquiera que opere en el corralon.
+        if self.action in ('pagar', 'anular'):
             self.roles_escritura = (ADMIN, GERENTE)
         else:
-            self.roles_escritura = (ADMIN, GERENTE, DEPOSITO)
+            self.roles_escritura = (
+                ADMIN,
+                GERENTE,
+                DEPOSITO,
+                CAJERO,
+                VENDEDOR,
+            )
         return super().get_permissions()
 
     def get_queryset(self):
@@ -1770,13 +1868,13 @@ class CompraViewSet(
             )
             if search.isdigit():
                 numero = int(search)
-                filtro |= Q(id=numero) | Q(seccion_caja_id=numero)
+                filtro |= Q(id=numero) | Q(movimiento_caja_id=numero)
             queryset = queryset.filter(filtro)
 
         sucursal = self.request.query_params.get('sucursal', '').strip()
         if sucursal:
             queryset = queryset.filter(
-                seccion_caja__sucursal_caja__sucursal_id=sucursal,
+                movimiento_caja__caja__sucursal_id=sucursal,
             )
 
         por_recibir = self.request.query_params.get('por_recibir')
@@ -1796,8 +1894,6 @@ class CompraViewSet(
             return serializers.CompraCreateSerializer
         if self.action == 'en_camino':
             return serializers.CompraEnCaminoSerializer
-        if self.action == 'recibir':
-            return serializers.CompraRecepcionSerializer
         if self.action == 'pagar':
             return serializers.PagoCompraMultipleSerializer
         return super().get_serializer_class()
@@ -1818,8 +1914,9 @@ class CompraViewSet(
             fecha_estimada = None
 
         compra = compras_service.registrar_compra(
-            datos['seccion_caja'],
+            datos['movimiento_caja'],
             datos['proveedor'],
+            datos.get('deposito'),
             datos['items'],
             estado_entrega,
             fecha_estimada,
@@ -1838,6 +1935,7 @@ class CompraViewSet(
         _, compra = pagos_service.registrar_pagos_compra(
             self.get_object(),
             entrada.validated_data['pagos'],
+            clave=entrada.validated_data.get('clave', ''),
         )
         salida = serializers.CompraSerializer(
             compra,
@@ -1861,12 +1959,7 @@ class CompraViewSet(
 
     @action(detail=True, methods=['post'])
     def recibir(self, request, pk=None):
-        entrada = self.get_serializer(data=request.data)
-        entrada.is_valid(raise_exception=True)
-        compra = compras_service.recibir_compra(
-            self.get_object(),
-            entrada.validated_data.get('deposito'),
-        )
+        compra = compras_service.recibir_compra(self.get_object())
         salida = serializers.CompraSerializer(
             compra,
             context=self.get_serializer_context(),
@@ -1905,7 +1998,8 @@ class MetodoPagoXCompraViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelVi
     queryset = MetodoPagoXCompra.objects.select_related('metodo_pago', 'compra')
     serializer_class = serializers.MetodoPagoXCompraSerializer
     permission_classes = [PermisoPorRol]
-    roles_escritura = (ADMIN, GERENTE, DEPOSITO)
+    # Pagar una compra es de administracion (AD/GE).
+    roles_escritura = (ADMIN, GERENTE)
     filterset_fields = ['compra', 'metodo_pago']
     ordering_fields = ['monto_pagado']
 
@@ -1923,6 +2017,107 @@ class MetodoPagoXCompraViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelVi
             datos['compra'],
             datos['metodo_pago'],
             datos['monto_pagado'],
+            clave=datos.get('clave', ''),
         )
         salida = serializers.MetodoPagoXCompraSerializer(pago)
         return Response(salida.data, status=status.HTTP_201_CREATED)
+
+
+class RegistroActividadViewSet(viewsets.ReadOnlyModelViewSet):
+    """Registro de cambios del sistema (auditoria).
+
+    Solo lectura. Se alimenta automaticamente desde el historial de
+    simple-history de los modelos con `history = HistoricalRecords()`.
+    """
+
+    queryset = RegistroActividad.objects.select_related('usuario').all()
+    serializer_class = serializers.RegistroActividadSerializer
+    permission_classes = [PermisoPorRol]
+    roles_escritura = ()
+    search_fields = ['modelo', 'objeto', 'usuario__username']
+    ordering_fields = ['fecha', 'modelo', 'accion']
+    ordering = ['-fecha']
+
+    ACCIONES_VALIDAS = {
+        RegistroActividad.TipoAccion.CREAR,
+        RegistroActividad.TipoAccion.EDITAR,
+        RegistroActividad.TipoAccion.ELIMINAR,
+    }
+
+    def _filtrar(self, queryset):
+        """Aplica los filtros de la vista (modelo, accion, usuario y fechas).
+
+        Usa `iexact` para que el slug del modelo y la accion se puedan enviar
+        en cualquier capitalizacion.
+        """
+        modelo = self.request.query_params.get('modelo', '').strip()
+        accion = self.request.query_params.get('accion', '').strip().upper()
+        usuario = self.request.query_params.get('usuario', '').strip()
+        fecha_desde = self.request.query_params.get('fecha_desde', '').strip()
+        fecha_hasta = self.request.query_params.get('fecha_hasta', '').strip()
+
+        if modelo:
+            queryset = queryset.filter(modelo__iexact=modelo)
+
+        if accion:
+            if accion not in self.ACCIONES_VALIDAS:
+                raise ValidationError(
+                    {
+                        'accion': (
+                            'La acción debe ser CREAR, EDITAR o ELIMINAR.'
+                        )
+                    }
+                )
+            queryset = queryset.filter(accion__iexact=accion)
+
+        if usuario:
+            try:
+                usuario_id = int(usuario)
+            except (TypeError, ValueError):
+                raise ValidationError(
+                    {'usuario': 'El usuario debe ser un id válido.'}
+                ) from None
+            queryset = queryset.filter(usuario_id=usuario_id)
+
+        if fecha_desde:
+            queryset = queryset.filter(fecha__date__gte=fecha_desde)
+        if fecha_hasta:
+            queryset = queryset.filter(fecha__date__lte=fecha_hasta)
+
+        return queryset
+
+    def get_queryset(self):
+        return self._filtrar(super().get_queryset())
+
+    @action(detail=False, methods=['get'])
+    def resumen(self, request):
+        """Totales por accion y por modelo con los filtros aplicados.
+
+        Se calcula sobre todo el conjunto filtrado (sin paginar) para que los
+        KPIs del frontend reflejen el filtro real.
+        """
+        queryset = self.filter_queryset(
+            self._filtrar(super().get_queryset())
+        )
+        # Sin ordering: el ORDER BY se suma al GROUP BY de values().annotate()
+        # y devuelve una fila por fecha en lugar de una por accion/modelo.
+        base = queryset.order_by()
+        por_accion = {
+            fila['accion']: fila['cantidad']
+            for fila in base.values('accion').annotate(
+                cantidad=Count('id')
+            )
+        }
+        por_modelo = {
+            fila['modelo']: fila['cantidad']
+            for fila in base.values('modelo').annotate(
+                cantidad=Count('id')
+            )
+        }
+        return Response(
+            {
+                'total': queryset.count(),
+                'por_accion': por_accion,
+                'por_modelo': por_modelo,
+            }
+        )

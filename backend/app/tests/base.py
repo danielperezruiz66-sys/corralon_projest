@@ -17,16 +17,15 @@ from app.models import (
     Localidad,
     Marca,
     MetodoPago,
+    MovimientoCaja,
     Pais,
     Producto,
     ProductoXProveedor,
     Provincia,
     Proveedor,
     Rol,
-    SeccionCaja,
     Stock,
     Sucursal,
-    SucursalXCaja,
     SucursalXEmpleado,
     Ubicacion,
     Unidad,
@@ -69,10 +68,9 @@ class BaseCorralonTestCase(APITestCase):
             ubicacion=cls.ubicacion,
             nombre='Central',
         )
-        cls.caja = Caja.objects.create(nombre='Caja 1')
-        cls.sucursal_caja = SucursalXCaja.objects.create(
+        cls.caja = Caja.objects.create(
             sucursal=cls.sucursal,
-            caja=cls.caja,
+            numero_caja=1,
         )
         cls.deposito = Deposito.objects.create(
             sucursal=cls.sucursal,
@@ -165,8 +163,8 @@ class BaseCorralonTestCase(APITestCase):
 
         # La seccion abierta del fixture es de `emp_cajero2`, para que `emp_cajero`
         # siga siendo elegible como empleado que abre secciones en los tests.
-        cls.seccion = SeccionCaja.objects.create(
-            sucursal_caja=cls.sucursal_caja,
+        cls.seccion = MovimientoCaja.objects.create(
+            caja=cls.caja,
             empleado=cls.emp_cajero2,
             fecha_hora_apertura=timezone.now(),
             monto_inicial=Decimal('1000.00'),
@@ -211,7 +209,7 @@ class BaseCorralonTestCase(APITestCase):
 
     def payload_venta(self, producto=None, cantidad='2.000', **extra):
         payload = {
-            'seccion_caja': self.seccion.id,
+            'movimiento_caja': self.seccion.id,
             'cliente': self.cliente.id,
             'items': [
                 {
@@ -249,7 +247,7 @@ class BaseCorralonTestCase(APITestCase):
         )
         self.autenticar(user or self.user_deposito)
         payload = {
-            'seccion_caja': self.seccion.id,
+            'movimiento_caja': self.seccion.id,
             'proveedor': proveedor.id,
             'items': [
                 {

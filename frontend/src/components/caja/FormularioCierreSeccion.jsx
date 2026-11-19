@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Swal from 'sweetalert2'
 import { IconCash, IconLoader2, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
+import { nuevaClave } from '../../utils/clave'
 import { formatearMoneda } from '../../utils/formato'
 import MensajeError from '../common/MensajeError.jsx'
 import { validarNumero } from '../../utils/validaciones'
@@ -22,14 +23,18 @@ export default function FormularioCierreSeccion({
   const [teorico, setTeorico] = useState([])
   const [montos, setMontos] = useState({})
   const [observaciones, setObservaciones] = useState('')
+  // Contraseña del usuario autenticado: obligatoria para cerrar.
+  const [password, setPassword] = useState('')
   const [cargando, setCargando] = useState(true)
   const [errorCarga, setErrorCarga] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
+  // Clave de idempotencia: si el cierre se reintenta, no repite el arqueo.
+  const [claveCierre] = useState(() => nuevaClave())
 
   useEffect(() => {
     let vigente = true
-    pedir(`/secciones-caja/${seccion.id}/teorico/`)
+    pedir(`/movimientos-caja/${seccion.id}/teorico/`)
       .then((datos) => {
         if (!vigente) {
           return
@@ -84,6 +89,10 @@ export default function FormularioCierreSeccion({
       }
     })
 
+    if (!password) {
+      nuevos.password = 'Ingresá tu contraseña para cerrar la seccion.'
+    }
+
     if (Object.keys(nuevos).length > 0) {
       setErrores(nuevos)
       requestAnimationFrame(() => {
@@ -108,17 +117,26 @@ export default function FormularioCierreSeccion({
 
     setGuardando(true)
     try {
-      const cerrada = await pedir(`/secciones-caja/${seccion.id}/cerrar/`, {
+      const cerrada = await pedir(`/movimientos-caja/${seccion.id}/cerrar/`, {
         method: 'POST',
         body: JSON.stringify({
+          clave: claveCierre,
           montos_reales: montosReales,
           observaciones: observaciones.trim() || null,
+          password,
         }),
       })
       onGuardado?.(cerrada, true)
     } catch (e) {
       if (e.campos) {
         setErrores(e.campos)
+        requestAnimationFrame(() => {
+          document.querySelector('.input-error')?.focus()
+        })
+        return
+      }
+      if (e.message.toLowerCase().includes('contraseñ')) {
+        setErrores((actuales) => ({ ...actuales, password: e.message }))
         requestAnimationFrame(() => {
           document.querySelector('.input-error')?.focus()
         })
@@ -290,6 +308,32 @@ export default function FormularioCierreSeccion({
                 onChange={(evento) => setObservaciones(evento.target.value)}
                 placeholder="Faltante, sobrante, rotura de billete, etc."
               />
+            </label>
+
+            <label className="campo-comercial ancho-completo">
+              <span>Tu contraseña *</span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                className={errores.password ? 'input-error' : ''}
+                value={password}
+                onChange={(evento) => {
+                  setPassword(evento.target.value)
+                  if (errores.password) {
+                    setErrores((previos) => {
+                      const siguientes = { ...previos }
+                      delete siguientes.password
+                      return siguientes
+                    })
+                  }
+                }}
+                placeholder="Se pide para confirmar el cierre"
+              />
+              <MensajeError>{errores.password}</MensajeError>
+              <p className="caja-nota-total">
+                Quien cierra queda registrado en el historial y en la
+                actividad del sistema.
+              </p>
             </label>
 
             <div className="comercial-modal-acciones">

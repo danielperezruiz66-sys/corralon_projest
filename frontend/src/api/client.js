@@ -22,46 +22,26 @@ function leerRefresco() {
   return localStorage.getItem(CLAVE_REFRESCO)
 }
 
-let renovacionEnCurso = null
-
 async function renovarAcceso() {
   const refresh = leerRefresco()
   if (!refresh) {
     return null
   }
 
-  if (!renovacionEnCurso) {
-    renovacionEnCurso = (async () => {
-      try {
-        const respuesta = await fetch(`${URL_API}/token/refresh/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh }),
-        })
+  const respuesta = await fetch(`${URL_API}/token/refresh/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh }),
+  })
 
-        if (!respuesta.ok) {
-          // Otro tab o instancia pudo estar renovando al mismo tiempo.
-          await new Promise((resolver) => setTimeout(resolver, 250))
-          const actual = leerRefresco()
-          if (actual && actual !== refresh) {
-            return localStorage.getItem(CLAVE_ACCESO)
-          }
-          limpiarTokens()
-          return null
-        }
-
-        const datos = await respuesta.json()
-        guardarTokens({ access: datos.access, refresh: datos.refresh || refresh })
-        return datos.access
-      } catch {
-        return null
-      } finally {
-        renovacionEnCurso = null
-      }
-    })()
+  if (!respuesta.ok) {
+    limpiarTokens()
+    return null
   }
 
-  return renovacionEnCurso
+  const datos = await respuesta.json()
+  guardarTokens({ access: datos.access, refresh: datos.refresh || refresh })
+  return datos.access
 }
 
 function mensajeDeError(datos, estado) {

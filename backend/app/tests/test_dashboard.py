@@ -3,7 +3,13 @@ from decimal import Decimal
 
 from django.utils import timezone
 
-from app.models import SeccionCaja, Stock, Sucursal, SucursalXCaja, Venta
+from app.models import (
+    Caja,
+    MovimientoCaja,
+    Stock,
+    Sucursal,
+    Venta,
+)
 
 from .base import BaseCorralonTestCase
 
@@ -13,6 +19,8 @@ class DashboardApiTests(BaseCorralonTestCase):
         self.crear_venta()
         self.stock_poco.cant_min = Decimal('10.000')
         self.stock_poco.save(update_fields=['cant_min'])
+        # El dashboard muestra las cajas del rol: el dueño de la sección.
+        self.autenticar(self.user_cajero2)
 
         respuesta = self.client.get('/api/dashboard/')
 
@@ -167,7 +175,7 @@ class DashboardApiTests(BaseCorralonTestCase):
                 'caja',
                 {
                     'ventas': True,
-                    'compras': False,
+                    'compras': True,
                     'caja': True,
                     'equipo': False,
                     'stock': True,
@@ -179,7 +187,7 @@ class DashboardApiTests(BaseCorralonTestCase):
                 'ventas',
                 {
                     'ventas': True,
-                    'compras': False,
+                    'compras': True,
                     'caja': False,
                     'equipo': False,
                     'stock': True,
@@ -240,13 +248,25 @@ class DashboardApiTests(BaseCorralonTestCase):
             ubicacion=self.ubicacion,
             nombre='Sucursal Norte',
         )
-        otra_caja = SucursalXCaja.objects.create(
-            sucursal=otra,
-            caja=self.caja,
+        # Una sección del cajero en su sucursal...
+        caja_salta = Caja.objects.create(
+            sucursal=self.sucursal,
+            numero_caja=2,
         )
-        SeccionCaja.objects.create(
-            sucursal_caja=otra_caja,
+        MovimientoCaja.objects.create(
+            caja=caja_salta,
             empleado=self.emp_cajero,
+            fecha_hora_apertura=timezone.now(),
+            monto_inicial=Decimal('500.00'),
+        )
+        # ...y una de otro empleado en una sucursal que no le corresponde.
+        otra_caja = Caja.objects.create(
+            sucursal=otra,
+            numero_caja=1,
+        )
+        MovimientoCaja.objects.create(
+            caja=otra_caja,
+            empleado=self.emp_vendedor,
             fecha_hora_apertura=timezone.now(),
             monto_inicial=Decimal('500.00'),
         )
@@ -265,7 +285,7 @@ class DashboardApiTests(BaseCorralonTestCase):
         respuesta = self.client.get('/api/dashboard/')
 
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(respuesta.data['caja']['abiertas'], 2)
+        self.assertEqual(respuesta.data['caja']['abiertas'], 3)
         self.assertEqual(
             {item['id'] for item in respuesta.data['filtros']['sucursales']},
             {self.sucursal.id, otra.id},

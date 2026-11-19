@@ -1,5 +1,4 @@
 /* Selector de productos (extraído de Comercial.css) */
-/* Selector de productos */
 .selector-productos {
   margin-bottom: 0.75rem;
 }
@@ -82,6 +81,16 @@
 .stock-negativo {
   color: var(--color-peligro) !important;
   font-weight: 700;
+}
+
+/* Disponibilidad en otras sucursales dentro del selector de productos */
+.selector-disponibilidad {
+  display: block;
+  margin-top: 0.15rem;
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 @media (max-width: 640px) {

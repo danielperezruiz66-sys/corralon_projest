@@ -1,26 +1,20 @@
-import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { IconClock } from '@tabler/icons-react'
 import MenuDesplegable from './components/MenuDesplegable.jsx'
 import { useAuth } from './context/auth-context'
 import { modulosDelMenu } from './data/menuConfig.js'
-
-// Cada pagina se descarga recien cuando se entra a su ruta.
-const Caja = lazy(() => import('./pages/Caja.jsx'))
-const Clientes = lazy(() => import('./pages/Clientes.jsx'))
-const Compras = lazy(() => import('./pages/Compras.jsx'))
-const Empleados = lazy(() => import('./pages/Empleados.jsx'))
-const EnDesarrollo = lazy(() => import('./pages/EnDesarrollo.jsx'))
-const Facturacion = lazy(() => import('./pages/Facturacion.jsx'))
-const Inicio = lazy(() => import('./pages/Inicio.jsx'))
-const Inventario = lazy(() => import('./pages/Inventario.jsx'))
-const Login = lazy(() => import('./pages/Login.jsx'))
-const Proveedores = lazy(() => import('./pages/Proveedores.jsx'))
-const Ventas = lazy(() => import('./pages/Ventas.jsx'))
-
-function CargandoModulo() {
-  return <div className="cargando-modulo">Cargando…</div>
-}
+import Caja from './pages/Caja.jsx'
+import Clientes from './pages/Clientes.jsx'
+import Compras from './pages/Compras.jsx'
+import Facturacion from './pages/Facturacion.jsx'
+import Empleados from './pages/Empleados.jsx'
+import EnDesarrollo from './pages/EnDesarrollo.jsx'
+import Inicio from './pages/Inicio.jsx'
+import Inventario from './pages/Inventario.jsx'
+import Login from './pages/Login.jsx'
+import Perfil from './pages/Perfil.jsx'
+import Actividad from './pages/Actividad.jsx'
+import Proveedores from './pages/Proveedores.jsx'
+import Ventas from './pages/Ventas.jsx'
 
 function RutaProtegida() {
   const { user } = useAuth()
@@ -29,10 +23,7 @@ function RutaProtegida() {
 
 function ModuloProtegido({ modulo, children }) {
   const { puedeVer } = useAuth()
-  if (!puedeVer(modulo)) {
-    return <Navigate to="/" replace />
-  }
-  return <Suspense fallback={<CargandoModulo />}>{children}</Suspense>
+  return puedeVer(modulo) ? children : <Navigate to="/" replace />
 }
 
 function contenidoModulo(modulo) {
@@ -60,30 +51,20 @@ function contenidoModulo(modulo) {
   if (modulo.path === '/proveedores') {
     return <Proveedores />
   }
+  if (modulo.path === '/perfil') {
+    return <Perfil />
+  }
+  if (modulo.path === '/actividad') {
+    return <Actividad />
+  }
   return <EnDesarrollo titulo={modulo.name} detalle={modulo.detalle} />
 }
 
 export default function App() {
-  const { cargando, pausada } = useAuth()
+  const { cargando } = useAuth()
 
   if (cargando) {
     return <div className="pantalla-carga">Cargando…</div>
-  }
-
-  if (pausada) {
-    return (
-      <div className="pantalla-sesion-pausada">
-        <div className="tarjeta-sesion-pausada">
-          <span className="icono-sesion-pausada">
-            <IconClock size={30} stroke={1.75} />
-          </span>
-          <h1>Sesión en pausa</h1>
-          <p>
-            Pasaron 30 minutos sin actividad. Elegí una opción para continuar.
-          </p>
-        </div>
-      </div>
-    )
   }
 
   const rutasModulos = modulosDelMenu
@@ -102,23 +83,9 @@ export default function App() {
 
   return (
     <Routes>
-      <Route
-        path="/login"
-        element={
-          <Suspense fallback={<div className="pantalla-carga">Cargando…</div>}>
-            <Login />
-          </Suspense>
-        }
-      />
+      <Route path="/login" element={<Login />} />
       <Route element={<RutaProtegida />}>
-        <Route
-          index
-          element={
-            <Suspense fallback={<CargandoModulo />}>
-              <Inicio />
-            </Suspense>
-          }
-        />
+        <Route index element={<Inicio />} />
         {rutasModulos}
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

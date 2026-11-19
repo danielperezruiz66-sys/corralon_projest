@@ -217,6 +217,36 @@ ESTILOS DE LAYOUT Y MENÚ DESPLEGABLE - FER-CONS
   padding-top: 0.75rem;
 }
 
+.sidebar-caja-abierta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-radius: 0.6rem;
+  background-color: rgba(237, 233, 254, 0.18);
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0.15rem 0.5rem 0.35rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.sidebar-caja-abierta:hover {
+  background-color: rgba(237, 233, 254, 0.3);
+}
+
+.sidebar-caja-abierta span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.sidebar-caja-abierta small {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
 .layout-boton-logout {
   border: none;
   background: transparent;

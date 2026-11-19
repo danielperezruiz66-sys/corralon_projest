@@ -34,11 +34,10 @@ router.register(
 # CAJA
 router.register('cajas', views.CajaViewSet, basename='caja')
 router.register(
-    'sucursales-cajas',
-    views.SucursalXCajaViewSet,
-    basename='sucursal-caja',
+    'movimientos-caja',
+    views.MovimientoCajaViewSet,
+    basename='movimiento-caja',
 )
-router.register('secciones-caja', views.SeccionCajaViewSet, basename='seccion-caja')
 
 # CATALOGO
 router.register('categorias', views.CategoriaViewSet, basename='categoria')
@@ -55,16 +54,6 @@ router.register(
 router.register('depositos', views.DepositoViewSet, basename='deposito')
 router.register('stocks', views.StockViewSet, basename='stock')
 router.register('detalles-stock', views.DetalleStockViewSet, basename='detalle-stock')
-router.register(
-    'movimientos-stock',
-    views.MovimientoStockViewSet,
-    basename='movimiento-stock',
-)
-router.register(
-    'transferencias-stock',
-    views.TransferenciaStockViewSet,
-    basename='transferencia-stock',
-)
 
 # PROVEEDORES
 router.register('proveedores', views.ProveedorViewSet, basename='proveedor')
@@ -101,6 +90,8 @@ router.register(
     views.MetodoPagoXCompraViewSet,
     basename='metodo-pago-compra',
 )
+
+router.register('actividad', views.RegistroActividadViewSet, basename='actividad')
 
 urlpatterns = [
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),

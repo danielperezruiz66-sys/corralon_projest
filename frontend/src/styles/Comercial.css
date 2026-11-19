@@ -311,6 +311,60 @@ COMERCIAL - VENTAS Y COMPRAS
   color: var(--color-peligro);
 }
 
+.estado-rs {
+  background-color: #d1fae5;
+  color: #047857;
+}
+
+.estado-rj {
+  background-color: #fee2e2;
+  color: var(--color-peligro);
+}
+
+/* Pestañas de compras y solicitudes */
+.compras-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.compras-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgba(15, 42, 48, 0.12);
+  border-radius: 9999px;
+  background-color: #ffffff;
+  padding: 0.5rem 0.95rem;
+  color: rgba(15, 42, 48, 0.65);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.compras-tabs button:hover {
+  background-color: var(--color-fondo);
+}
+
+.compras-tabs button.activo {
+  border-color: var(--color-oscuro);
+  background-color: var(--color-oscuro);
+  color: #ffffff;
+}
+
+.compras-tabs-contador {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.3rem;
+  border-radius: 9999px;
+  background-color: var(--color-peligro);
+  padding: 0 0.35rem;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 /* Acciones de fila */
 .acciones-fila {
   display: flex;
@@ -778,7 +832,6 @@ COMERCIAL - VENTAS Y COMPRAS
   .detalle-cabecera {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
 }
 
 @media (max-width: 640px) {
@@ -826,5 +879,50 @@ COMERCIAL - VENTAS Y COMPRAS
   .comercial-modal-acciones button {
     flex: 1;
   }
-
 }
+
+/* ============================================
+   ACTIVIDAD - KPIs
+   ============================================ */
+
+.comercial-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.comercial-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  background-color: var(--color-fondo);
+  min-width: 11rem;
+}
+
+.comercial-kpi-label {
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.comercial-kpi-valor {
+  color: var(--color-oscuro);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+/* Fila de filtros con formularios (usuario + fechas) */
+.inventario-filtros-form {
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.inventario-filtros-form .campo-comercial {
+  min-width: 12rem;
+}
+

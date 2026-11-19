@@ -27,7 +27,7 @@ from app.models import (
     MetodoPago,
     MetodoPagoXCompra,
     MetodoPagoXVenta,
-    MovimientoStock,
+    MovimientoCaja,
     Pais,
     Producto,
     ProductoXProveedor,
@@ -36,12 +36,9 @@ from app.models import (
     ProveedorXSucursal,
     Provincia,
     Rol,
-    SeccionCaja,
     Stock,
     Sucursal,
-    SucursalXCaja,
     SucursalXEmpleado,
-    TransferenciaStock,
     Ubicacion,
     Unidad,
     Venta,
@@ -112,31 +109,12 @@ SUCURSALES = [
         'email_suc': 'salta@fer-cons.com.ar',
         'es_central': True,
     },
-    {
-        'nombre': 'Campo Quijano',
-        'codigo': 'CQJ',
-        'localidad': 'Campo Quijano',
-        'codigo_postal': '4407',
-        'calle': 'Ruta Nacional 51',
-        'nro_calle': 12,
-        'latitud': Decimal('-24.916667'),
-        'longitud': Decimal('-65.633333'),
-        'hora_ap': '08:00:00',
-        'hora_c': '17:00:00',
-        'contacto': '3875551002',
-        'email_suc': 'campoquijano@fer-cons.com.ar',
-        'es_central': False,
-    },
 ]
 
 DEPOSITOS = {
     'Salta Capital': [
         ('Depósito Principal Salta', True),
         ('Depósito Anexo Salta', False),
-    ],
-    'Campo Quijano': [
-        ('Depósito Principal Campo Quijano', True),
-        ('Depósito Anexo Campo Quijano', False),
     ],
 }
 
@@ -186,40 +164,13 @@ EMPLEADOS = [
         'deposito.salta',
     ),
     (
-        '30123456',
-        '0005',
-        'Ana',
-        'Alderete',
-        'AD',
-        'Campo Quijano',
-        'admin.quijano',
-    ),
-    (
-        '32456789',
-        '0006',
-        'José',
-        'Vega',
-        'CA',
-        'Campo Quijano',
-        'cajero.quijano',
-    ),
-    (
-        '34678901',
-        '0007',
-        'Camila',
-        'Rodríguez',
-        'VE',
-        'Campo Quijano',
-        'vendedor.quijano',
-    ),
-    (
-        '27890123',
-        '0008',
-        'Miguel Ángel',
-        'Quispe',
-        'ED',
-        'Campo Quijano',
-        'deposito.quijano',
+        '29182736',
+        '0009',
+        'Sofía',
+        'Ramírez',
+        'GE',
+        'Salta Capital',
+        'gerente.salta',
     ),
 ]
 
@@ -754,14 +705,14 @@ class Command(BaseCommand):
         ids['proveedor'] = self._proveedores()
         self._proveedores_x_sucursal(ids['proveedor'], ids['sucursal'])
         self._productos_x_proveedor(ids['producto'], ids['proveedor'])
-        ids['sucursal_caja'] = self._cajas(ids['sucursal'])
+        ids['caja'] = self._cajas(ids['sucursal'])
         ids['metodo'] = self._metodos_pago()
         ids['cliente'] = self._clientes()
         ids['stock_detalle'] = self._detalles_stock(
             ids['stock'],
             ids['deposito'],
         )
-        self._secciones(ids['sucursal_caja'])
+        self._secciones(ids['caja'])
 
         # Compras y ventas se ejecutan en orden cronologico para que el libro
         # de stock quede congruente con las fechas de los documentos.
@@ -774,12 +725,11 @@ class Command(BaseCommand):
     def _reset(self):
         self.stdout.write('Borrando tablas de negocio...')
         modelos = [
-            TransferenciaStock, DetalleCierreCaja, MovimientoStock,
-            MetodoPagoXCompra, MetodoPagoXVenta, DetalleCompra, DetalleVenta,
-            Factura, Compra, Venta, Cliente, MetodoPago,
-            DetalleStock, Stock, ProductoXSucursal, ProductoXProveedor,
-            ProveedorXSucursal, Proveedor, Deposito, SeccionCaja,
-            SucursalXCaja, Caja,
+            DetalleCierreCaja, MetodoPagoXCompra, MetodoPagoXVenta,
+            DetalleCompra, DetalleVenta, Factura, Compra, Venta, Cliente,
+            MetodoPago, DetalleStock, Stock, ProductoXSucursal,
+            ProductoXProveedor, ProveedorXSucursal, Proveedor, Deposito,
+            MovimientoCaja, Caja,
             Producto, Unidad, Marca, Categoria,
             SucursalXEmpleado, EmpleadoXRol, Empleado, Rol,
             Usuario, Sucursal, Empresa, Ubicacion, Localidad, Provincia, Pais,
@@ -1144,54 +1094,46 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------- cajas
     def _cajas(self, sucursales):
         cajas = []
-        for nombre in CAJAS_FISICAS:
-            caja, _ = Caja.objects.update_or_create(
-                nombre=nombre,
-                defaults={'estado': Caja.EstadoCaja.ACTIVA},
-            )
-            cajas.append(caja)
-
-        asignaciones = []
         for sucursal in sucursales:
-            for caja in cajas:
-                asignacion, _ = SucursalXCaja.objects.update_or_create(
+            for numero in range(1, len(CAJAS_FISICAS) + 1):
+                caja, _ = Caja.objects.update_or_create(
                     sucursal=sucursal,
-                    caja=caja,
-                    defaults={'habilitada': True},
+                    numero_caja=numero,
+                    defaults={'estado': Caja.EstadoCaja.ACTIVA},
                 )
-                asignaciones.append(asignacion)
-        return asignaciones
+                cajas.append(caja)
+        return cajas
 
-    def _secciones(self, asignaciones):
+    def _secciones(self, cajas):
         ahora = timezone.now()
         usadas_por_sucursal = {}
-        for asignacion in asignaciones:
-            nombre_sucursal = asignacion.sucursal.nombre
+        for caja in cajas:
+            nombre_sucursal = caja.sucursal.nombre
             empleados = self.empleados_por_sucursal[nombre_sucursal]
             usadas = usadas_por_sucursal.setdefault(nombre_sucursal, set())
-            # Un empleado no puede tener dos secciones abiertas a la vez:
+            # Un empleado no puede tener dos movimientos abiertos a la vez:
             # la primera caja la abre el cajero y la segunda el administrador.
             cajero = empleados['CA']
             empleado = cajero if cajero not in usadas else empleados['AD']
             usadas.add(empleado)
-            seccion, _ = SeccionCaja.objects.get_or_create(
-                sucursal_caja=asignacion,
-                estado=SeccionCaja.EstadoSeccion.ABIERTA,
+            movimiento, _ = MovimientoCaja.objects.get_or_create(
+                caja=caja,
+                estado=MovimientoCaja.EstadoMovimiento.ABIERTA,
                 defaults={
                     'empleado': empleado,
                     'fecha_hora_apertura': ahora - timedelta(hours=2),
                     'monto_inicial': Decimal('25000.00'),
                 },
             )
-            self.secciones_abiertas[asignacion.id] = seccion
+            self.secciones_abiertas[caja.id] = movimiento
         return list(self.secciones_abiertas.values())
 
-    def _seccion_para(self, asignacion, fecha):
+    def _seccion_para(self, caja, fecha):
         fecha_local = timezone.localtime(fecha)
         if fecha_local.date() == timezone.localdate():
-            return self.secciones_abiertas[asignacion.id]
+            return self.secciones_abiertas[caja.id]
 
-        clave = (asignacion.id, fecha_local.date())
+        clave = (caja.id, fecha_local.date())
         if clave in self.secciones_por_dia:
             return self.secciones_por_dia[clave]
 
@@ -1201,20 +1143,20 @@ class Command(BaseCommand):
         cierre = timezone.make_aware(
             datetime.combine(fecha_local.date(), time(18, 0))
         )
-        cajero = self.empleados_por_sucursal[asignacion.sucursal.nombre]['CA']
-        seccion, _ = SeccionCaja.objects.get_or_create(
-            sucursal_caja=asignacion,
+        cajero = self.empleados_por_sucursal[caja.sucursal.nombre]['CA']
+        movimiento, _ = MovimientoCaja.objects.get_or_create(
+            caja=caja,
             fecha_hora_apertura=apertura,
             defaults={
                 'empleado': cajero,
                 'fecha_hora_cierre': cierre,
                 'monto_inicial': Decimal('25000.00'),
                 'monto_final': Decimal('25000.00'),
-                'estado': SeccionCaja.EstadoSeccion.CERRADA,
+                'estado': MovimientoCaja.EstadoMovimiento.CERRADA,
             },
         )
-        self.secciones_por_dia[clave] = seccion
-        return seccion
+        self.secciones_por_dia[clave] = movimiento
+        return movimiento
 
     # ---------------------------------------------------------------- pagos
     def _metodos_pago(self):
@@ -1256,7 +1198,7 @@ class Command(BaseCommand):
 
     # --------------------------------------------------------------- historial
     def _historial(self, ids, cantidad_compras, cantidad_ventas):
-        asignaciones = ids['sucursal_caja']
+        cajas = ids['caja']
         ahora = timezone.now()
         eventos = []
 
@@ -1265,13 +1207,13 @@ class Command(BaseCommand):
                 {
                     'tipo': 'compra',
                     'fecha': self._fecha_historial(indice, cantidad_compras),
-                    'asignacion': asignaciones[indice % len(asignaciones)],
+                    'caja': cajas[indice % len(cajas)],
                 }
             )
 
         pendientes = min(8, max(2, cantidad_ventas // 25))
         for indice in range(cantidad_ventas):
-            asignacion = asignaciones[indice % len(asignaciones)]
+            caja = cajas[indice % len(cajas)]
             if indice < pendientes:
                 fecha = ahora - timedelta(minutes=random.randint(2, 25))
                 estado = (
@@ -1290,7 +1232,7 @@ class Command(BaseCommand):
                 {
                     'tipo': 'venta',
                     'fecha': fecha,
-                    'asignacion': asignacion,
+                    'caja': caja,
                     'estado': estado,
                 }
             )
@@ -1298,12 +1240,12 @@ class Command(BaseCommand):
         eventos.sort(key=lambda evento: evento['fecha'])
         for evento in eventos:
             if evento['tipo'] == 'compra':
-                self._crear_compra(ids, evento['fecha'], evento['asignacion'])
+                self._crear_compra(ids, evento['fecha'], evento['caja'])
             else:
                 self._crear_venta(
                     ids,
                     evento['fecha'],
-                    evento['asignacion'],
+                    evento['caja'],
                     evento['estado'],
                 )
 
@@ -1332,13 +1274,13 @@ class Command(BaseCommand):
             return random.choice(consumidores)
         return random.choice(clientes)
 
-    def _crear_venta(self, ids, fecha, asignacion, estado_pago):
+    def _crear_venta(self, ids, fecha, caja, estado_pago):
         productos = ids['producto']
         metodos = ids['metodo']
-        seccion = self._seccion_para(asignacion, fecha)
+        seccion = self._seccion_para(caja, fecha)
         cliente = self._cliente_aleatorio(ids['cliente'])
         venta = Venta.objects.create(
-            seccion_caja=seccion,
+            movimiento_caja=seccion,
             cliente=cliente,
             fecha_venta=fecha,
             monto_venta=Decimal('0.00'),
@@ -1354,28 +1296,24 @@ class Command(BaseCommand):
             cantidad = Decimal(
                 random.randint(datos['venta'][0], datos['venta'][1])
             )
-            stock = stock_service.obtener_stock(producto, asignacion.sucursal)
+            stock = stock_service.obtener_stock(producto, caja.sucursal)
             if stock.cantidad < cantidad:
                 continue
 
             precio = producto.precio_unidad
             subtotal = (cantidad * precio).quantize(Decimal('0.01'))
-            DetalleVenta.objects.create(
+            detalle_venta = DetalleVenta.objects.create(
                 venta=venta,
                 producto=producto,
                 cantidad_venta=cantidad,
                 precio_venta=precio,
                 subtotal=subtotal,
             )
-            movimientos = stock_service.consumir_stock(
+            detalle_venta.consumos = stock_service.consumir_stock(
                 stock,
                 cantidad,
-                referencia=f'Venta {venta.pk}',
-                venta=venta,
             )
-            MovimientoStock.objects.filter(
-                pk__in=[movimiento.pk for movimiento in movimientos]
-            ).update(fecha=fecha)
+            detalle_venta.save(update_fields=['consumos'])
             total += subtotal
             vendidos += 1
 
@@ -1420,7 +1358,7 @@ class Command(BaseCommand):
         maximo = max(base + 1, datos['stock'][1] // 2)
         return Decimal(random.randint(base, maximo))
 
-    def _crear_compra(self, ids, fecha, asignacion):
+    def _crear_compra(self, ids, fecha, caja):
         metodos = ids['metodo']
         proveedores = [
             proveedor
@@ -1432,14 +1370,15 @@ class Command(BaseCommand):
 
         proveedor = random.choice(proveedores)
         disponibles = self.productos_por_proveedor[proveedor.id]
-        seccion = self._seccion_para(asignacion, fecha)
+        seccion = self._seccion_para(caja, fecha)
         fecha_recepcion = fecha + timedelta(hours=random.randint(3, 10))
         if fecha_recepcion > timezone.now():
             fecha_recepcion = timezone.now() - timedelta(hours=1)
-        deposito = stock_service.deposito_predeterminado(asignacion.sucursal)
+        deposito = stock_service.deposito_predeterminado(caja.sucursal)
 
         compra = Compra.objects.create(
-            seccion_caja=seccion,
+            movimiento_caja=seccion,
+            deposito=deposito,
             proveedor=proveedor,
             fecha_compra=fecha,
             estado_entrega=Compra.EstadoEntrega.RECIBIDA,
@@ -1466,8 +1405,8 @@ class Command(BaseCommand):
                 subtotal=subtotal,
             )
 
-            stock = stock_service.obtener_stock(producto, asignacion.sucursal)
-            detalle_stock, movimiento = stock_service.reponer_stock(
+            stock = stock_service.obtener_stock(producto, caja.sucursal)
+            detalle_stock = stock_service.reponer_stock(
                 stock,
                 cantidad,
                 deposito,
@@ -1479,14 +1418,10 @@ class Command(BaseCommand):
                     if datos['perecedero']
                     else None
                 ),
-                referencia=f'Compra {compra.pk}',
-                compra=compra,
+                observaciones=f'Compra #{compra.pk}',
             )
             DetalleStock.objects.filter(pk=detalle_stock.pk).update(
                 fecha_ingreso=fecha_recepcion
-            )
-            MovimientoStock.objects.filter(pk=movimiento.pk).update(
-                fecha=fecha_recepcion
             )
             total += subtotal
 
@@ -1534,8 +1469,8 @@ class Command(BaseCommand):
                 )
 
     def _cerrar_secciones(self):
-        secciones = SeccionCaja.objects.filter(
-            estado=SeccionCaja.EstadoSeccion.CERRADA,
+        secciones = MovimientoCaja.objects.filter(
+            estado=MovimientoCaja.EstadoMovimiento.CERRADA,
             monto_teorico__isnull=True,
         )
         for seccion in secciones:
@@ -1550,7 +1485,7 @@ class Command(BaseCommand):
                     real = max(Decimal('0.00'), sistema + diferencia)
                 detalles.append(
                     DetalleCierreCaja.objects.create(
-                        seccion_caja=seccion,
+                        movimiento_caja=seccion,
                         metodo_pago=item['metodo_pago'],
                         monto_sistema=sistema,
                         monto_real=real,
@@ -1571,7 +1506,7 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS('\nDatos cargados correctamente.\n')
         )
-        self.stdout.write('Sucursales: Salta Capital y Campo Quijano')
+        self.stdout.write('Sucursal: Salta Capital')
         self.stdout.write(
             f'Productos: {Producto.objects.count()} | '
             f'Stocks: {Stock.objects.count()} | '

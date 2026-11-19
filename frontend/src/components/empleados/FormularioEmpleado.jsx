@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import Swal from 'sweetalert2'
 import { IconLoader2, IconUsers, IconX } from '@tabler/icons-react'
-import { pedirCatalogo } from '../../api/catalogos'
+import { pedirTodas } from '../../api/catalogos'
 import { pedir } from '../../api/client'
 import MensajeError from '../common/MensajeError.jsx'
 import {
@@ -133,7 +133,7 @@ export default function FormularioEmpleado({ empleado, onCerrar, onGuardado }) {
 
   useEffect(() => {
     let vigente = true
-    Promise.all([pedirCatalogo('/roles/'), pedirCatalogo('/sucursales/')])
+    Promise.all([pedirTodas('/roles/'), pedirTodas('/sucursales/')])
       .then(([rolesData, sucursalesData]) => {
         if (!vigente) {
           return

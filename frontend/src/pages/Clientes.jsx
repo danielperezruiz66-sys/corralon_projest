@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -16,9 +16,7 @@ import {
 import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
-const FormularioCliente = lazy(
-  () => import('../components/clientes/FormularioCliente.jsx'),
-)
+import FormularioCliente from '../components/clientes/FormularioCliente.jsx'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv } from '../utils/csv'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
@@ -533,13 +531,11 @@ export default function Clientes() {
       </div>
 
       {(modalAbierto || clienteEditando) && (
-        <Suspense fallback={null}>
-          <FormularioCliente
-            cliente={clienteEditando}
-            onCerrar={cerrarModal}
-            onGuardado={clienteGuardado}
-          />
-        </Suspense>
+        <FormularioCliente
+          cliente={clienteEditando}
+          onCerrar={cerrarModal}
+          onGuardado={clienteGuardado}
+        />
       )}
 
       {clienteDetalle && (
