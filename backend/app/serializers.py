@@ -109,6 +109,17 @@ class UbicacionSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 class EmpresaSerializer(serializers.ModelSerializer):
+    def validate_cuit(self, value):
+        limpio = ''.join(caracter for caracter in value if caracter.isdigit())
+        if len(limpio) != 11:
+            raise serializers.ValidationError('El CUIT debe tener 11 números.')
+        existentes = Empresa.objects.filter(cuit=limpio)
+        if self.instance is not None:
+            existentes = existentes.exclude(pk=self.instance.pk)
+        if existentes.exists():
+            raise serializers.ValidationError('Ya existe una empresa con este CUIT.')
+        return limpio
+
     class Meta:
         model = Empresa
         fields = [

@@ -135,6 +135,13 @@ export const menuCategories = [
         icono: IconHistory,
         roles: ['AD', 'GE'],
       },
+      {
+        name: 'Configuración',
+        path: '/configuracion',
+        detalle: 'Datos de la empresa',
+        icono: IconSettings,
+        roles: ['AD'],
+      },
     ],
   },
 ]

@@ -16,9 +16,9 @@
 
 Estado: backend consolidado (35 modelos, 34 viewsets, suite en `app.tests`),
 una sola sucursal operativa por empresa. Frontend con Dashboard, Ventas,
-Compras, Clientes, Inventario, Proveedores, Caja, Empleados, Perfil y
-Actividad. Falta la revisión/QA visual módulo por módulo y las métricas del
-Dashboard V2. Facturación ARCA está bloqueada.
+Compras, Clientes, Inventario, Proveedores, Caja, Empleados, Perfil, Actividad
+y Configuración (solo AD/superuser). Falta la revisión/QA visual módulo por
+módulo y las métricas del Dashboard V2. Facturación ARCA está bloqueada.
 
 ## 2. Estructura
 
@@ -31,7 +31,7 @@ backend/
     │                       # proveedores, empleados
     ├── management/commands/# seed_data, cancelar_ventas_vencidas
     ├── migrations/         # 0001 esquema + 0002/0003 estado Parcial
-    ├── tests/              # suite en app.tests (242 tests)
+    ├── tests/              # suite en app.tests (252 tests)
     ├── permissions.py  backends.py  exceptions.py
     └── serializers.py  views.py  urls.py
 frontend/src/
@@ -127,6 +127,7 @@ Reglas fijas:
 | Empleados | ✔ | ✔ | ✖ | ✖ | ✖ |
 | Facturación | ✔ | ✔ | ✔ | ✖ | ✖ |
 | Perfil / Actividad | ✔ | ✔ | perfil | perfil | perfil |
+| Configuración | ✔ | ✖ | ✖ | ✖ | ✖ |
 
 Cobrar/confirmar/anular ventas: `AD/GE/CA`. Pagar/anular compras: `AD/GE`.
 `is_superuser` y `AD` pueden todo. Sin rol = solo lectura. Un empleado
@@ -172,7 +173,12 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
 - Errores: `400 {"detail": "...", "codigo": "..."}` con `stock_insuficiente`,
   `error_de_negocio`, `validacion`, `no_encontrado` o `protegido`.
 - 34 viewsets en `app/urls.py` + `GET /api/perfil/`, `GET /api/dashboard/`,
-  `GET /api/actividad/` y `/api/actividad/resumen/`.
+  `GET /api/actividad/` y `/api/actividad/resumen/`. `GET /api/perfil/`
+  devuelve `dni`, `telefono`, `estado`, `estado_detalle` e `is_active` del
+  empleado/usuario.
+- `/api/empresas/` es de lectura y escritura solo para `AD`/superuser; el CUIT
+  es único y se normaliza antes de validar. Un rol `AD` ve solo la empresa de
+  sus sucursales asignadas; el superuser ve todas.
 - El dashboard respeta las sucursales permitidas (superuser/AD ven todas; una
   sucursal ajena devuelve 403), devuelve `bloques` por rol y separa
   `ventas.pendientes` (`PE`) de `ventas.parciales` (`PC`).
@@ -186,8 +192,9 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
     `/{id}/reanudar/`, `/{id}/auditar/`, `/{id}/teorico/`, `/mia/`,
     `/sugerencia/`.
   - `POST /api/empleados/`, `/{id}/cambiar-password/`.
-- `Usuario` exige `IsAdminUser`; contraseña write-only. `Producto` acepta
-  `sucursales` y sincroniza `ProductoXSucursal`.
+- `Usuario` exige `IsAdminUser`; contraseña write-only. Editar el propio perfil
+  (`PATCH /usuarios/{id}/`) exige `AD`/superuser y usa `UsuarioPerfilSerializer`.
+  `Producto` acepta `sucursales` y sincroniza `ProductoXSucursal`.
 
 ## 6. Frontend
 
@@ -198,11 +205,14 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
 - Tokens en `localStorage` (`corralon.acceso` / `corralon.refresco`); ante 401,
   `pedir()` renueva y reintenta una vez.
 - Módulos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores, Caja,
-  Empleados, Perfil, Actividad. Facturación muestra mantenimiento.
+  Empleados, Perfil, Actividad y Configuración. Facturación muestra mantenimiento.
 - **Cache en memoria + actualización en segundo plano**: patrón obligatorio en
   cada módulo que se revise. Se cachea la última respuesta por usuario y
-  sucursal, se muestra al volver y se refresca sin bloquear. Inicio ya lo hace
-  (refresco cada 15 s y al enfocar la ventana).
+  sucursal, se muestra al volver y se refresca sin bloquear. Inicio y
+  Configuración ya lo hacen (refresco cada 15 s y al enfocar la ventana).
+- Perfil y Configuración comparten `frontend/src/styles/DatosCuenta.css`:
+  cabecera con avatar, grilla de campos inline y edición solo para
+  `AD`/superuser. DNI/CUIT, legajo y estado son solo lectura.
 - Ventas: pestañas Pendientes/Parciales/Confirmadas/Anuladas y filtro Vencidas.
   Pago parcial → Parcial; pago total → Confirmada. El cobro no pide confirmación
   extra. No existe “Por vencer” en la UI.
@@ -233,7 +243,7 @@ cd backend
 ../venv/Scripts/python.exe manage.py check
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 242 tests
+../venv/Scripts/python.exe manage.py test app              # 252 tests
 ../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 

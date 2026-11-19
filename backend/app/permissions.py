@@ -55,6 +55,11 @@ def es_gestion(user):
     return bool(codigos_activos(user) & {ADMIN, GERENTE})
 
 
+class SoloAdministrador(BasePermission):
+    def has_permission(self, request, view):
+        return es_admin(request.user)
+
+
 class PermisoPorRol(BasePermission):
     """Lectura libre para autenticados; escritura segun `roles_escritura`."""
 
