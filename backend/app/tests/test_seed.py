@@ -70,6 +70,17 @@ class SeedStockTests(TestCase):
     def test_toda_venta_tiene_al_menos_un_detalle(self):
         self.assertFalse(Venta.objects.filter(detalles__isnull=True).exists())
 
+    def test_ventas_con_pagos_no_quedan_pendientes(self):
+        self.assertFalse(
+            Venta.objects.filter(
+                estado=Venta.EstadoVenta.PENDIENTE,
+                pagos__isnull=False,
+            ).exists()
+        )
+        self.assertTrue(
+            Venta.objects.filter(estado=Venta.EstadoVenta.PARCIAL).exists()
+        )
+
     def test_cancelar_venta_pendiente_restaura_stock(self):
         venta = Venta.objects.filter(
             estado=Venta.EstadoVenta.PENDIENTE,

@@ -163,7 +163,6 @@ export default function Compras() {
   const [metodos, setMetodos] = useState([])
   const [pagosPago, setPagosPago] = useState([])
   const [pagando, setPagando] = useState(false)
-  const [depositos, setDepositos] = useState([])
   const [modalAbierto, setModalAbierto] = useState(
     () => searchParams.get('nueva') === '1',
   )
@@ -195,20 +194,6 @@ export default function Compras() {
   const pagosIncompletos = pagosPago.some(
     (item) => !item.metodo || montoPago(item.monto) <= 0,
   )
-
-  useEffect(() => {
-    let vigente = true
-    pedirTodas('/depositos/')
-      .then((datosDepositos) => {
-        if (vigente) {
-          setDepositos(datosDepositos)
-        }
-      })
-      .catch(() => {})
-    return () => {
-      vigente = false
-    }
-  }, [])
 
   useEffect(() => {
     const parametros = new URLSearchParams()
@@ -510,22 +495,10 @@ export default function Compras() {
   }
 
   async function recibirCompra(compra) {
-    const opciones = {
-      '': 'Depósito central (por defecto)',
-      ...Object.fromEntries(
-        depositos.map((item) => [
-          String(item.id),
-          `${item.nombre}${item.sucursal_detalle ? ` · ${item.sucursal_detalle}` : ''}`,
-        ]),
-      ),
-    }
     const resultado = await Swal.fire({
       title: `¿Recibir compra #${compra.id}?`,
-      text: 'Elegí el depósito de recepción. Si no elegís, se usa el depósito principal de la sucursal central.',
+      text: 'El stock se repone en el depósito de la compra.',
       icon: 'question',
-      input: 'select',
-      inputOptions: opciones,
-      inputValue: '',
       showCancelButton: true,
       confirmButtonColor: '#4a9da8',
       cancelButtonColor: '#6c757d',
@@ -537,16 +510,11 @@ export default function Compras() {
     }
 
     try {
-      await pedir(`/compras/${compra.id}/recibir/`, {
-        method: 'POST',
-        body: JSON.stringify({
-          deposito: resultado.value ? Number(resultado.value) : null,
-        }),
-      })
+      await pedir(`/compras/${compra.id}/recibir/`, { method: 'POST' })
       Swal.fire({
         icon: 'success',
         title: 'Compra recibida',
-        text: 'El stock fue repuesto en el depósito seleccionado.',
+        text: 'El stock fue repuesto en el depósito de la compra.',
         timer: 1600,
         showConfirmButton: false,
       })
@@ -894,6 +862,9 @@ export default function Compras() {
                           </td>
                           <td className="texto-chico">
                             {compra.movimiento_caja_detalle || '—'}
+                            {compra.deposito_detalle && (
+                              <small>{compra.deposito_detalle}</small>
+                            )}
                           </td>
                           <td className="numero">
                             <strong>{formatearMoneda(compra.monto_compra)}</strong>
@@ -1042,6 +1013,12 @@ export default function Compras() {
               <div>
                 <span>Caja / Sección</span>
                 <strong>{detalle.movimiento_caja_detalle || '—'}</strong>
+              </div>
+              <div>
+                <span>Depósito destino</span>
+                <strong>
+                  {detalle.deposito_detalle || 'Predeterminado de la sucursal'}
+                </strong>
               </div>
               <div>
                 <span>Pago</span>

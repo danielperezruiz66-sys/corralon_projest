@@ -43,6 +43,30 @@ class StockApiTests(BaseCorralonTestCase):
         self.assertEqual(negativo.data['count'], 1)
         self.assertEqual(negativo.data['results'][0]['id'], self.stock.id)
 
+        critico = self.client.get('/api/stocks/', {'alerta': 'critico'})
+        self.assertEqual(critico.data['count'], 2)
+        self.assertEqual(
+            {item['id'] for item in critico.data['results']},
+            {self.stock.id, self.stock_poco.id},
+        )
+
+    def test_stock_sin_minimo_no_aparece_como_bajo(self):
+        self.stock.cantidad = Decimal('0.000')
+        self.stock.save(update_fields=['cantidad'])
+        self.autenticar(self.user_deposito)
+
+        minimo = self.client.get('/api/stocks/', {'alerta': 'minimo'})
+        self.assertEqual(minimo.data['count'], 0)
+
+        critico = self.client.get('/api/stocks/', {'alerta': 'critico'})
+        self.assertEqual(critico.data['count'], 0)
+
+        ok = self.client.get('/api/stocks/', {'alerta': 'ok'})
+        self.assertEqual(ok.data['count'], 2)
+
+        detalle = self.client.get(f'/api/stocks/{self.stock.id}/')
+        self.assertEqual(detalle.data['alerta'], 'OK')
+
     def _detalle_stock(self, stock=None):
         stock = stock or self.stock
         return DetalleStock.objects.filter(stock=stock).order_by('id').first()

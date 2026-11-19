@@ -1326,7 +1326,7 @@ class Command(BaseCommand):
             venta.estado = Venta.EstadoVenta.CONFIRMADA
             self._pagar(venta, total, metodos, 'venta')
         elif estado_pago == 'PENDIENTE_CON_PAGO':
-            venta.estado = Venta.EstadoVenta.PENDIENTE
+            venta.estado = Venta.EstadoVenta.PARCIAL
             porcentaje = Decimal(str(random.uniform(0.3, 0.6)))
             self._pagar(
                 venta,

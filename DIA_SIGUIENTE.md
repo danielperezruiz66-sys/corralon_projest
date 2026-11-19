@@ -1,43 +1,55 @@
-# Pendientes por fases
+# Pendientes
 
-> Solo lo pendiente. Contexto: `AGENTS.md`. Backend cerrado en `524875e`
-> (más la restricción de una sola sucursal). Base local reseteada y sembrada.
+> Único lugar de pendientes. Contexto y reglas en `AGENTS.md`; instalación en
+> `INSTRUCCIONES.md`; credenciales demo en `contraseñas.md`.
+> Se trabaja módulo por módulo, sin fases cerradas: al terminar uno se corrige,
+> se verifica y se actualizan estos pendientes.
 
-## Fase 1 — Frontend Caja
+## Próximo módulo: Ventas
 
-- [ ] `Caja` con `sucursal` + `numero_caja`; eliminar `FormularioAsignacionCaja`
-      y la pestaña de asignaciones.
-- [ ] `/api/secciones-caja/` → `/api/movimientos-caja/` en página, componentes,
-      menú y CSV.
-- [ ] El cierre pide `password` del usuario autenticado.
-- [ ] Ajustar apertura, detalle y acciones (`pausar`, `reanudar`, `auditar`).
+- [ ] Revisar pantalla, estados `PE`/`PC`/`CO`/`AN`, pestañas, acciones de
+      cobro/confirmación/anulación, filtro Vencidas y atajos.
+- [ ] Confirmar que “Por vencer” ya no existe en la UI y que la alerta de
+      vencidas enruta a `/ventas?alerta=vencida`.
+- [ ] Aplicar cache en memoria + actualización en segundo plano (patrón de
+      Inicio) al módulo.
 
-## Fase 2 — Frontend Ventas y Compras
+## Revisión módulo por módulo
 
-- [ ] Selectores de sesión: `seccion_caja` → `movimiento_caja` en venta y compra.
-- [ ] Compra: selector de `deposito` y mostrar el depósito de la compra.
-- [ ] Quitar pestaña **Solicitudes**, badge y acciones de solicitud.
+- [ ] Caja.
+- [ ] Compras.
+- [ ] Clientes.
+- [ ] Inventario.
+- [ ] Proveedores.
+- [ ] Empleados.
+- [ ] Perfil y Actividad.
+- [ ] Menú/encabezado y navegación general.
+- [ ] En cada módulo revisado: cache en memoria, refresco en segundo plano,
+      filtros/atajos correctos y coherencia con la API.
+- [ ] QA visual final con `admin`, `gerente.salta`, `cajero.salta`,
+      `vendedor.salta` y `deposito.salta`.
 
-## Fase 3 — Frontend Inventario
+## Dashboard
 
-- [ ] Quitar pestañas **Movimientos** y **Transferencias** y
-      `FormularioTransferencia`.
-- [ ] Agregar acción **Mover lote** (`/api/detalles-stock/{id}/mover/`).
+- [ ] Verificar las 4 tarjetas (hoy, últimos 7 días, mes calendario, parciales).
+- [ ] Verificar alertas: vencidas, stock negativo/bajo y compras por recibir;
+      enrutamientos a las tarjetas secundarias y desde allí a los módulos.
+- [ ] Verificar cache en memoria (15 s + foco de ventana) y el refresco al
+      volver desde otro módulo.
 
-## Fase 4 — Dashboard, menú y QA
+## Backend
 
-- [ ] Panel de cajas abiertas sobre `MovimientoCaja`.
-- [ ] `npm run lint` y `npm run build`.
-- [ ] QA visual de las fases 1–3.
-
-## Backend (después del frontend)
-
-- [ ] Reversión de pagos para poder anular compras pagadas.
+- [ ] Reversión de pagos para poder anular ventas `PC`/`CO` y compras pagadas.
 - [ ] Dashboard V2: top productos, formas de pago, ventas por sucursal,
       diferencias de caja y actividad reciente.
 - [ ] Omitir desde la API los bloques del dashboard que el rol no puede ver.
 
+## Documentación
+
+- [ ] Sincronizar `INSTRUCCIONES.md` con la base actual: una sucursal, sin
+      usuarios de Campo Quijano.
+
 ## Facturación y operación
 
-- [ ] ARCA bloqueada (CUIT del emisor, certificado y punto de venta).
+- [ ] ARCA bloqueada: CUIT del emisor, certificado y punto de venta.
 - [ ] El barrido de ventas vencidas sigue siendo manual.

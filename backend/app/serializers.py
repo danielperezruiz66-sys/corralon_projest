@@ -1262,7 +1262,7 @@ class StockSerializer(serializers.ModelSerializer):
     def get_alerta(self, obj):
         if obj.cantidad < 0:
             return 'NEGATIVO'
-        if obj.cantidad <= obj.cant_min:
+        if obj.cant_min > 0 and obj.cantidad <= obj.cant_min:
             return 'MINIMO'
         return 'OK'
 

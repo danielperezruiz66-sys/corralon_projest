@@ -92,30 +92,48 @@ export default function Perfil() {
     user?.is_superuser || (user?.codigos ?? []).includes('AD'),
   )
 
+  const aplicarPerfil = useCallback((perfil) => {
+    setDatos(perfil)
+    setValoresPersonales({
+      nombre: perfil.empleado?.nombre ?? '',
+      apellido: perfil.empleado?.apellido ?? '',
+      email: perfil.email ?? '',
+      dni: perfil.empleado?.dni ?? '',
+      telefono: perfil.empleado?.telefono ?? '',
+    })
+  }, [])
+
   const cargar = useCallback(() => {
     setCargando(true)
     setError('')
     pedir('/perfil/')
       .then((perfil) => {
-        setDatos(perfil)
-        setValoresPersonales({
-          nombre: perfil.empleado?.nombre ?? '',
-          apellido: perfil.empleado?.apellido ?? '',
-          email: perfil.email ?? '',
-          dni: perfil.empleado?.dni ?? '',
-          telefono: perfil.empleado?.telefono ?? '',
-        })
+        aplicarPerfil(perfil)
         setCargando(false)
       })
       .catch((e) => {
         setError(e.message)
         setCargando(false)
       })
-  }, [])
+  }, [aplicarPerfil])
 
   useEffect(() => {
-    cargar()
-  }, [cargar])
+    let vigente = true
+    pedir('/perfil/')
+      .then((perfil) => {
+        if (!vigente) return
+        aplicarPerfil(perfil)
+        setCargando(false)
+      })
+      .catch((e) => {
+        if (!vigente) return
+        setError(e.message)
+        setCargando(false)
+      })
+    return () => {
+      vigente = false
+    }
+  }, [aplicarPerfil])
 
   function setValorPersonal(campo, valor) {
     setValoresPersonales((actuales) => ({ ...actuales, [campo]: valor }))

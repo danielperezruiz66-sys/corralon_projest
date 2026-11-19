@@ -274,6 +274,8 @@ def dashboard(request):
 
     bloques = {
         'ventas': gestion or cajero or vendedor,
+        # La alerta de vencimiento queda para quien puede cobrar/confirmar.
+        'alertas_ventas': gestion or cajero,
         'compras': bool(codigos),
         'stock': bool(codigos),
         'caja': gestion or cajero,
@@ -364,6 +366,22 @@ def dashboard(request):
             'ticket_promedio': str(ticket),
         }
 
+    def resumen_con_saldo(queryset):
+        """Resumen de ventas con el saldo que aun falta cobrar."""
+        datos = resumen(queryset)
+        pagado = (
+            MetodoPagoXVenta.objects.filter(venta__in=queryset)
+            .aggregate(total=Sum('monto_pagado'))['total']
+            or Decimal('0.00')
+        )
+        saldo = Decimal(datos['monto']) - pagado
+        if saldo < 0:
+            saldo = Decimal('0.00')
+        return {
+            **datos,
+            'saldo_pendiente': str(saldo.quantize(Decimal('0.01'))),
+        }
+
     def variacion(actual, anterior):
         if anterior == 0:
             return None if actual == 0 else 100.0
@@ -387,8 +405,10 @@ def dashboard(request):
     }
 
     inicio_semana = hoy - timedelta(days=hoy.weekday())
+    # Comparar contra la misma porcion de la semana anterior (lunes -> mismo
+    # dia de la semana) para no castigar una semana que todavia esta en curso.
     inicio_semana_anterior = inicio_semana - timedelta(days=7)
-    fin_semana_anterior = inicio_semana - timedelta(days=1)
+    fin_semana_anterior = inicio_semana_anterior + timedelta(days=hoy.weekday())
 
     ventas_hoy = resumen(ventas_del_rango(hoy, hoy))
     ventas_semana = resumen(ventas_del_rango(inicio_semana, hoy))
@@ -403,8 +423,30 @@ def dashboard(request):
             Decimal(ventas_semana_anterior['monto']),
         ),
     }
+
+    # Mismo periodo que muestra el grafico del dashboard: los ultimos 7 dias
+    # comparados contra los 7 anteriores.
+    inicio_7d = hoy - timedelta(days=6)
+    inicio_7d_anterior = inicio_7d - timedelta(days=7)
+    fin_7d_anterior = inicio_7d - timedelta(days=1)
+    ventas_7d = resumen(ventas_del_rango(inicio_7d, hoy))
+    ventas_7d_anterior = resumen(
+        ventas_del_rango(inicio_7d_anterior, fin_7d_anterior)
+    )
+    comparacion_7d = {
+        'monto_anterior': ventas_7d_anterior['monto'],
+        'cantidad_anterior': ventas_7d_anterior['cantidad'],
+        'variacion_porcentaje': variacion(
+            Decimal(ventas_7d['monto']),
+            Decimal(ventas_7d_anterior['monto']),
+        ),
+    }
+
     ventas_mes = resumen(ventas_del_rango(inicio_mes, hoy))
-    pendientes = resumen(ventas.filter(estado=Venta.EstadoVenta.PENDIENTE))
+    pendientes_qs = ventas.filter(estado=Venta.EstadoVenta.PENDIENTE)
+    parciales_qs = ventas.filter(estado=Venta.EstadoVenta.PARCIAL)
+    pendientes = resumen_con_saldo(pendientes_qs)
+    parciales = resumen_con_saldo(parciales_qs)
     compras_mes = resumen(
         compras.filter(
             fecha_compra__date__gte=inicio_mes,
@@ -441,12 +483,31 @@ def dashboard(request):
     stock_bajo_qs = stocks.filter(
         cantidad__gte=0,
         cantidad__lte=F('cant_min'),
+        cant_min__gt=0,
     )
     stock_negativo_qs = stocks.filter(cantidad__lt=0)
-    stock_critico_qs = stocks.filter(cantidad__lte=F('cant_min'))
+    # Critico = negativo o bajo un minimo configurado. Un producto con
+    # cant_min = 0 no esta "bajo el minimo" aunque tenga stock cero.
+    stock_critico_qs = stocks.filter(
+        Q(cantidad__lt=0)
+        | Q(
+            cantidad__gte=0,
+            cantidad__lte=F('cant_min'),
+            cant_min__gt=0,
+        )
+    )
     compras_pendientes_qs = compras.filter(fecha_recepcion__isnull=True)
     cajas_abiertas_qs = secciones.filter(
         estado=MovimientoCaja.EstadoMovimiento.ABIERTA
+    )
+    cajas_pausadas_qs = secciones.filter(
+        estado=MovimientoCaja.EstadoMovimiento.PAUSADA
+    )
+    cajas_en_curso_qs = secciones.filter(
+        estado__in=[
+            MovimientoCaja.EstadoMovimiento.ABIERTA,
+            MovimientoCaja.EstadoMovimiento.PAUSADA,
+        ]
     )
 
     estados_venta_valida = [
@@ -456,7 +517,7 @@ def dashboard(request):
     filtro_ventas = Q(ventas__estado__in=estados_venta_valida)
     cajas_abiertas = []
     for seccion in (
-        cajas_abiertas_qs.select_related(
+        cajas_en_curso_qs.select_related(
             'caja',
             'caja__sucursal',
             'empleado',
@@ -516,7 +577,10 @@ def dashboard(request):
             'proveedor': str(compra.proveedor or 'Sin proveedor'),
             'fecha_compra': compra.fecha_compra.isoformat(),
             'monto': str(compra.monto_compra),
-            'dias_esperando': max(0, (ahora - compra.fecha_compra).days),
+            'dias_esperando': max(
+                0,
+                (hoy - timezone.localdate(compra.fecha_compra)).days,
+            ),
             'estado': compra.estado,
             'estado_detalle': compra.get_estado_display(),
             'estado_entrega': compra.estado_entrega,
@@ -589,6 +653,7 @@ def dashboard(request):
             'cantidad': str(stock.cantidad),
             'cant_min': str(stock.cant_min),
             'alerta': 'NEGATIVO' if stock.cantidad < 0 else 'MINIMO',
+            'sin_stock': stock.cantidad == 0,
         }
         for stock in stock_critico_qs.select_related(
             'producto', 'sucursal'
@@ -626,6 +691,15 @@ def dashboard(request):
         for item in sucursales_qs
     ]
 
+    # El catalogo se acota a la sucursal elegida: un producto sin asociacion
+    # activa en esa sucursal no se ofrece ni se cuenta en ese contexto.
+    productos_qs = Producto.objects.all()
+    if sucursal is not None:
+        productos_qs = productos_qs.filter(
+            sucursales_asociadas__sucursal=sucursal,
+            sucursales_asociadas__estado=True,
+        ).distinct()
+
     return Response(
         {
             'vista': vista,
@@ -642,6 +716,10 @@ def dashboard(request):
                     **ventas_semana,
                     'comparacion': comparacion_semana,
                 },
+                'ultimos_7_dias': {
+                    **ventas_7d,
+                    'comparacion': comparacion_7d,
+                },
                 'mes': ventas_mes,
                 'periodo': {
                     **periodo_actual,
@@ -653,17 +731,23 @@ def dashboard(request):
                     'vencidas': vencidas_qs.count(),
                     'minutos_restantes': minutos_restantes,
                 },
+                'parciales': parciales,
             },
             'compras': {
                 'pendientes_recepcion': compras_pendientes_qs.count(),
                 'mes': compras_mes,
             },
-            'catalogo': {'productos': Producto.objects.count()},
+            'catalogo': {'productos': productos_qs.count()},
             'stock': {
                 'bajo': stock_bajo_qs.count(),
                 'negativo': stock_negativo_qs.count(),
+                'critico': stock_critico_qs.count(),
             },
-            'caja': {'abiertas': cajas_abiertas_qs.count()},
+            'caja': {
+                'abiertas': cajas_abiertas_qs.count(),
+                'pausadas': cajas_pausadas_qs.count(),
+                'en_curso': cajas_en_curso_qs.count(),
+            },
             'equipo': {
                 'empleados_activos': empleados_qs.count(),
                 'proveedores_activos': proveedores_qs.count(),
@@ -674,8 +758,11 @@ def dashboard(request):
                 'minutos_restantes': minutos_restantes,
                 'stock_negativo': stock_negativo_qs.count(),
                 'stock_bajo': stock_bajo_qs.count(),
+                'stock_critico': stock_critico_qs.count(),
                 'compras_por_recibir': compras_pendientes_qs.count(),
                 'cajas_abiertas': cajas_abiertas_qs.count(),
+                'cajas_pausadas': cajas_pausadas_qs.count(),
+                'cajas_en_curso': cajas_en_curso_qs.count(),
             },
             'serie_etiqueta': (
                 'Mes actual' if periodo == 'mes' else 'Últimos 7 días'
@@ -1340,12 +1427,26 @@ class StockViewSet(
         if alerta == 'negativo':
             queryset = queryset.filter(cantidad__lt=0)
         elif alerta == 'minimo':
+            # Solo cuenta como "bajo el minimo" si hay un minimo configurado:
+            # un producto con cant_min = 0 y stock 0 no esta bajo el minimo.
             queryset = queryset.filter(
                 cantidad__gte=0,
                 cantidad__lte=F('cant_min'),
+                cant_min__gt=0,
+            )
+        elif alerta == 'critico':
+            queryset = queryset.filter(
+                Q(cantidad__lt=0)
+                | Q(
+                    cantidad__gte=0,
+                    cantidad__lte=F('cant_min'),
+                    cant_min__gt=0,
+                )
             )
         elif alerta == 'ok':
-            queryset = queryset.filter(cantidad__gt=F('cant_min'))
+            queryset = queryset.filter(cantidad__gte=0).filter(
+                Q(cant_min=0) | Q(cantidad__gt=F('cant_min'))
+            )
         return queryset
 
     def get_serializer_class(self):

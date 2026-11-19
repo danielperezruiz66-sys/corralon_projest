@@ -2,11 +2,12 @@
 
 Reglas de ventas:
 
-- el pago no cambia el estado de la venta: sigue `PENDIENTE` hasta que el
-  cajero la confirme manualmente con el total cubierto;
-- se permiten pagos parciales mientras la venta esta pendiente;
-- una venta confirmada o anulada no se puede volver a cobrar si ya esta paga
-  o anulada.
+- una venta sin pagos esta `PENDIENTE` y vence a los 30 minutos;
+- un pago parcial la deja `PARCIAL` (no vence y no se puede anular sin
+  revertir los pagos);
+- cuando los pagos cubren el total, la venta queda `CONFIRMADA`: pagada y
+  confirmada son el mismo estado;
+- una venta confirmada o anulada no se puede volver a cobrar.
 
 Las compras conservan `PENDIENTE`, `PARCIAL`, `PAGADA` y `ANULADA`. El pago
 las deja `PARCIAL` o `PAGADA`; la recepcion es un estado logistico aparte y no
@@ -54,11 +55,21 @@ def _pagado(objeto):
     return total if total is not None else Decimal('0.00')
 
 
+def _estado_venta_segun_pago(venta, pagado):
+    if pagado <= 0:
+        return Venta.EstadoVenta.PENDIENTE
+    if pagado < venta.monto_venta:
+        return Venta.EstadoVenta.PARCIAL
+    return Venta.EstadoVenta.CONFIRMADA
+
+
 @transaction.atomic
 def registrar_pago_venta(venta, metodo_pago, monto, clave=''):
     venta = Venta.objects.select_for_update().get(pk=venta.pk)
     if venta.estado == Venta.EstadoVenta.ANULADA:
         raise ValueError('No se puede registrar un pago sobre una venta anulada.')
+    if venta.estado == Venta.EstadoVenta.CONFIRMADA:
+        raise ValueError('La venta ya está confirmada.')
 
     if clave:
         existentes = list(MetodoPagoXVenta.objects.filter(venta=venta, clave=clave))
@@ -75,21 +86,27 @@ def registrar_pago_venta(venta, metodo_pago, monto, clave=''):
             f'Pendiente: {venta.monto_venta - pagado}.'
         )
 
-    return MetodoPagoXVenta.objects.create(
+    pago = MetodoPagoXVenta.objects.create(
         venta=venta,
         metodo_pago=metodo_pago,
         monto_pagado=monto,
         clave=clave,
     )
+    nuevo_estado = _estado_venta_segun_pago(venta, _pagado(venta))
+    if venta.estado != nuevo_estado:
+        venta.estado = nuevo_estado
+        venta.save(update_fields=['estado'])
+    return pago
 
 
 @transaction.atomic
 def registrar_pagos_venta(venta, pagos, confirmar=False, clave=''):
-    """Registra varios métodos de pago para una venta en una sola transaccion.
+    """Registra varios metodos de pago para una venta en una sola transaccion.
 
-    Si `confirmar` es True, exige que la suma de los pagos cubra el saldo y
-    deja la venta Confirmada. Si es False, la venta sigue Pendiente aunque
-    los pagos cubran el total.
+    Si los pagos no cubren el total, la venta queda `PARCIAL`. Si lo cubren,
+    queda `CONFIRMADA` (pagada y confirmada son el mismo estado). El flag
+    `confirmar` se mantiene por compatibilidad: cuando es True exige que los
+    pagos cubran el total antes de registrar.
 
     `clave` es la clave de idempotencia: si la misma operacion se reintenta,
     se devuelven los pagos ya registrados en vez de cobrarlos dos veces.
@@ -140,9 +157,9 @@ def registrar_pagos_venta(venta, pagos, confirmar=False, clave=''):
         for metodo_pago, monto in preparados
     ]
 
-    if confirmar:
-        venta.estado = Venta.EstadoVenta.CONFIRMADA
-        venta.save(update_fields=['estado'])
+    nuevo_estado = _estado_venta_segun_pago(venta, _pagado(venta))
+    venta.estado = nuevo_estado
+    venta.save(update_fields=['estado'])
 
     return creados, venta
 

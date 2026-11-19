@@ -891,6 +891,7 @@ class Cliente(models.Model):
 class Venta(models.Model):
     class EstadoVenta(models.TextChoices):
         PENDIENTE = 'PE', 'Pendiente'
+        PARCIAL = 'PC', 'Parcial'
         CONFIRMADA = 'CO', 'Confirmada'
         ANULADA = 'AN', 'Anulada'
 

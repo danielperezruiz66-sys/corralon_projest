@@ -187,26 +187,8 @@ DASHBOARD DE INICIO - FER-CONS
 /* KPIs */
 .dashboard-kpis {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 1rem;
-}
-
-@media (max-width: 1279px) {
-  .dashboard-kpis {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 899px) {
-  .dashboard-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 560px) {
-  .dashboard-kpis {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .kpi-tarjeta {
@@ -320,6 +302,15 @@ DASHBOARD DE INICIO - FER-CONS
 
 .dashboard-grid-inferior {
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+}
+
+.dashboard-grid-solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.panel-nota-pie {
+  margin: 0.5rem 0 0;
+  text-align: right;
 }
 
 @media (max-width: 1023px) {
@@ -475,11 +466,12 @@ DASHBOARD DE INICIO - FER-CONS
 /* Mini datos */
 .dashboard-mini {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.75rem;
-  border-top: 1px solid rgba(15, 42, 48, 0.12);
-  margin-top: 1rem;
-  padding-top: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1rem;
+  border-radius: 1.25rem;
+  background-color: #ffffff;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 10px 24px rgba(15, 42, 48, 0.06);
 }
 
 .mini-dato {
@@ -536,7 +528,6 @@ DASHBOARD DE INICIO - FER-CONS
   font-size: 0.75rem;
 }
 
-.stock-item-enlace,
 .compra-item-enlace,
 .vencimiento-item-enlace {
   color: inherit;
@@ -546,7 +537,6 @@ DASHBOARD DE INICIO - FER-CONS
     transform 0.15s ease;
 }
 
-.stock-item-enlace:hover,
 .compra-item-enlace:hover,
 .vencimiento-item-enlace:hover {
   background-color: #eef6f6;
@@ -616,6 +606,19 @@ DASHBOARD DE INICIO - FER-CONS
 .caja-item small {
   color: rgba(15, 42, 48, 0.6);
   font-size: 0.72rem;
+}
+
+.caja-item-pausa {
+  align-self: flex-start;
+  margin-top: 0.15rem;
+  border-radius: 999px;
+  background-color: rgba(214, 158, 46, 0.16);
+  color: #8a6416;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .caja-item-horario {
