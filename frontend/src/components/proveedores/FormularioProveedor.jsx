@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Swal from 'sweetalert2'
 import { IconLoader2, IconTruck, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
+import { useSucursal } from '../../context/sucursal-context'
 import MensajeError from '../common/MensajeError.jsx'
 import {
   normalizarDocumento,
@@ -12,11 +13,10 @@ import {
 
 export default function FormularioProveedor({
   proveedor = null,
-  sucursales = [],
-  sucursalActiva = '',
   onCerrar,
   onGuardado,
 }) {
+  const { sucursalActiva } = useSucursal()
   const esEdicion = Boolean(proveedor?.id)
   const [cuit, setCuit] = useState(proveedor?.cuit || '')
   const [nombre, setNombre] = useState(proveedor?.nombre || '')
@@ -24,25 +24,8 @@ export default function FormularioProveedor({
   const [contacto, setContacto] = useState(proveedor?.contacto || '')
   const [email, setEmail] = useState(proveedor?.email_prov || '')
   const [estado, setEstado] = useState(proveedor?.estado_prov ?? true)
-  const [seleccionadas, setSeleccionadas] = useState(() => {
-    if (proveedor?.sucursales_activas) {
-      return proveedor.sucursales_activas.map(Number)
-    }
-    if (sucursalActiva) {
-      return [Number(sucursalActiva)]
-    }
-    return sucursales.map((item) => item.id)
-  })
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
-
-  function alternarSucursal(id) {
-    setSeleccionadas((actuales) =>
-      actuales.includes(id)
-        ? actuales.filter((item) => item !== id)
-        : [...actuales, id],
-    )
-  }
 
   async function guardar(evento) {
     evento.preventDefault()
@@ -86,14 +69,20 @@ export default function FormularioProveedor({
       nuevos.email_prov = errorEmail
     }
 
-    if (seleccionadas.length === 0) {
-      nuevos.sucursales = 'Seleccioná al menos una sucursal.'
-    }
-
     if (Object.keys(nuevos).length > 0) {
       setErrores(nuevos)
       requestAnimationFrame(() => {
         document.querySelector('.input-error')?.focus()
+      })
+      return
+    }
+
+    if (!sucursalActiva) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo guardar el proveedor',
+        text: 'Faltan datos de configuración de tu usuario. Contactá al administrador.',
+        confirmButtonColor: '#4a9da8',
       })
       return
     }
@@ -112,14 +101,17 @@ export default function FormularioProveedor({
             contacto: contacto.trim() || null,
             email_prov: email.trim() || null,
             estado_prov: estado,
-            sucursales: seleccionadas,
+            sucursales: [Number(sucursalActiva)],
           }),
         },
       )
       onGuardado?.(guardado, esEdicion)
     } catch (e) {
-      if (e.campos) {
-        setErrores(e.campos)
+      const campos = { ...(e.campos || {}) }
+      const errorAsociacion = campos.sucursales
+      delete campos.sucursales
+      if (Object.keys(campos).length > 0) {
+        setErrores(campos)
         requestAnimationFrame(() => {
           document.querySelector('.input-error')?.focus()
         })
@@ -128,7 +120,9 @@ export default function FormularioProveedor({
       Swal.fire({
         icon: 'error',
         title: 'No se pudo guardar el proveedor',
-        text: e.message,
+        text: errorAsociacion
+          ? 'Verificá la configuración de tu usuario e intentá de nuevo.'
+          : e.message,
         confirmButtonColor: '#4a9da8',
       })
     } finally {
@@ -220,23 +214,6 @@ export default function FormularioProveedor({
             />
             <span>Proveedor activo</span>
           </label>
-
-          <div className="campo-comercial ancho-completo">
-            <span>Sucursales activas *</span>
-            <div className="inventario-sucursales">
-              {sucursales.map((sucursal) => (
-                <label key={sucursal.id} className="campo-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={seleccionadas.includes(sucursal.id)}
-                    onChange={() => alternarSucursal(sucursal.id)}
-                  />
-                  <span>{sucursal.nombre}</span>
-                </label>
-              ))}
-            </div>
-            <MensajeError>{errores.sucursales}</MensajeError>
-          </div>
 
           <div className="comercial-modal-acciones ancho-completo">
             <button

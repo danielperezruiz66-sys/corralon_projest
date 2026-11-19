@@ -8,8 +8,12 @@ export function SucursalProvider({ children }) {
   const { user } = useAuth()
   const sucursales = useMemo(() => user?.sucursales ?? [], [user])
 
-  // El sistema opera con una sola sucursal: la que devuelve el perfil.
-  const sucursalDetalle = sucursales[0] ?? null
+  // El sistema opera con una sola sucursal. Si el perfil devuelve varias
+  // (por ejemplo, una base vieja), se usa la marcada como central.
+  const sucursalDetalle =
+    sucursales.find((sucursal) => sucursal.es_central) ??
+    sucursales[0] ??
+    null
   const sucursalActiva = sucursalDetalle
     ? String(sucursalDetalle.id)
     : ''

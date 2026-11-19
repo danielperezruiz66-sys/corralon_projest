@@ -18,7 +18,6 @@ import Encabezado from '../components/Encabezado.jsx'
 import FormularioProductoProveedor from '../components/proveedores/FormularioProductoProveedor.jsx'
 import FormularioProveedor from '../components/proveedores/FormularioProveedor.jsx'
 import { useAuth } from '../context/auth-context'
-import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
 import { formatearMoneda } from '../utils/formato'
@@ -45,7 +44,6 @@ const ESTADOS = [
 
 export default function Proveedores() {
   const { puedeEscribir } = useAuth()
-  const { sucursalActiva } = useSucursal()
   const puedeEditar = puedeEscribir(['GE', 'ED'])
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState(() => searchParams.get('tab') || 'proveedores')
@@ -63,8 +61,6 @@ export default function Proveedores() {
   const [error, setError] = useState('')
   const [refresco, setRefresco] = useState(0)
 
-  const [sucursales, setSucursales] = useState([])
-
   const [proveedorEditando, setProveedorEditando] = useState(null)
   const [costoEditando, setCostoEditando] = useState(null)
   const [detalleProveedor, setDetalleProveedor] = useState(null)
@@ -72,26 +68,6 @@ export default function Proveedores() {
 
   const busqueda = useDebounce(texto.trim(), 350)
   const buscando = texto.trim() !== busqueda || actualizando
-
-  useEffect(() => {
-    let vigente = true
-    pedirTodas('/sucursales/')
-      .then((sucursalesData) => {
-        if (!vigente) {
-          return
-        }
-        setSucursales(sucursalesData)
-      })
-      .catch((e) => {
-        if (vigente) {
-          setError(e.message)
-        }
-      })
-
-    return () => {
-      vigente = false
-    }
-  }, [])
 
   useEffect(() => {
     const parametros = new URLSearchParams()
@@ -301,7 +277,6 @@ export default function Proveedores() {
           'CUIT',
           'Contacto',
           'Email',
-          'Sucursales',
           'Estado',
         ]
         filas = todos.map((item) => [
@@ -310,7 +285,6 @@ export default function Proveedores() {
           item.cuit,
           item.contacto || '',
           item.email_prov || '',
-          (item.sucursales_detalle || []).join(' / '),
           item.estado_prov ? 'Activo' : 'Inactivo',
         ])
       } else {
@@ -351,7 +325,7 @@ export default function Proveedores() {
     <>
       <Encabezado
         titulo="Proveedores"
-        subtitulo="Información, sucursales y costos"
+        subtitulo="Información y costos"
       />
 
       <div className="comercial inventario">
@@ -469,7 +443,6 @@ export default function Proveedores() {
                     <th>CUIT</th>
                     <th>Contacto</th>
                     <th>Email</th>
-                    <th>Sucursales</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
@@ -477,14 +450,14 @@ export default function Proveedores() {
                 <tbody>
                   {cargando && (
                     <tr>
-                      <td colSpan="8" className="comercial-vacio">
+                      <td colSpan="7" className="comercial-vacio">
                         Cargando proveedores…
                       </td>
                     </tr>
                   )}
                   {!cargando && datos.results.length === 0 && (
                     <tr>
-                      <td colSpan="8" className="comercial-vacio">
+                      <td colSpan="7" className="comercial-vacio">
                         No se encontraron proveedores.
                       </td>
                     </tr>
@@ -498,9 +471,6 @@ export default function Proveedores() {
                       <td className="mono">{item.cuit}</td>
                       <td>{item.contacto || '—'}</td>
                       <td>{item.email_prov || '—'}</td>
-                      <td className="texto-chico">
-                        {(item.sucursales_detalle || []).join(' / ') || '—'}
-                      </td>
                       <td>
                         <button
                           type="button"
@@ -629,10 +599,8 @@ export default function Proveedores() {
 
       {proveedorEditando !== null && (
         <FormularioProveedor
-          key={sucursalActiva || 'todas'}
+          key={proveedorEditando.id ?? 'nuevo'}
           proveedor={proveedorEditando}
-          sucursales={sucursales}
-          sucursalActiva={sucursalActiva}
           onCerrar={() => setProveedorEditando(null)}
           onGuardado={guardadoProveedor}
         />
@@ -641,8 +609,6 @@ export default function Proveedores() {
       {costoEditando !== null && (
         <FormularioProductoProveedor
           asociacion={costoEditando}
-          sucursales={sucursales}
-          sucursalActiva={sucursalActiva}
           onCerrar={() => setCostoEditando(null)}
           onGuardado={guardadoCosto}
         />
@@ -682,13 +648,6 @@ export default function Proveedores() {
               <div>
                 <span>Email</span>
                 <strong>{detalleProveedor.email_prov || '—'}</strong>
-              </div>
-              <div>
-                <span>Sucursales</span>
-                <strong>
-                  {(detalleProveedor.sucursales_detalle || []).join(' / ') ||
-                    '—'}
-                </strong>
               </div>
               <div>
                 <span>Estado</span>

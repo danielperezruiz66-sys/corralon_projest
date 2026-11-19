@@ -10,8 +10,6 @@ import FormularioProveedor from './FormularioProveedor.jsx'
 
 export default function FormularioProductoProveedor({
   asociacion = null,
-  sucursales = [],
-  sucursalActiva = '',
   onCerrar,
   onGuardado,
 }) {
@@ -271,8 +269,6 @@ export default function FormularioProductoProveedor({
 
       {proveedorRapido && (
         <FormularioProveedor
-          sucursales={sucursales}
-          sucursalActiva={sucursalActiva}
           onCerrar={() => setProveedorRapido(false)}
           onGuardado={proveedorCreado}
         />
