@@ -18,7 +18,6 @@ import FormularioEmpleado from '../components/empleados/FormularioEmpleado.jsx'
 import { useAuth } from '../context/auth-context'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv } from '../utils/csv'
-import { useSucursal } from '../context/sucursal-context'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
 import '../styles/Empleados.css'
@@ -56,7 +55,6 @@ const ROLES = [
 
 export default function Empleados() {
   const { user, puedeEscribir } = useAuth()
-  const { sucursalActiva } = useSucursal()
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
   const esAdministrador = Boolean(
     user?.is_superuser || (user?.codigos ?? []).includes('AD'),
@@ -112,9 +110,6 @@ export default function Empleados() {
     if (rol) {
       parametros.set('rol', rol)
     }
-    if (sucursalActiva) {
-      parametros.set('sucursal', sucursalActiva)
-    }
 
     pedir(`/empleados/?${parametros.toString()}`)
       .then((datosPagina) => {
@@ -136,7 +131,7 @@ export default function Empleados() {
     return () => {
       vigente = false
     }
-  }, [busqueda, estado, rol, pagina, refresco, sucursalActiva])
+  }, [busqueda, estado, rol, pagina, refresco])
 
   function irAPagina(numero) {
     setPagina(numero)
@@ -179,9 +174,6 @@ export default function Empleados() {
       if (rol) {
         parametros.set('rol', rol)
       }
-      if (sucursalActiva) {
-        parametros.set('sucursal', sucursalActiva)
-      }
 
       const todos = await pedirTodas(
         `/empleados/?${parametros.toString()}`,
@@ -202,13 +194,12 @@ export default function Empleados() {
         empleado.dni,
         empleado.telefono || '',
         (empleado.roles_detalle || []).join(', '),
-        (empleado.sucursales_detalle || []).join(', '),
         empleado.usuario_detalle || 'Sin acceso',
         ETIQUETA_ESTADO[empleado.estado] ?? empleado.estado,
       ])
       descargarCsv(
         `empleados-${new Date().toISOString().slice(0, 10)}.csv`,
-        ['Legajo', 'Empleado', 'DNI', 'Teléfono', 'Roles', 'Sucursales', 'Usuario', 'Estado'],
+        ['Legajo', 'Empleado', 'DNI', 'Teléfono', 'Roles', 'Usuario', 'Estado'],
         filas,
       )
     } catch (e) {
@@ -230,7 +221,7 @@ export default function Empleados() {
         subtitulo="Administración de empleados, roles y accesos"
       />
 
-      <div className="comercial inventario" key={sucursalActiva || 'todas'}>
+      <div className="comercial inventario">
         <section className="comercial-barra">
           <form
             className="comercial-busqueda"
@@ -325,7 +316,6 @@ export default function Empleados() {
                   <th>DNI</th>
                   <th>Teléfono</th>
                   <th>Roles</th>
-                  <th>Sucursales</th>
                   <th>Acceso</th>
                   <th>Estado</th>
                   <th>Acciones</th>
@@ -334,14 +324,14 @@ export default function Empleados() {
               <tbody>
                 {cargando && (
                   <tr>
-                    <td colSpan="9" className="comercial-vacio">
+                    <td colSpan="8" className="comercial-vacio">
                       Cargando empleados…
                     </td>
                   </tr>
                 )}
                 {!cargando && !error && datos.results.length === 0 && (
                   <tr>
-                    <td colSpan="9" className="comercial-vacio">
+                    <td colSpan="8" className="comercial-vacio">
                       No se encontraron empleados.
                     </td>
                   </tr>
@@ -368,9 +358,6 @@ export default function Empleados() {
                             <span className="empleados-nota">—</span>
                           )}
                         </div>
-                      </td>
-                      <td className="empleados-sucursales">
-                        {(empleado.sucursales_detalle || []).join(' / ') || '—'}
                       </td>
                       <td>{empleado.usuario_detalle || 'Sin acceso'}</td>
                       <td>
