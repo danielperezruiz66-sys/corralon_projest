@@ -36,3 +36,6 @@ dist-ssr/
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Historial local de sesiones
+HISTORIAL_CHAT_ANTERIOR.md

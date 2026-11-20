@@ -30,10 +30,3 @@
 
 - [ ] ARCA bloqueada: certificado y punto de venta.
 - [ ] El barrido de ventas vencidas sigue siendo manual.
-
-## Control de cambios
-
-- [ ] Commitear en `combinacion-etapas` los cambios de Configuración, la unificación
-      visual de Perfil/Configuración, los permisos de perfil y el arreglo de
-      `Login.css`; no incluir `HISTORIAL_CHAT_ANTERIOR.md`.
-- [ ] Confirmar push de `combinacion-etapas`.
