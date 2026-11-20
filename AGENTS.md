@@ -206,6 +206,8 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
   `pedir()` renueva y reintenta una vez.
 - Módulos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores, Caja,
   Empleados, Perfil, Actividad y Configuración. Facturación muestra mantenimiento.
+- El menú lateral inicia cerrado (solo iconos) y las categorías arrancan
+  colapsadas al entrar; el usuario las abre a mano.
 - **Cache en memoria + actualización en segundo plano**: patrón obligatorio en
   cada módulo que se revise. Se cachea la última respuesta por usuario y
   sucursal, se muestra al volver y se refresca sin bloquear. Inicio y

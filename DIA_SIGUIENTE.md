@@ -11,6 +11,8 @@
       que guarda datos de la empresa sin errores.
 - [ ] Confirmar que **Perfil** y **Configuración** se ven parecidos y que solo
       `admin`/superusuario edita campos; los demás roles ven todo en lectura.
+- [ ] Confirmar que al iniciar sesión el menú lateral arranca cerrado (solo
+      iconos) y las categorías aparecen colapsadas.
 
 ## Backend
 

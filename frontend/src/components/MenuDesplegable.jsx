@@ -19,16 +19,16 @@ const clasesInferior = ({ isActive }) =>
   `item-inferior-base ${isActive ? 'item-inferior-activo' : 'item-inferior-inactivo'}`
 
 export default function MenuDesplegable() {
-  const [abierto, setAbierto] = useState(true)
+  const [abierto, setAbierto] = useState(false)
   const [menuMovil, setMenuMovil] = useState(false)
   const [esMovil, setEsMovil] = useState(
     () => window.matchMedia('(max-width: 767px)').matches,
   )
   const [categoriasAbiertas, setCategoriasAbiertas] = useState({
-    comercial: true,
-    inventario: true,
-    administracion: true,
-    sistema: true,
+    comercial: false,
+    inventario: false,
+    administracion: false,
+    sistema: false,
   })
 
   const { user, logout, puedeVer } = useAuth()
