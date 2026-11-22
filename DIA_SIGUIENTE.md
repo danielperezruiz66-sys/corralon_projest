@@ -5,13 +5,26 @@
 > Se trabaja módulo por módulo, sin fases cerradas: al terminar uno se corrige,
 > se verifica y se actualizan estos pendientes.
 
+## Contexto al cierre — 2026-11-22
+
+- Solución #1 cerrada: constraints únicos en las 3 relaciones N:M, validadores
+  de precio, bloqueo de costos duplicados con `PATCH` del existente y tests.
+- Integración visual de `combinacion-etapas`: estilos compartidos, módulo
+  Configuración, Perfil/Actividad/Facturación rediseñados y **toda la UI sin
+  sucursales** (sin filtros, columnas ni checklists).
+- `useCacheModulo` aplicado en todos los módulos: Inicio, Ventas, Compras,
+  Inventario, Proveedores, Clientes, Caja, Empleados, Actividad, Facturación,
+  Perfil y Configuración.
+- QA de 12 rutas sin errores de consola; flujo de costo duplicado revalidado.
+- Backend: 259 tests OK. Frontend: lint 0 warnings y build OK.
+- La rama `main` quedó actualizada con este estado.
+
 ## Próximo módulo: Caja
 
 - [ ] Revisar pantalla, secciones `AB`/`PA`/`CE`/`AU`, apertura, cierre,
       pausa, reanudación, auditoría y arqueo por método.
 - [ ] Verificar montos sugeridos, notas inborrables y permisos (`CA` en sus
       sucursales, `AD/GE` en cualquiera).
-- [ ] Aplicar `useCacheModulo` al módulo.
 
 ## Ventas
 
