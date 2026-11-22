@@ -1,8 +1,8 @@
 """El seed tiene que dejar un libro de stock coherente.
 
 Los tests crean la base vacia y corren el comando completo, para verificar que
-las ventas y las compras historicas generen sus `MovimientoStock` y que el
-stock siga cuadrando con la suma de sus detalles.
+las ventas descuenten stock con sus consumos registrados y que el stock
+siga cuadrando con la suma de sus detalles.
 """
 
 from decimal import Decimal
@@ -20,7 +20,6 @@ from app.models import (
     DetalleVenta,
     Empleado,
     EmpleadoXRol,
-    MovimientoStock,
     Producto,
     ProductoXProveedor,
     Stock,
@@ -41,65 +40,20 @@ class SeedStockTests(TestCase):
             stdout=StringIO(),
         )
 
-    def test_genera_movimientos_de_compra_y_venta(self):
-        tipos = set(
-            MovimientoStock.objects.values_list('tipo', flat=True).distinct()
-        )
-
-        self.assertEqual(
-            tipos,
-            {
-                MovimientoStock.TipoMovimiento.COMPRA,
-                MovimientoStock.TipoMovimiento.VENTA,
-            },
-        )
-
-    def test_cada_venta_tiene_sus_movimientos(self):
+    def test_cada_venta_registra_los_lotes_consumidos(self):
         for venta in Venta.objects.prefetch_related('detalles'):
-            movimientos = venta.movimientos_stock.filter(
-                tipo=MovimientoStock.TipoMovimiento.VENTA
-            )
-            self.assertTrue(
-                movimientos.exists(),
-                f'La venta {venta.pk} no genero movimientos de stock.',
-            )
-            cantidad = sum(
-                (detalle.cantidad_venta for detalle in venta.detalles.all()),
-                Decimal('0.000'),
-            )
-            total_movido = sum(
-                (movimiento.cantidad for movimiento in movimientos),
-                Decimal('0.000'),
-            )
-            self.assertEqual(total_movido, -cantidad)
+            for detalle in venta.detalles.all():
+                self.assertTrue(
+                    detalle.consumos,
+                    f'La venta {venta.pk} no registro los lotes consumidos.',
+                )
 
-    def test_cada_compra_tiene_sus_movimientos(self):
-        for compra in Compra.objects.prefetch_related('detalles'):
-            movimientos = compra.movimientos_stock.filter(
-                tipo=MovimientoStock.TipoMovimiento.COMPRA
-            )
-            self.assertTrue(
-                movimientos.exists(),
-                f'La compra {compra.pk} no genero movimientos de stock.',
-            )
-            cantidad = sum(
-                (detalle.cantidad_compra for detalle in compra.detalles.all()),
-                Decimal('0.000'),
-            )
-            total_movido = sum(
-                (movimiento.cantidad for movimiento in movimientos),
-                Decimal('0.000'),
-            )
-            self.assertEqual(total_movido, cantidad)
-
-    def test_movimientos_quedan_con_la_fecha_del_documento(self):
-        for venta in Venta.objects.all():
-            for movimiento in venta.movimientos_stock.all():
-                self.assertEqual(movimiento.fecha, venta.fecha_venta)
-
+    def test_cada_compra_tiene_deposito(self):
         for compra in Compra.objects.all():
-            for movimiento in compra.movimientos_stock.all():
-                self.assertEqual(movimiento.fecha, compra.fecha_recepcion)
+            self.assertIsNotNone(
+                compra.deposito_id,
+                f'La compra {compra.pk} no tiene deposito.',
+            )
 
     def test_stock_coincide_con_la_suma_de_sus_detalles(self):
         for stock in Stock.objects.prefetch_related('detalles'):
@@ -116,6 +70,17 @@ class SeedStockTests(TestCase):
     def test_toda_venta_tiene_al_menos_un_detalle(self):
         self.assertFalse(Venta.objects.filter(detalles__isnull=True).exists())
 
+    def test_ventas_con_pagos_no_quedan_pendientes(self):
+        self.assertFalse(
+            Venta.objects.filter(
+                estado=Venta.EstadoVenta.PENDIENTE,
+                pagos__isnull=False,
+            ).exists()
+        )
+        self.assertTrue(
+            Venta.objects.filter(estado=Venta.EstadoVenta.PARCIAL).exists()
+        )
+
     def test_cancelar_venta_pendiente_restaura_stock(self):
         venta = Venta.objects.filter(
             estado=Venta.EstadoVenta.PENDIENTE,
@@ -126,7 +91,7 @@ class SeedStockTests(TestCase):
         detalle = venta.detalles.first()
         stock = Stock.objects.get(
             producto=detalle.producto,
-            sucursal=venta.seccion_caja.sucursal_caja.sucursal,
+            sucursal=venta.movimiento_caja.caja.sucursal,
         )
         cantidad_antes = stock.cantidad
 
@@ -139,28 +104,20 @@ class SeedStockTests(TestCase):
             stock.cantidad,
             cantidad_antes + detalle.cantidad_venta,
         )
-        self.assertTrue(
-            MovimientoStock.objects.filter(
-                venta=venta,
-                tipo=MovimientoStock.TipoMovimiento.CANCELACION,
-            ).exists()
-        )
+
 
     def test_no_genera_detalles_negativos(self):
         self.assertFalse(DetalleStock.objects.filter(cantidad__lt=0).exists())
 
-    def test_dos_sucursales_en_salta(self):
+    def test_una_sucursal_por_empresa(self):
         sucursales = list(
             Sucursal.objects.select_related(
                 'ubicacion__localidad__provincia'
             )
         )
 
-        self.assertEqual(len(sucursales), 2)
-        self.assertEqual(
-            {sucursal.nombre for sucursal in sucursales},
-            {'Salta Capital', 'Campo Quijano'},
-        )
+        self.assertEqual(len(sucursales), 1)
+        self.assertEqual({sucursal.nombre for sucursal in sucursales}, {'Salta Capital'})
         for sucursal in sucursales:
             self.assertEqual(
                 sucursal.ubicacion.localidad.provincia.nombre,
@@ -178,33 +135,44 @@ class SeedStockTests(TestCase):
                 sucursal.depositos.filter(es_predeterminado=True).count(),
                 1,
             )
-            self.assertEqual(sucursal.cajas_asignadas.count(), 2)
+            self.assertEqual(sucursal.cajas.count(), 2)
+            self.assertEqual(
+                set(sucursal.cajas.values_list('numero_caja', flat=True)),
+                {1, 2},
+            )
         self.assertEqual(Caja.objects.count(), 2)
-        # La misma caja fisica esta habilitada en ambas sucursales.
-        for caja in Caja.objects.all():
-            self.assertEqual(caja.sucursales_asignadas.count(), 2)
 
-    def test_cada_sucursal_tiene_cuatro_empleados_con_roles(self):
+    def test_cada_sucursal_tiene_empleados_con_roles(self):
         for sucursal in Sucursal.objects.all():
             empleados = Empleado.objects.filter(
                 sucursales_asignadas__sucursal=sucursal,
                 sucursales_asignadas__estado=True,
             ).distinct()
 
-            self.assertEqual(empleados.count(), 4)
             codigos = set(
                 EmpleadoXRol.objects.filter(
                     empleado__in=empleados,
                     estado='AC',
                 ).values_list('rol__codigo', flat=True)
             )
-            self.assertEqual(codigos, {'AD', 'CA', 'VE', 'ED'})
+            self.assertTrue({'AD', 'CA', 'VE', 'ED'}.issubset(codigos))
 
-        self.assertEqual(Empleado.objects.count(), 8)
+        # El seed crea 4 empleados por sucursal y suma un gerente de prueba.
+        self.assertEqual(Empleado.objects.count(), 5)
+        gerente = Empleado.objects.get(legajo='0009')
+        self.assertEqual(
+            set(
+                gerente.roles_asignados.filter(estado='AC').values_list(
+                    'rol__codigo',
+                    flat=True,
+                )
+            ),
+            {'GE'},
+        )
 
     def test_productos_tienen_catalogo_costo_y_stock(self):
         self.assertEqual(Producto.objects.count(), 30)
-        self.assertEqual(Stock.objects.count(), 60)
+        self.assertEqual(Stock.objects.count(), 30)
 
         for producto in Producto.objects.select_related(
             'categoria',
@@ -258,12 +226,12 @@ class SeedStockTests(TestCase):
         for sucursal in Sucursal.objects.all():
             self.assertTrue(
                 Venta.objects.filter(
-                    seccion_caja__sucursal_caja__sucursal=sucursal,
+                    movimiento_caja__caja__sucursal=sucursal,
                 ).exists()
             )
             self.assertTrue(
                 Compra.objects.filter(
-                    seccion_caja__sucursal_caja__sucursal=sucursal,
+                    movimiento_caja__caja__sucursal=sucursal,
                 ).exists()
             )
 

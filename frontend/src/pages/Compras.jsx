@@ -26,8 +26,10 @@ import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
+import { nuevaClave } from '../utils/clave'
 import { formatearFecha, formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/components/comercial/Cobro.css'
 
 const PAGINA_VACIA = {
   count: 0,
@@ -125,7 +127,8 @@ function fechaMinimaLlegada() {
 export default function Compras() {
   const { puedeEscribir } = useAuth()
   const { sucursalActiva } = useSucursal()
-  const puedeCrear = puedeEscribir(['AD', 'GE', 'ED'])
+  const puedeCrear = puedeEscribir(['AD', 'GE', 'ED', 'CA', 'VE'])
+  const puedeOperar = puedeEscribir(['AD', 'GE', 'ED', 'CA', 'VE'])
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
   const [searchParams, setSearchParams] = useSearchParams()
   const [datos, setDatos] = useState(PAGINA_VACIA)
@@ -160,10 +163,10 @@ export default function Compras() {
   const [metodos, setMetodos] = useState([])
   const [pagosPago, setPagosPago] = useState([])
   const [pagando, setPagando] = useState(false)
-  const [depositos, setDepositos] = useState([])
   const [modalAbierto, setModalAbierto] = useState(
     () => searchParams.get('nueva') === '1',
   )
+  const [clavePago, setClavePago] = useState('')
 
   const textoDiferido = useDebounce(texto.trim(), 350)
   const busqueda = textoDiferido
@@ -191,20 +194,6 @@ export default function Compras() {
   const pagosIncompletos = pagosPago.some(
     (item) => !item.metodo || montoPago(item.monto) <= 0,
   )
-
-  useEffect(() => {
-    let vigente = true
-    pedirTodas('/depositos/')
-      .then((datosDepositos) => {
-        if (vigente) {
-          setDepositos(datosDepositos)
-        }
-      })
-      .catch(() => {})
-    return () => {
-      vigente = false
-    }
-  }, [])
 
   useEffect(() => {
     const parametros = new URLSearchParams()
@@ -417,7 +406,7 @@ export default function Compras() {
         compra.id,
         formatearFechaHora(compra.fecha_compra),
         compra.proveedor_detalle || 'Sin proveedor',
-        compra.seccion_caja_detalle || '',
+        compra.movimiento_caja_detalle || '',
         numeroCsv(compra.monto_compra),
         compra.estado_detalle,
         etiquetaEntrega(compra),
@@ -506,22 +495,10 @@ export default function Compras() {
   }
 
   async function recibirCompra(compra) {
-    const opciones = {
-      '': 'Depósito central (por defecto)',
-      ...Object.fromEntries(
-        depositos.map((item) => [
-          String(item.id),
-          `${item.nombre}${item.sucursal_detalle ? ` · ${item.sucursal_detalle}` : ''}`,
-        ]),
-      ),
-    }
     const resultado = await Swal.fire({
       title: `¿Recibir compra #${compra.id}?`,
-      text: 'Elegí el depósito de recepción. Si no elegís, se usa el depósito principal de la sucursal central.',
+      text: 'El stock se repone en el depósito de la compra.',
       icon: 'question',
-      input: 'select',
-      inputOptions: opciones,
-      inputValue: '',
       showCancelButton: true,
       confirmButtonColor: '#4a9da8',
       cancelButtonColor: '#6c757d',
@@ -533,16 +510,11 @@ export default function Compras() {
     }
 
     try {
-      await pedir(`/compras/${compra.id}/recibir/`, {
-        method: 'POST',
-        body: JSON.stringify({
-          deposito: resultado.value ? Number(resultado.value) : null,
-        }),
-      })
+      await pedir(`/compras/${compra.id}/recibir/`, { method: 'POST' })
       Swal.fire({
         icon: 'success',
         title: 'Compra recibida',
-        text: 'El stock fue repuesto en el depósito seleccionado.',
+        text: 'El stock fue repuesto en el depósito de la compra.',
         timer: 1600,
         showConfirmButton: false,
       })
@@ -559,6 +531,7 @@ export default function Compras() {
 
   async function abrirPago(compra) {
     setPago(compra)
+    setClavePago(nuevaClave())
     setPagosPago([nuevoPago('', saldoCompra(compra).toFixed(2))])
     if (metodos.length > 0) {
       return
@@ -587,22 +560,29 @@ export default function Compras() {
     setPagosPago((actuales) => actuales.filter((item) => item.id !== id))
   }
 
+  function cerrarPago() {
+    setPago(null)
+    setClavePago('')
+  }
+
   async function registrarPago() {
     if (!pago) {
       return
     }
     setPagando(true)
+    const cuerpo = {
+      clave: clavePago,
+      pagos: pagosPago.map((item) => ({
+        metodo_pago: Number(item.metodo),
+        monto_pagado: montoPago(item.monto).toFixed(2),
+      })),
+    }
     try {
       const actualizada = await pedir(`/compras/${pago.id}/pagar/`, {
         method: 'POST',
-        body: JSON.stringify({
-          pagos: pagosPago.map((item) => ({
-            metodo_pago: Number(item.metodo),
-            monto_pagado: montoPago(item.monto).toFixed(2),
-          })),
-        }),
+        body: JSON.stringify(cuerpo),
       })
-      setPago(null)
+      cerrarPago()
       setDetalle((actual) =>
         actual && actual.id === actualizada.id ? actualizada : actual,
       )
@@ -687,307 +667,310 @@ export default function Compras() {
       />
 
       <div className="comercial">
-        <section className="comercial-barra">
-          <form
-            className="comercial-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-              }}
-              placeholder="Buscar por N.º de compra, proveedor o CUIT"
-              aria-label="Buscar compras"
-            />
-            {buscando && (
-              <IconLoader2 className="icono-girando" size={18} />
-            )}
-            {texto && (
-              <button
-                type="button"
-                className="boton-limpiar-busqueda"
-                onClick={limpiarTexto}
-                aria-label="Limpiar búsqueda"
+            <section className="comercial-barra">
+              <form
+                className="comercial-busqueda"
+                onSubmit={(evento) => evento.preventDefault()}
               >
-                <IconX size={16} />
-              </button>
-            )}
-          </form>
-
-          <div className="comercial-acciones-barra">
-            {hayFiltros && (
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                onClick={limpiarTodo}
-              >
-                Limpiar filtros
-              </button>
-            )}
-            <button
-              type="button"
-              className="boton-comercial-secundario"
-              onClick={exportar}
-              disabled={exportando || rangoInvalido}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-            {puedeCrear && (
-              <button
-                type="button"
-                className="boton-comercial-primario"
-                onClick={() => setModalAbierto(true)}
-              >
-                <IconPlus size={18} />
-                Nueva compra
-              </button>
-            )}
-          </div>
-        </section>
-
-        <section className="filtros-tabs">
-          {ESTADOS.map((opcion) => (
-            <button
-              key={opcion.id || 'todas'}
-              type="button"
-              className={estado === opcion.id ? 'activo' : ''}
-              onClick={() => cambiarEstado(opcion.id)}
-              title={opcion.ayuda}
-            >
-              {opcion.etiqueta}
-            </button>
-          ))}
-          <div className="filtros-tabs-grupo">
-            <button
-              type="button"
-              className={`filtro-destacado ${porRecibir ? 'activo' : ''}`}
-              onClick={() => cambiarEntrega('por_recibir')}
-              title="Compras registradas que todavía no repusieron stock."
-            >
-              Por recibir
-            </button>
-            <button
-              type="button"
-              className={`filtro-destacado ${enCamino ? 'activo' : ''}`}
-              onClick={() => cambiarEntrega('EC')}
-              title="Compras que todavía están en camino y no movieron stock."
-            >
-              En camino
-            </button>
-          </div>
-        </section>
-
-        <FiltrosFecha
-          valores={fechas}
-          onCambiar={cambiarFechas}
-          error={
-            rangoInvalido
-              ? 'La fecha desde no puede ser posterior a la fecha hasta.'
-              : ''
-          }
-        />
-
-        <p className="filtros-ayuda">
-          Pago: Pendiente (sin pago total) · Parcial (pago parcial) · Pagada
-          (pago total) · Anulada. Recepción: Por recibir, En camino o
-          Recibida. El stock se mueve recién al recibir.
-        </p>
-
-        {error && <p className="comercial-error">{error}</p>}
-
-        <section
-          className={`comercial-panel ${
-            actualizando ? 'panel-actualizando' : ''
-          }`}
-        >
-          <div className="comercial-tabla-scroll">
-            <table className="tabla-comercial">
-              <thead>
-                <tr>
-                  <th>Compra</th>
-                  <th
-                    aria-sort={
-                      orden === 'fecha_compra'
-                        ? 'ascending'
-                        : orden === '-fecha_compra'
-                          ? 'descending'
-                          : 'none'
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="encabezado-orden"
-                      onClick={() => alternarOrden('fecha_compra')}
-                    >
-                      Fecha {iconoOrden('fecha_compra')}
-                    </button>
-                  </th>
-                  <th>Proveedor</th>
-                  <th>Caja / Sección</th>
-                  <th
-                    className="numero"
-                    aria-sort={
-                      orden === 'monto_compra'
-                        ? 'ascending'
-                        : orden === '-monto_compra'
-                          ? 'descending'
-                          : 'none'
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="encabezado-orden"
-                      onClick={() => alternarOrden('monto_compra')}
-                    >
-                      Monto {iconoOrden('monto_compra')}
-                    </button>
-                  </th>
-                  <th>Pago</th>
-                  <th>Recepción</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cargando && !rangoInvalido && (
-                  <tr>
-                    <td colSpan="8" className="comercial-vacio">
-                      Cargando compras…
-                    </td>
-                  </tr>
+                <IconSearch size={20} />
+                <input
+                  type="search"
+                  value={texto}
+                  onChange={(evento) => {
+                    setTexto(evento.target.value)
+                    setPagina(1)
+                  }}
+                  placeholder="Buscar por N.º de compra, proveedor o CUIT"
+                  aria-label="Buscar compras"
+                />
+                {buscando && (
+                  <IconLoader2 className="icono-girando" size={18} />
                 )}
+                {texto && (
+                  <button
+                    type="button"
+                    className="boton-limpiar-busqueda"
+                    onClick={limpiarTexto}
+                    aria-label="Limpiar búsqueda"
+                  >
+                    <IconX size={16} />
+                  </button>
+                )}
+              </form>
 
-                {!cargando &&
-                  !rangoInvalido &&
-                  !error &&
-                  datos.results.length === 0 && (
+              <div className="comercial-acciones-barra">
+                {hayFiltros && (
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    onClick={limpiarTodo}
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="boton-comercial-secundario"
+                  onClick={exportar}
+                  disabled={exportando || rangoInvalido}
+                >
+                  <IconDownload size={18} />
+                  {exportando ? 'Exportando…' : 'Exportar CSV'}
+                </button>
+                {puedeCrear && (
+                  <button
+                    type="button"
+                    className="boton-comercial-primario"
+                    onClick={() => setModalAbierto(true)}
+                  >
+                    <IconPlus size={18} />
+                    Nueva compra
+                  </button>
+                )}
+              </div>
+            </section>
+
+            <section className="filtros-tabs">
+              {ESTADOS.map((opcion) => (
+                <button
+                  key={opcion.id || 'todas'}
+                  type="button"
+                  className={estado === opcion.id ? 'activo' : ''}
+                  onClick={() => cambiarEstado(opcion.id)}
+                  title={opcion.ayuda}
+                >
+                  {opcion.etiqueta}
+                </button>
+              ))}
+              <div className="filtros-tabs-grupo">
+                <button
+                  type="button"
+                  className={`filtro-destacado ${porRecibir ? 'activo' : ''}`}
+                  onClick={() => cambiarEntrega('por_recibir')}
+                  title="Compras registradas que todavía no repusieron stock."
+                >
+                  Por recibir
+                </button>
+                <button
+                  type="button"
+                  className={`filtro-destacado ${enCamino ? 'activo' : ''}`}
+                  onClick={() => cambiarEntrega('EC')}
+                  title="Compras que todavía están en camino y no movieron stock."
+                >
+                  En camino
+                </button>
+              </div>
+            </section>
+
+            <FiltrosFecha
+              valores={fechas}
+              onCambiar={cambiarFechas}
+              error={
+                rangoInvalido
+                  ? 'La fecha desde no puede ser posterior a la fecha hasta.'
+                  : ''
+              }
+            />
+
+            <p className="filtros-ayuda">
+              Pago: Pendiente (sin pago total) · Parcial (pago parcial) · Pagada
+              (pago total) · Anulada. Recepción: Por recibir, En camino o
+              Recibida. El stock se mueve recién al recibir.
+            </p>
+
+            {error && <p className="comercial-error">{error}</p>}
+
+            <section
+              className={`comercial-panel ${
+                actualizando ? 'panel-actualizando' : ''
+              }`}
+            >
+              <div className="comercial-tabla-scroll">
+                <table className="tabla-comercial">
+                  <thead>
                     <tr>
-                      <td colSpan="8" className="comercial-vacio">
-                        No se encontraron compras.
-                      </td>
+                      <th>Compra</th>
+                      <th
+                        aria-sort={
+                          orden === 'fecha_compra'
+                            ? 'ascending'
+                            : orden === '-fecha_compra'
+                              ? 'descending'
+                              : 'none'
+                        }
+                      >
+                        <button
+                          type="button"
+                          className="encabezado-orden"
+                          onClick={() => alternarOrden('fecha_compra')}
+                        >
+                          Fecha {iconoOrden('fecha_compra')}
+                        </button>
+                      </th>
+                      <th>Proveedor</th>
+                      <th>Caja / Sección</th>
+                      <th
+                        className="numero"
+                        aria-sort={
+                          orden === 'monto_compra'
+                            ? 'ascending'
+                            : orden === '-monto_compra'
+                              ? 'descending'
+                              : 'none'
+                        }
+                      >
+                        <button
+                          type="button"
+                          className="encabezado-orden"
+                          onClick={() => alternarOrden('monto_compra')}
+                        >
+                          Monto {iconoOrden('monto_compra')}
+                        </button>
+                      </th>
+                      <th>Pago</th>
+                      <th>Recepción</th>
+                      <th>Acciones</th>
                     </tr>
-                  )}
+                  </thead>
+                  <tbody>
+                    {cargando && !rangoInvalido && (
+                      <tr>
+                        <td colSpan="8" className="comercial-vacio">
+                          Cargando compras…
+                        </td>
+                      </tr>
+                    )}
 
-                {!cargando &&
-                  datos.results.map((compra) => (
-                    <tr key={compra.id}>
-                      <td className="mono">#{compra.id}</td>
-                      <td>{formatearFechaHora(compra.fecha_compra)}</td>
-                      <td>
-                        <strong>{compra.proveedor_detalle || 'Sin proveedor'}</strong>
-                      </td>
-                      <td className="texto-chico">
-                        {compra.seccion_caja_detalle || '—'}
-                      </td>
-                      <td className="numero">
-                        <strong>{formatearMoneda(compra.monto_compra)}</strong>
-                      </td>
-                      <td>
-                        <span className={claseEstado(compra.estado)}>
-                          {compra.estado_detalle}
-                        </span>
-                        {compra.estado !== 'AN' &&
-                          saldoCompra(compra) > 0 && (
-                            <small>
-                              Saldo {formatearMoneda(saldoCompra(compra))}
-                            </small>
-                          )}
-                      </td>
-                      <td>
-                        <span className={claseEntrega(compra)}>
-                          {etiquetaEntrega(compra)}
-                        </span>
-                        {compra.estado_entrega === 'EC' &&
-                          compra.fecha_estimada_llegada && (
-                            <small>
-                              Llega {formatearFecha(compra.fecha_estimada_llegada)}
-                            </small>
-                          )}
-                      </td>
-                      <td>
-                        <div className="acciones-fila">
-                          <button
-                            type="button"
-                            className="boton-icono"
-                            onClick={() => setDetalle(compra)}
-                            title="Ver detalle"
-                          >
-                            <IconEye size={17} />
-                          </button>
-                          {puedeGestionar &&
-                            compra.estado !== 'AN' &&
-                            saldoCompra(compra) > 0 && (
+                    {!cargando &&
+                      !rangoInvalido &&
+                      !error &&
+                      datos.results.length === 0 && (
+                        <tr>
+                          <td colSpan="8" className="comercial-vacio">
+                            No se encontraron compras.
+                          </td>
+                        </tr>
+                      )}
+
+                    {!cargando &&
+                      datos.results.map((compra) => (
+                        <tr key={compra.id}>
+                          <td className="mono">#{compra.id}</td>
+                          <td>{formatearFechaHora(compra.fecha_compra)}</td>
+                          <td>
+                            <strong>{compra.proveedor_detalle || 'Sin proveedor'}</strong>
+                          </td>
+                          <td className="texto-chico">
+                            {compra.movimiento_caja_detalle || '—'}
+                            {compra.deposito_detalle && (
+                              <small>{compra.deposito_detalle}</small>
+                            )}
+                          </td>
+                          <td className="numero">
+                            <strong>{formatearMoneda(compra.monto_compra)}</strong>
+                          </td>
+                          <td>
+                            <span className={claseEstado(compra.estado)}>
+                              {compra.estado_detalle}
+                            </span>
+                            {compra.estado !== 'AN' &&
+                              saldoCompra(compra) > 0 && (
+                                <small>
+                                  Saldo {formatearMoneda(saldoCompra(compra))}
+                                </small>
+                              )}
+                          </td>
+                          <td>
+                            <span className={claseEntrega(compra)}>
+                              {etiquetaEntrega(compra)}
+                            </span>
+                            {compra.estado_entrega === 'EC' &&
+                              compra.fecha_estimada_llegada && (
+                                <small>
+                                  Llega {formatearFecha(compra.fecha_estimada_llegada)}
+                                </small>
+                              )}
+                          </td>
+                          <td>
+                            <div className="acciones-fila">
                               <button
                                 type="button"
                                 className="boton-icono"
-                                onClick={() => abrirPago(compra)}
-                                title="Registrar pago"
+                                onClick={() => setDetalle(compra)}
+                                title="Ver detalle"
                               >
-                                <IconCash size={17} />
+                                <IconEye size={17} />
                               </button>
-                            )}
-                          {puedeGestionar &&
-                            compra.estado !== 'AN' &&
-                            !compra.recibida &&
-                            compra.estado_entrega !== 'EC' && (
-                              <button
-                                type="button"
-                                className="boton-icono"
-                                onClick={() => marcarEnCamino(compra)}
-                                title="Marcar en camino"
-                              >
-                                <IconTruck size={17} />
-                              </button>
-                            )}
-                          {puedeGestionar &&
-                            compra.estado !== 'AN' &&
-                            !compra.recibida && (
-                              <button
-                                type="button"
-                                className="boton-icono boton-icono-exito"
-                                onClick={() => recibirCompra(compra)}
-                                title="Recibir compra"
-                              >
-                                <IconCheck size={17} />
-                              </button>
-                            )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+                              {puedeGestionar &&
+                                compra.estado !== 'AN' &&
+                                saldoCompra(compra) > 0 && (
+                                  <button
+                                    type="button"
+                                    className="boton-icono"
+                                    onClick={() => abrirPago(compra)}
+                                    title="Registrar pago"
+                                  >
+                                    <IconCash size={17} />
+                                  </button>
+                                )}
+                              {puedeOperar &&
+                                compra.estado !== 'AN' &&
+                                !compra.recibida &&
+                                compra.estado_entrega !== 'EC' && (
+                                  <button
+                                    type="button"
+                                    className="boton-icono"
+                                    onClick={() => marcarEnCamino(compra)}
+                                    title="Marcar en camino"
+                                  >
+                                    <IconTruck size={17} />
+                                  </button>
+                                )}
+                              {puedeOperar &&
+                                compra.estado !== 'AN' &&
+                                !compra.recibida && (
+                                  <button
+                                    type="button"
+                                    className="boton-icono boton-icono-exito"
+                                    onClick={() => recibirCompra(compra)}
+                                    title="Recibir compra"
+                                  >
+                                    <IconCheck size={17} />
+                                  </button>
+                                )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
 
-          <div className="comercial-paginacion">
-            <span>
-              {datos.count} compra{datos.count === 1 ? '' : 's'}
-            </span>
-            <div>
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                disabled={!datos.previous || actualizando}
-                onClick={() => irAPagina(pagina - 1)}
-              >
-                Anterior
-              </button>
-              <span>Página {pagina}</span>
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                disabled={!datos.next || actualizando}
-                onClick={() => irAPagina(pagina + 1)}
-              >
-                Siguiente
-              </button>
-            </div>
-          </div>
-        </section>
+              <div className="comercial-paginacion">
+                <span>
+                  {datos.count} compra{datos.count === 1 ? '' : 's'}
+                </span>
+                <div>
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    disabled={!datos.previous || actualizando}
+                    onClick={() => irAPagina(pagina - 1)}
+                  >
+                    Anterior
+                  </button>
+                  <span>Página {pagina}</span>
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    disabled={!datos.next || actualizando}
+                    onClick={() => irAPagina(pagina + 1)}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </section>
       </div>
 
       {modalAbierto && (
@@ -1029,7 +1012,13 @@ export default function Compras() {
               </div>
               <div>
                 <span>Caja / Sección</span>
-                <strong>{detalle.seccion_caja_detalle || '—'}</strong>
+                <strong>{detalle.movimiento_caja_detalle || '—'}</strong>
+              </div>
+              <div>
+                <span>Depósito destino</span>
+                <strong>
+                  {detalle.deposito_detalle || 'Predeterminado de la sucursal'}
+                </strong>
               </div>
               <div>
                 <span>Pago</span>
@@ -1148,7 +1137,7 @@ export default function Compras() {
                     Registrar pago
                   </button>
                 )}
-              {puedeGestionar &&
+              {puedeOperar &&
                 detalle.estado !== 'AN' &&
                 !detalle.recibida &&
                 detalle.estado_entrega !== 'EC' && (
@@ -1165,7 +1154,7 @@ export default function Compras() {
                     Marcar en camino
                   </button>
                 )}
-              {puedeGestionar &&
+              {puedeOperar &&
                 detalle.estado !== 'AN' &&
                 !detalle.recibida && (
                 <button
@@ -1191,12 +1180,12 @@ export default function Compras() {
             <div className="comercial-modal-cabecera">
               <h2>
                 <IconCash size={24} />
-                Registrar pago · Compra #{pago.id}
+                {`Registrar pago · Compra #${pago.id}`}
               </h2>
               <button
                 type="button"
                 className="comercial-modal-cerrar"
-                onClick={() => setPago(null)}
+                onClick={cerrarPago}
                 aria-label="Cerrar"
               >
                 <IconX size={20} />
@@ -1343,7 +1332,7 @@ export default function Compras() {
               <button
                 type="button"
                 className="boton-comercial-secundario"
-                onClick={() => setPago(null)}
+                onClick={cerrarPago}
               >
                 Cancelar
               </button>

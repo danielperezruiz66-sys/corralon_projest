@@ -4,7 +4,7 @@ from django.contrib.auth.admin import UserAdmin
 from .models import (
     Empleado,
     HistoricalDetalleCierreCaja,
-    HistoricalSeccionCaja,
+    HistoricalMovimientoCaja,
     Usuario,
 )
 
@@ -76,15 +76,15 @@ class _HistoricoAdmin(admin.ModelAdmin):
         return request.user.is_superuser or request.user.is_staff
 
 
-@admin.register(HistoricalSeccionCaja)
-class HistoricalSeccionCajaAdmin(_HistoricoAdmin):
+@admin.register(HistoricalMovimientoCaja)
+class HistoricalMovimientoCajaAdmin(_HistoricoAdmin):
     list_display = (
         'history_id',
         'history_date',
         'history_user',
         'history_type',
         'history_change_reason',
-        'sucursal_caja',
+        'caja',
         'empleado',
         'estado',
     )
@@ -101,7 +101,7 @@ class HistoricalDetalleCierreCajaAdmin(_HistoricoAdmin):
         'history_user',
         'history_type',
         'history_change_reason',
-        'seccion_caja',
+        'movimiento_caja',
         'metodo_pago',
     )
     list_filter = ('history_type',)

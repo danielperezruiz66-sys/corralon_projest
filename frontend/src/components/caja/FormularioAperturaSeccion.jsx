@@ -32,7 +32,7 @@ export default function FormularioAperturaSeccion({
   const empleadoPropio = user?.empleado ?? null
 
   const [caja, setCaja] = useState(() =>
-    cajasDisponibles.length > 0 ? String(cajasDisponibles[0].caja) : '',
+    cajasDisponibles.length > 0 ? String(cajasDisponibles[0].id) : '',
   )
   const [montoInicial, setMontoInicial] = useState('0')
   // '' => se abre a nombre del usuario actual (solo si tiene empleado).
@@ -49,7 +49,7 @@ export default function FormularioAperturaSeccion({
   const [observaciones, setObservaciones] = useState('')
   const valorActual =
     caja ||
-    (cajasDisponibles.length > 0 ? String(cajasDisponibles[0].caja) : '')
+    (cajasDisponibles.length > 0 ? String(cajasDisponibles[0].id) : '')
 
   // Sugerencia de monto inicial: efectivo contado en el último cierre de la
   // caja en esta sucursal. Al cambiar de caja se repone el campo.
@@ -60,7 +60,7 @@ export default function FormularioAperturaSeccion({
     let vigente = true
 
     pedir(
-      `/secciones-caja/sugerencia/?caja=${valorActual}&sucursal=${sucursalActiva}`,
+      `/movimientos-caja/sugerencia/?caja=${valorActual}&sucursal=${sucursalActiva}`,
     )
       .then((datos) => {
         if (!vigente) {
@@ -184,7 +184,7 @@ export default function FormularioAperturaSeccion({
       if (motivo) {
         cuerpo.observaciones_apertura = motivo
       }
-      const guardada = await pedir('/secciones-caja/', {
+      const guardada = await pedir('/movimientos-caja/', {
         method: 'POST',
         body: JSON.stringify(cuerpo),
       })
@@ -252,8 +252,8 @@ export default function FormularioAperturaSeccion({
                 <option value="">No hay cajas disponibles</option>
               ) : (
                 cajasDisponibles.map((disponible) => (
-                  <option key={disponible.id} value={disponible.caja}>
-                    {disponible.caja_detalle}
+                  <option key={disponible.id} value={disponible.id}>
+                    Caja {disponible.numero_caja}
                   </option>
                 ))
               )}
@@ -261,8 +261,8 @@ export default function FormularioAperturaSeccion({
             <MensajeError>{errores.caja}</MensajeError>
             {sinDisponibles && (
               <p className="caja-nota-total">
-                Todas las cajas físicas habilitadas en esta sucursal ya tienen
-                una seccion abierta. Cerrá una para poder abrir otra.
+                Todas las cajas de esta sucursal ya tienen una seccion
+                abierta o en pausa. Cerrá una para poder abrir otra.
               </p>
             )}
           </label>

@@ -27,8 +27,10 @@ import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
+import { nuevaClave } from '../utils/clave'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/components/comercial/Cobro.css'
 
 const PAGINA_VACIA = {
   count: 0,
@@ -42,12 +44,17 @@ const ESTADOS = [
   {
     id: 'PE',
     etiqueta: 'Pendientes',
-    ayuda: 'Venta creada, con stock descontado y sin confirmar. Puede tener pagos parciales. Vence a los 30 minutos si no tiene pagos.',
+    ayuda: 'Venta sin pagos; vence a los 30 minutos si no se cobra.',
+  },
+  {
+    id: 'PC',
+    etiqueta: 'Parciales',
+    ayuda: 'Venta con pagos parciales; no vence y no se puede anular.',
   },
   {
     id: 'CO',
     etiqueta: 'Confirmadas',
-    ayuda: 'Venta con el pago total registrado y confirmada por el cajero.',
+    ayuda: 'Venta pagada y confirmada.',
   },
   {
     id: 'AN',
@@ -102,7 +109,7 @@ export default function Ventas() {
     () => searchParams.get('estado') || '',
   )
   const [alerta, setAlerta] = useState(
-    () => searchParams.get('alerta') || '',
+    () => (searchParams.get('alerta') === 'vencida' ? 'vencida' : ''),
   )
   const [fechas, setFechas] = useState(() => ({
     fecha: searchParams.get('fecha') || '',
@@ -122,9 +129,9 @@ export default function Ventas() {
   const [error, setError] = useState('')
   const [detalle, setDetalle] = useState(null)
   const [cobro, setCobro] = useState(null)
+  const [claveCobro, setClaveCobro] = useState('')
   const [metodos, setMetodos] = useState([])
   const [pagosCobro, setPagosCobro] = useState([])
-  const [confirmarCobro, setConfirmarCobro] = useState(false)
   const [cobrando, setCobrando] = useState(false)
   const [modalAbierto, setModalAbierto] = useState(
     () =>
@@ -385,7 +392,7 @@ export default function Ventas() {
         venta.id,
         formatearFechaHora(venta.fecha_venta),
         nombreCliente(venta),
-        venta.seccion_caja_detalle || '',
+        venta.movimiento_caja_detalle || '',
         numeroCsv(venta.monto_venta),
         numeroCsv(totalPagado(venta)),
         numeroCsv(saldoVenta(venta)),
@@ -428,7 +435,6 @@ export default function Ventas() {
   const pagosIncompletos = pagosCobro.some(
     (pago) => !pago.metodo || !(Number(pago.monto) > 0),
   )
-  const confirmarEfectivo = confirmarCobro && cubreTotalCobro && !excedeSaldoCobro
 
   function agregarPago() {
     const usados = new Set(pagosCobro.map((pago) => pago.metodo))
@@ -462,7 +468,7 @@ export default function Ventas() {
     setPagosCobro([
       nuevoPago(metodoInicial, saldo > 0 ? saldo.toFixed(2) : ''),
     ])
-    setConfirmarCobro(false)
+    setClaveCobro(nuevaClave())
     setCobro(venta)
     setDetalle(null)
   }
@@ -498,44 +504,29 @@ export default function Ventas() {
       })
       return
     }
-    if (confirmarEfectivo && totalCobro < saldoCobro - 0.001) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Falta saldo',
-        text: 'Para confirmar la venta los pagos deben cubrir el total.',
-        confirmButtonColor: '#4a9da8',
-      })
-      return
-    }
 
     setCobrando(true)
     try {
-      await pedir(`/ventas/${cobro.id}/cobrar/`, {
+      const respuesta = await pedir(`/ventas/${cobro.id}/cobrar/`, {
         method: 'POST',
         body: JSON.stringify({
+          clave: claveCobro,
           pagos: pagosCobro.map((pago) => ({
             metodo_pago: Number(pago.metodo),
             monto_pagado: montoPago(pago.monto).toFixed(2),
           })),
-          confirmar: confirmarEfectivo,
         }),
       })
 
-      const quedaSaldo = totalCobro < saldoCobro - 0.001
+      const quedaSaldo = respuesta.estado === 'PC'
       Swal.fire({
         icon: 'success',
-        title: confirmarEfectivo
-          ? 'Venta confirmada'
-          : quedaSaldo
-            ? 'Pagos registrados'
-            : 'Total cubierto',
-        text: confirmarEfectivo
-          ? 'Los pagos quedaron registrados y la venta se cerró.'
-          : quedaSaldo
-            ? `Saldo pendiente: ${formatearMoneda(
-                saldoCobro - totalCobro,
-              )}. La venta sigue pendiente.`
-            : 'Pagos registrados. Confirmá la venta para cerrarla.',
+        title: quedaSaldo ? 'Pago parcial registrado' : 'Venta confirmada',
+        text: quedaSaldo
+          ? `Saldo pendiente: ${formatearMoneda(
+              saldoCobro - totalCobro,
+            )}. La venta quedó parcial.`
+          : 'Los pagos cubrieron el total y la venta quedó confirmada.',
         timer: 2400,
         showConfirmButton: false,
       })
@@ -757,8 +748,8 @@ export default function Ventas() {
         />
 
         <p className="filtros-ayuda">
-          Pendiente: creada y sin confirmar; puede tener pagos parciales.
-          Confirmada: paga y confirmada por el cajero. Anulada: stock
+          Pendiente: sin pagos; vence a los 30 minutos. Parcial: con pagos
+          parciales; no vence. Confirmada: pagada y confirmada. Anulada: stock
           restaurado.
         </p>
 
@@ -844,7 +835,7 @@ export default function Ventas() {
                         <strong>{nombreCliente(venta)}</strong>
                       </td>
                       <td className="texto-chico">
-                        {venta.seccion_caja_detalle || '—'}
+                        {venta.movimiento_caja_detalle || '—'}
                       </td>
                       <td className="numero">
                         <strong>{formatearMoneda(venta.monto_venta)}</strong>
@@ -870,7 +861,8 @@ export default function Ventas() {
                             <IconEye size={17} />
                           </button>
                           {puedeCobrar &&
-                            venta.estado === 'PE' &&
+                            (venta.estado === 'PE' ||
+                              venta.estado === 'PC') &&
                             saldoVenta(venta) > 0 && (
                               <button
                                 type="button"
@@ -882,7 +874,8 @@ export default function Ventas() {
                               </button>
                             )}
                           {puedeCobrar &&
-                            venta.estado === 'PE' &&
+                            (venta.estado === 'PE' ||
+                              venta.estado === 'PC') &&
                             saldoVenta(venta) <= 0 && (
                               <button
                                 type="button"
@@ -980,7 +973,7 @@ export default function Ventas() {
               </div>
               <div>
                 <span>Caja / Sección</span>
-                <strong>{detalle.seccion_caja_detalle || '—'}</strong>
+                <strong>{detalle.movimiento_caja_detalle || '—'}</strong>
               </div>
               <div>
                 <span>Estado</span>
@@ -1043,7 +1036,7 @@ export default function Ventas() {
                 Cerrar
               </button>
               {puedeCobrar &&
-                detalle.estado === 'PE' &&
+                (detalle.estado === 'PE' || detalle.estado === 'PC') &&
                 saldoVenta(detalle) <= 0 && (
                   <button
                     type="button"
@@ -1058,7 +1051,7 @@ export default function Ventas() {
                   </button>
                 )}
               {puedeCobrar &&
-                detalle.estado === 'PE' &&
+                (detalle.estado === 'PE' || detalle.estado === 'PC') &&
                 saldoVenta(detalle) > 0 && (
                   <button
                     type="button"
@@ -1113,7 +1106,8 @@ export default function Ventas() {
 
             <p className="cobro-nota">
               Podés combinar varios métodos de pago. Si la suma cubre el
-              saldo, podés confirmar la venta en el mismo paso.
+              saldo, la venta se confirma automáticamente; si no, queda
+              parcial.
             </p>
 
             <div className="cobro-pagos-lista">
@@ -1221,19 +1215,6 @@ export default function Ventas() {
               </p>
             )}
 
-            {cubreTotalCobro && !excedeSaldoCobro && (
-              <label className="cobro-confirmar">
-                <input
-                  type="checkbox"
-                  checked={confirmarCobro}
-                  onChange={(evento) =>
-                    setConfirmarCobro(evento.target.checked)
-                  }
-                />
-                <span>Confirmar la venta al registrar los pagos</span>
-              </label>
-            )}
-
             {metodos.length === 0 && (
               <p className="comercial-error">
                 No hay métodos de pago activos. Configuralos antes de cobrar.
@@ -1264,10 +1245,10 @@ export default function Ventas() {
                     <IconLoader2 className="icono-girando" size={18} />
                     Registrando…
                   </>
-                ) : confirmarEfectivo ? (
-                  'Registrar pagos y confirmar'
+                ) : cubreTotalCobro ? (
+                  'Registrar pago y confirmar'
                 ) : (
-                  'Registrar pagos'
+                  'Registrar pago parcial'
                 )}
               </button>
             </div>

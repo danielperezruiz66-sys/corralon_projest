@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { IconX } from '@tabler/icons-react'
+import '../../styles/components/comercial/FiltrosFecha.css'
 
 function isoLocal(fecha) {
   const anio = fecha.getFullYear()

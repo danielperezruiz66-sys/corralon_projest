@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -8,7 +8,6 @@ import {
   IconBuildingWarehouse,
   IconDownload,
   IconEye,
-  IconHistory,
   IconLoader2,
   IconPackage,
   IconPencil,
@@ -23,16 +22,15 @@ import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import CampoSelectorBuscable from '../components/common/CampoSelectorBuscable.jsx'
-import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
 import FormularioCompra from '../components/comercial/FormularioCompra.jsx'
 import FormularioAjusteStock from '../components/inventario/FormularioAjusteStock.jsx'
 import FormularioCargaStock from '../components/inventario/FormularioCargaStock.jsx'
 import FormularioCatalogo from '../components/inventario/FormularioCatalogo.jsx'
 import FormularioDeposito from '../components/inventario/FormularioDeposito.jsx'
 import FormularioDetalleStock from '../components/inventario/FormularioDetalleStock.jsx'
+import FormularioMoverLote from '../components/inventario/FormularioMoverLote.jsx'
 import FormularioProducto from '../components/inventario/FormularioProducto.jsx'
 import FormularioStock from '../components/inventario/FormularioStock.jsx'
-import FormularioTransferencia from '../components/inventario/FormularioTransferencia.jsx'
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
@@ -55,23 +53,8 @@ const PAGINA_VACIA = {
 const TABS = [
   { id: 'productos', etiqueta: 'Productos', icono: IconPackage },
   { id: 'stock', etiqueta: 'Stock', icono: IconBox },
-  { id: 'movimientos', etiqueta: 'Movimientos', icono: IconHistory },
-  {
-    id: 'transferencias',
-    etiqueta: 'Transferencias',
-    icono: IconArrowsExchange,
-  },
   { id: 'depositos', etiqueta: 'Depósitos', icono: IconBuildingWarehouse },
   { id: 'catalogos', etiqueta: 'Catálogos', icono: IconTag },
-]
-
-const TIPOS_MOVIMIENTO = [
-  { id: '', etiqueta: 'Todos' },
-  { id: 'VE', etiqueta: 'Ventas' },
-  { id: 'CA', etiqueta: 'Cancelaciones' },
-  { id: 'CO', etiqueta: 'Compras' },
-  { id: 'AJ', etiqueta: 'Ajustes' },
-  { id: 'TR', etiqueta: 'Transferencias' },
 ]
 
 function claseAlerta(alerta) {
@@ -85,7 +68,10 @@ export default function Inventario() {
   const puedeStock = puedeEscribir(['GE', 'ED'])
   const puedeComprar = puedeEscribir(['AD', 'GE'])
   const [searchParams, setSearchParams] = useSearchParams()
-  const [tab, setTab] = useState(() => searchParams.get('tab') || 'productos')
+  const [tab, setTab] = useState(() => {
+    const guardada = searchParams.get('tab')
+    return TABS.some((item) => item.id === guardada) ? guardada : 'productos'
+  })
   const [texto, setTexto] = useState(() => searchParams.get('search') || '')
   const [pagina, setPagina] = useState(
     () => Number(searchParams.get('page')) || 1,
@@ -97,20 +83,9 @@ export default function Inventario() {
   const [alerta, setAlerta] = useState(
     () => searchParams.get('alerta') || '',
   )
-  const [producto, setProducto] = useState(() => {
-    const valor =
-      searchParams.get('producto') ||
-      searchParams.get('producto_id') ||
-      ''
-    return /^\d+$/.test(valor) ? valor : ''
-  })
-  const [tipo, setTipo] = useState('')
-  const [estadoTransferencia, setEstadoTransferencia] = useState('')
-  const [fechas, setFechas] = useState({
-    fecha: '',
-    desde: '',
-    hasta: '',
-  })
+  // En la pestaña Stock: si está activo, muestra el stock de todas las
+  // sucursales (solo lectura; operar sigue siendo sobre la propia).
+  const [todasLasSucursales, setTodasLasSucursales] = useState(false)
   const [datos, setDatos] = useState(PAGINA_VACIA)
   const [cargando, setCargando] = useState(true)
   const [actualizando, setActualizando] = useState(false)
@@ -123,41 +98,23 @@ export default function Inventario() {
   const [marcas, setMarcas] = useState([])
   const [unidades, setUnidades] = useState([])
   const [depositos, setDepositos] = useState([])
-  const [productoFiltrado, setProductoFiltrado] = useState(null)
 
   const [productoEditando, setProductoEditando] = useState(null)
   const [depositoEditando, setDepositoEditando] = useState(null)
   const [catalogoEditando, setCatalogoEditando] = useState(null)
   const [stockConfig, setStockConfig] = useState(null)
   const [stockAjuste, setStockAjuste] = useState(null)
-  const [transferenciaAbierta, setTransferenciaAbierta] = useState(false)
   const [cargaStockAbierta, setCargaStockAbierta] = useState(false)
-  const [productoTransferencia, setProductoTransferencia] = useState('')
-  const [productoTransferenciaDetalle, setProductoTransferenciaDetalle] =
-    useState(null)
-  const [depositoTransferencia, setDepositoTransferencia] = useState('')
-  const [transferenciaDestacada, setTransferenciaDestacada] = useState(null)
-  const destacadoTimer = useRef(null)
   const [compraInicial, setCompraInicial] = useState(null)
   const [detalleProducto, setDetalleProducto] = useState(null)
   const [detalleProductoData, setDetalleProductoData] = useState(null)
   const [detalleStock, setDetalleStock] = useState(null)
   const [detalleStockData, setDetalleStockData] = useState(null)
   const [detalleLoteEditando, setDetalleLoteEditando] = useState(null)
+  const [loteMoviendo, setLoteMoviendo] = useState(null)
 
   const busqueda = useDebounce(texto.trim(), 350)
   const buscando = texto.trim() !== busqueda || actualizando
-  const rangoInvalido = Boolean(
-    fechas.desde && fechas.hasta && fechas.desde > fechas.hasta,
-  )
-  const filtroScrolleado = useRef('')
-  const nombreProductoFiltrado =
-    productoFiltrado &&
-    String(productoFiltrado.id) === String(producto)
-      ? productoFiltrado.nombre
-      : producto
-        ? `Producto #${producto}`
-        : ''
 
   useEffect(() => {
     let vigente = true
@@ -190,30 +147,6 @@ export default function Inventario() {
   }, [])
 
   useEffect(() => {
-    if (!producto) {
-      return undefined
-    }
-    let vigente = true
-    pedir(`/productos/${producto}/`)
-      .then((data) => {
-        if (vigente) {
-          setProductoFiltrado({
-            id: Number(producto),
-            nombre: data.nombre,
-          })
-        }
-      })
-      .catch(() => {
-        if (vigente) {
-          setProductoFiltrado(null)
-        }
-      })
-    return () => {
-      vigente = false
-    }
-  }, [producto])
-
-  useEffect(() => {
     const parametros = new URLSearchParams()
     if (tab !== 'productos') {
       parametros.set('tab', tab)
@@ -225,21 +158,15 @@ export default function Inventario() {
       if (alerta) {
         parametros.set('alerta', alerta)
       }
-      if (producto) {
-        parametros.set('producto', String(producto))
-      }
     }
     if (pagina > 1) {
       parametros.set('page', String(pagina))
     }
     setSearchParams(parametros, { replace: true })
-  }, [tab, busqueda, pagina, alerta, producto, setSearchParams])
+  }, [tab, busqueda, pagina, alerta, setSearchParams])
 
   useEffect(() => {
     if (tab === 'catalogos') {
-      return undefined
-    }
-    if (tab === 'movimientos' && rangoInvalido) {
       return undefined
     }
 
@@ -249,7 +176,10 @@ export default function Inventario() {
     if (busqueda) {
       parametros.set('search', busqueda)
     }
-    if (sucursalActiva) {
+    if (
+      sucursalActiva &&
+      !(tab === 'stock' && todasLasSucursales)
+    ) {
       parametros.set('sucursal', sucursalActiva)
     }
 
@@ -262,18 +192,6 @@ export default function Inventario() {
     } else if (tab === 'stock') {
       ruta = '/stocks/'
       if (alerta) parametros.set('alerta', alerta)
-      if (producto) parametros.set('producto', producto)
-    } else if (tab === 'movimientos') {
-      ruta = '/movimientos-stock/'
-      if (tipo) parametros.set('tipo', tipo)
-      if (fechas.fecha) parametros.set('fecha', fechas.fecha)
-      if (fechas.desde) parametros.set('fecha_desde', fechas.desde)
-      if (fechas.hasta) parametros.set('fecha_hasta', fechas.hasta)
-    } else if (tab === 'transferencias') {
-      ruta = '/transferencias-stock/'
-      if (estadoTransferencia) {
-        parametros.set('estado', estadoTransferencia)
-      }
     } else if (tab === 'depositos') {
       ruta = '/depositos/'
     }
@@ -309,56 +227,14 @@ export default function Inventario() {
     pagina,
     busqueda,
     sucursalActiva,
+    todasLasSucursales,
     categoria,
     marca,
     unidad,
     orden,
     alerta,
-    producto,
-    tipo,
-    estadoTransferencia,
-    fechas,
     refresco,
-    rangoInvalido,
   ])
-
-  useEffect(() => {
-    if (
-      tab !== 'stock' ||
-      cargando ||
-      actualizando ||
-      (!alerta && !producto)
-    ) {
-      return undefined
-    }
-
-    const clave = `${alerta}|${producto}`
-    if (filtroScrolleado.current === clave) {
-      return undefined
-    }
-
-    const fila = producto
-      ? document.querySelector(`[data-stock-producto="${producto}"]`)
-      : null
-    const destino = fila || document.getElementById('inventario-panel')
-    if (!destino) {
-      return undefined
-    }
-
-    filtroScrolleado.current = clave
-    destino.scrollIntoView({
-      behavior: 'smooth',
-      block: producto ? 'center' : 'start',
-    })
-  }, [tab, alerta, producto, cargando, actualizando, datos])
-
-  useEffect(() => {
-    return () => {
-      if (destacadoTimer.current) {
-        window.clearTimeout(destacadoTimer.current)
-      }
-    }
-  }, [])
 
   function cambiarTab(nuevoTab) {
     setTab(nuevoTab)
@@ -369,11 +245,6 @@ export default function Inventario() {
     setUnidad('')
     setOrden('')
     setAlerta('')
-    setProducto('')
-    filtroScrolleado.current = ''
-    setTipo('')
-    setEstadoTransferencia('')
-    setFechas({ fecha: '', desde: '', hasta: '' })
     setError('')
     setCargando(true)
   }
@@ -393,26 +264,9 @@ export default function Inventario() {
 
   function cambiarAlerta(valor) {
     setAlerta(valor)
-    setProducto('')
-    filtroScrolleado.current = ''
     setPagina(1)
     setError('')
     setActualizando(true)
-  }
-
-  function limpiarFiltrosStock() {
-    setAlerta('')
-    setProducto('')
-    filtroScrolleado.current = ''
-    setPagina(1)
-    setError('')
-    setActualizando(true)
-  }
-
-  function cambiarFechas(nuevas) {
-    setFechas(nuevas)
-    setPagina(1)
-    setError('')
   }
 
   function irAPagina(nueva) {
@@ -424,19 +278,6 @@ export default function Inventario() {
   function refrescarListado() {
     setRefresco((valor) => valor + 1)
     setActualizando(true)
-  }
-
-  function destacarTransferencia(id) {
-    if (!id) {
-      return
-    }
-    setTransferenciaDestacada(Number(id))
-    if (destacadoTimer.current) {
-      window.clearTimeout(destacadoTimer.current)
-    }
-    destacadoTimer.current = window.setTimeout(() => {
-      setTransferenciaDestacada(null)
-    }, 3000)
   }
 
   function guardadoProducto(_, esEdicion) {
@@ -554,25 +395,22 @@ export default function Inventario() {
 
   async function abrirDetalleProducto(producto) {
     setDetalleProducto(producto)
-    setDetalleProductoData({ cargando: true, stock: [], costos: [], movimientos: [] })
+    setDetalleProductoData({ cargando: true, stock: [], costos: [] })
     try {
-      const [stock, costos, movimientos] = await Promise.all([
+      const [stock, costos] = await Promise.all([
         pedirTodas(`/stocks/?producto=${producto.id}`),
         pedirTodas(`/productos-proveedores/?producto=${producto.id}`),
-        pedir(`/movimientos-stock/?producto=${producto.id}&page=1`),
       ])
       setDetalleProductoData({
         cargando: false,
         stock,
         costos,
-        movimientos: movimientos.results || [],
       })
     } catch (e) {
       setDetalleProductoData({
         cargando: false,
         stock: [],
         costos: [],
-        movimientos: [],
         error: e.message,
       })
     }
@@ -580,22 +418,17 @@ export default function Inventario() {
 
   async function abrirDetalleStock(stock) {
     setDetalleStock(stock)
-    setDetalleStockData({ cargando: true, lotes: [], movimientos: [] })
+    setDetalleStockData({ cargando: true, lotes: [] })
     try {
-      const [lotes, movimientos] = await Promise.all([
-        pedirTodas(`/detalles-stock/?stock=${stock.id}`),
-        pedir(`/movimientos-stock/?stock=${stock.id}&page=1`),
-      ])
+      const lotes = await pedirTodas(`/detalles-stock/?stock=${stock.id}`)
       setDetalleStockData({
         cargando: false,
         lotes,
-        movimientos: movimientos.results || [],
       })
     } catch (e) {
       setDetalleStockData({
         cargando: false,
         lotes: [],
-        movimientos: [],
         error: e.message,
       })
     }
@@ -621,33 +454,6 @@ export default function Inventario() {
       icon: 'success',
       title: 'Stock cargado',
       text: 'Las cantidades se sumaron al stock de la sucursal.',
-      timer: 1800,
-      showConfirmButton: false,
-    })
-    refrescarListado()
-  }
-
-  function abrirTransferencia(producto = '', deposito = '', detalle = null) {
-    setProductoTransferencia(producto ? String(producto) : '')
-    setProductoTransferenciaDetalle(detalle)
-    setDepositoTransferencia(deposito ? String(deposito) : '')
-    setTransferenciaAbierta(true)
-  }
-
-  function guardadoTransferencia(creada) {
-    setTransferenciaAbierta(false)
-    setTab('transferencias')
-    setEstadoTransferencia('ET')
-    setPagina(1)
-    setTexto('')
-    setError('')
-    setCargando(true)
-    setActualizando(true)
-    destacarTransferencia(creada?.id)
-    Swal.fire({
-      icon: 'success',
-      title: 'Transferencia creada',
-      text: 'Quedó en tránsito hasta que se confirme la recepción.',
       timer: 1800,
       showConfirmButton: false,
     })
@@ -722,98 +528,14 @@ export default function Inventario() {
     refrescarListado()
   }
 
-  async function recibirTransferencia(transferencia) {
-    const resultado = await Swal.fire({
-      title: '¿Confirmar recepción?',
-      text: 'El stock ingresará en el depósito de destino.',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#4a9da8',
-      cancelButtonColor: '#6c757d',
-      confirmButtonText: 'Sí, recibir',
-      cancelButtonText: 'Cancelar',
-    })
-    if (!resultado.isConfirmed) {
-      return
-    }
-    try {
-      const actualizada = await pedir(
-        `/transferencias-stock/${transferencia.id}/recibir/`,
-        {
-          method: 'POST',
-        },
-      )
-      if (estadoTransferencia === 'ET') {
-        setEstadoTransferencia(actualizada.estado)
-        setPagina(1)
-      }
-      destacarTransferencia(actualizada.id)
-      Swal.fire({
-        icon: 'success',
-        title: 'Transferencia recibida',
-        timer: 1500,
-        showConfirmButton: false,
-      })
-      refrescarListado()
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo recibir',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    }
-  }
-
-  async function cancelarTransferencia(transferencia) {
-    const resultado = await Swal.fire({
-      title: '¿Cancelar transferencia?',
-      text: 'El stock volverá al depósito de origen.',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#c0392b',
-      cancelButtonColor: '#6c757d',
-      confirmButtonText: 'Sí, cancelar',
-      cancelButtonText: 'No',
-    })
-    if (!resultado.isConfirmed) {
-      return
-    }
-    try {
-      const actualizada = await pedir(
-        `/transferencias-stock/${transferencia.id}/cancelar/`,
-        {
-          method: 'POST',
-        },
-      )
-      if (estadoTransferencia === 'ET') {
-        setEstadoTransferencia(actualizada.estado)
-        setPagina(1)
-      }
-      destacarTransferencia(actualizada.id)
-      Swal.fire({
-        icon: 'success',
-        title: 'Transferencia cancelada',
-        timer: 1500,
-        showConfirmButton: false,
-      })
-      refrescarListado()
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo cancelar',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    }
-  }
-
   async function exportar() {
     setExportando(true)
     try {
       const parametros = new URLSearchParams()
       if (busqueda) parametros.set('search', busqueda)
-      if (sucursalActiva) parametros.set('sucursal', sucursalActiva)
+      if (sucursalActiva && !(tab === 'stock' && todasLasSucursales)) {
+        parametros.set('sucursal', sucursalActiva)
+      }
 
       let encabezados = []
       let filas = []
@@ -867,54 +589,6 @@ export default function Inventario() {
           cantidadCsv(item.cant_negativa_max),
           item.alerta,
         ])
-      } else if (tab === 'movimientos') {
-        if (tipo) parametros.set('tipo', tipo)
-        if (fechas.fecha) parametros.set('fecha', fechas.fecha)
-        if (fechas.desde) parametros.set('fecha_desde', fechas.desde)
-        if (fechas.hasta) parametros.set('fecha_hasta', fechas.hasta)
-        const todos = await pedirTodas(`/movimientos-stock/?${parametros}`)
-        encabezados = ['Fecha', 'Producto', 'Depósito', 'Tipo', 'Cantidad', 'Referencia']
-        filas = todos.map((item) => [
-          formatearFechaHora(item.fecha),
-          item.stock_detalle,
-          item.detalle_stock_detalle || '',
-          item.tipo_detalle,
-          cantidadCsv(item.cantidad),
-          item.referencia || '',
-        ])
-      } else if (tab === 'transferencias') {
-        if (estadoTransferencia) {
-          parametros.set('estado', estadoTransferencia)
-        }
-        const todos = await pedirTodas(`/transferencias-stock/?${parametros}`)
-        encabezados = [
-          'Producto',
-          'Depósito origen',
-          'Sucursal origen',
-          'Depósito destino',
-          'Sucursal destino',
-          'Cantidad',
-          'Lote origen',
-          'Lote destino',
-          'Estado',
-          'Fecha',
-          'Observaciones destino',
-          'Motivo',
-        ]
-        filas = todos.map((item) => [
-          item.producto_detalle,
-          item.deposito_origen_detalle,
-          item.sucursal_origen_detalle,
-          item.deposito_destino_detalle,
-          item.sucursal_destino_detalle,
-          cantidadCsv(item.cantidad),
-          item.lote || item.lote_origen || '',
-          item.lote_destino || '',
-          item.estado_detalle,
-          formatearFechaHora(item.fecha_creacion),
-          item.observaciones_destino || '',
-          item.motivo || '',
-        ])
       } else if (tab === 'depositos') {
         const todos = await pedirTodas(`/depositos/?${parametros}`)
         encabezados = ['Depósito', 'Sucursal', 'Predeterminado', 'Descripción']
@@ -955,15 +629,13 @@ export default function Inventario() {
   const mostrarBotonExportar = tab !== 'catalogos'
   const mostrarNuevoProducto = tab === 'productos' && puedeProducto
   const mostrarNuevoDeposito = tab === 'depositos' && puedeStock
-  const mostrarNuevaTransferencia =
-    tab === 'transferencias' && puedeStock
   const mostrarCargaStock = tab === 'stock' && puedeStock
 
   return (
     <>
       <Encabezado
         titulo="Inventario"
-        subtitulo="Productos, stock, movimientos y depósitos"
+        subtitulo="Productos, stock y depósitos"
       />
 
       <div className="comercial inventario">
@@ -1005,9 +677,7 @@ export default function Inventario() {
                   type="button"
                   className="boton-comercial-secundario"
                   onClick={exportar}
-                  disabled={
-                    exportando || (tab === 'movimientos' && rangoInvalido)
-                  }
+                  disabled={exportando}
                 >
                   <IconDownload size={18} />
                   {exportando ? 'Exportando…' : 'Exportar CSV'}
@@ -1041,16 +711,6 @@ export default function Inventario() {
                 >
                   <IconPlus size={18} />
                   Nuevo depósito
-                </button>
-              )}
-              {mostrarNuevaTransferencia && (
-                <button
-                  type="button"
-                  className="boton-comercial-primario"
-                  onClick={() => abrirTransferencia()}
-                >
-                  <IconPlus size={18} />
-                  Nueva transferencia
                 </button>
               )}
             </div>
@@ -1128,82 +788,22 @@ export default function Inventario() {
                 <option value="ok">OK</option>
                 <option value="minimo">Mínimo</option>
                 <option value="negativo">Negativo</option>
+                <option value="critico">Crítico</option>
               </select>
             </label>
-          </section>
-        )}
-
-        {tab === 'stock' && (alerta || producto) && (
-          <div className="filtro-origen">
-            <span>
-              Filtro del dashboard:{' '}
-              <strong>
-                {alerta === 'negativo'
-                  ? 'stock negativo'
-                  : alerta === 'minimo'
-                    ? 'bajo el mínimo'
-                    : 'stock'}
-              </strong>
-              {producto && (
-                <>
-                  {' '}
-                  · Producto: <strong>{nombreProductoFiltrado}</strong>
-                </>
-              )}
-            </span>
-            <button type="button" onClick={limpiarFiltrosStock}>
-              <IconX size={15} />
-              Quitar filtro
-            </button>
-          </div>
-        )}
-
-        {tab === 'movimientos' && (
-          <>
-            <section className="inventario-filtros">
-              <label className="campo-comercial">
-                <span>Tipo</span>
-                <select
-                  value={tipo}
-                  onChange={(evento) =>
-                    cambiarFiltro(setTipo, evento.target.value)
-                  }
-                >
-                  {TIPOS_MOVIMIENTO.map((item) => (
-                    <option key={item.id || 'todos'} value={item.id}>
-                      {item.etiqueta}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </section>
-            <FiltrosFecha
-              valores={fechas}
-              onCambiar={cambiarFechas}
-              error={
-                rangoInvalido
-                  ? 'La fecha desde no puede ser posterior a la fecha hasta.'
-                  : ''
-              }
-            />
-          </>
-        )}
-
-        {tab === 'transferencias' && (
-          <section className="inventario-filtros">
-            <label className="campo-comercial">
-              <span>Estado</span>
-              <select
-                value={estadoTransferencia}
-                onChange={(evento) =>
-                  cambiarFiltro(setEstadoTransferencia, evento.target.value)
-                }
-              >
-                <option value="">Todos</option>
-                <option value="ET">En tránsito</option>
-                <option value="RE">Recibidas</option>
-                <option value="CA">Canceladas</option>
-              </select>
+            <label className="inventario-check">
+              <input
+                type="checkbox"
+                checked={todasLasSucursales}
+                onChange={(evento) => {
+                  setTodasLasSucursales(evento.target.checked)
+                  setPagina(1)
+                }}
+              />
+              <span>
+                Ver el stock de{' '}
+                <strong>todas las sucursales</strong>
+              </span>
             </label>
           </section>
         )}
@@ -1339,16 +939,7 @@ export default function Inventario() {
                       </tr>
                     )}
                     {datos.results.map((item) => (
-                      <tr
-                        key={item.id}
-                        data-stock-producto={item.producto_id}
-                        className={
-                          producto &&
-                          String(item.producto_id) === String(producto)
-                            ? 'fila-destacada'
-                            : undefined
-                        }
-                      >
+                      <tr key={item.id}>
                         <td>
                           <strong>{item.producto_detalle}</strong>
                         </td>
@@ -1373,7 +964,7 @@ export default function Inventario() {
                               type="button"
                               className="boton-icono"
                               onClick={() => abrirDetalleStock(item)}
-                              title="Ver lotes y movimientos"
+                              title="Ver lotes"
                             >
                               <IconEye size={17} />
                             </button>
@@ -1398,164 +989,6 @@ export default function Inventario() {
                               </button>
                             )}
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-
-              {tab === 'movimientos' && (
-                <table className="tabla-comercial">
-                  <thead>
-                    <tr>
-                      <th>Fecha</th>
-                      <th>Producto</th>
-                      <th>Depósito</th>
-                      <th>Tipo</th>
-                      <th className="numero">Cantidad</th>
-                      <th>Referencia</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cargando && (
-                      <tr>
-                        <td colSpan="6" className="comercial-vacio">
-                          Cargando movimientos…
-                        </td>
-                      </tr>
-                    )}
-                    {!cargando && datos.results.length === 0 && (
-                      <tr>
-                        <td colSpan="6" className="comercial-vacio">
-                          No se encontraron movimientos.
-                        </td>
-                      </tr>
-                    )}
-                    {datos.results.map((item) => (
-                      <tr key={item.id}>
-                        <td>{formatearFechaHora(item.fecha)}</td>
-                        <td>
-                          <strong>{item.stock_detalle}</strong>
-                        </td>
-                        <td>{item.detalle_stock_detalle || '—'}</td>
-                        <td>{item.tipo_detalle}</td>
-                        <td
-                          className={`numero ${
-                            Number(item.cantidad) < 0
-                              ? 'inventario-negativo'
-                              : 'inventario-positivo'
-                          }`}
-                        >
-                          {Number(item.cantidad) > 0 ? '+' : ''}
-                          {formatearNumero(item.cantidad)}
-                        </td>
-                        <td className="texto-chico">
-                          {item.referencia || '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-
-              {tab === 'transferencias' && (
-                <table className="tabla-comercial">
-                  <thead>
-                    <tr>
-                      <th>Producto</th>
-                      <th>Origen</th>
-                      <th>Destino</th>
-                      <th className="numero">Cantidad</th>
-                      <th>Lote origen</th>
-                      <th>Lote destino</th>
-                      <th>Estado</th>
-                      <th>Fecha</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cargando && (
-                      <tr>
-                        <td colSpan="9" className="comercial-vacio">
-                          Cargando transferencias…
-                        </td>
-                      </tr>
-                    )}
-                    {!cargando && datos.results.length === 0 && (
-                      <tr>
-                        <td colSpan="9" className="comercial-vacio">
-                          No se encontraron transferencias.
-                        </td>
-                      </tr>
-                    )}
-                    {datos.results.map((item) => (
-                      <tr
-                        key={item.id}
-                        className={
-                          transferenciaDestacada === item.id
-                            ? 'fila-destacada'
-                            : undefined
-                        }
-                      >
-                        <td>
-                          <strong>{item.producto_detalle}</strong>
-                        </td>
-                        <td>
-                          {item.deposito_origen_detalle}
-                          <small>{item.sucursal_origen_detalle}</small>
-                        </td>
-                        <td>
-                          {item.deposito_destino_detalle}
-                          <small>{item.sucursal_destino_detalle}</small>
-                        </td>
-                        <td className="numero">
-                          {formatearNumero(item.cantidad)}
-                        </td>
-                        <td>{item.lote || item.lote_origen || '—'}</td>
-                        <td className="texto-chico">
-                          {item.lote_destino || (item.estado === 'ET' ? 'Pendiente' : '—')}
-                          {item.observaciones_destino ? (
-                            <small title={item.observaciones_destino}>
-                              {item.observaciones_destino}
-                            </small>
-                          ) : null}
-                        </td>
-                        <td>
-                          <span
-                            className={`inventario-alerta ${
-                              item.estado === 'RE'
-                                ? 'ok'
-                                : item.estado === 'ET'
-                                  ? 'minimo'
-                                  : 'negativo'
-                            }`}
-                          >
-                            {item.estado_detalle}
-                          </span>
-                        </td>
-                        <td>{formatearFechaHora(item.fecha_creacion)}</td>
-                        <td>
-                          {puedeStock && item.estado === 'ET' && (
-                            <div className="acciones-fila">
-                              <button
-                                type="button"
-                                className="boton-icono boton-icono-exito"
-                                onClick={() => recibirTransferencia(item)}
-                                title="Confirmar recepción"
-                              >
-                                <IconBox size={17} />
-                              </button>
-                              <button
-                                type="button"
-                                className="boton-icono boton-icono-peligro"
-                                onClick={() => cancelarTransferencia(item)}
-                                title="Cancelar transferencia"
-                              >
-                                <IconTrash size={17} />
-                              </button>
-                            </div>
-                          )}
                         </td>
                       </tr>
                     ))}
@@ -1759,17 +1192,6 @@ export default function Inventario() {
         />
       )}
 
-      {transferenciaAbierta && (
-        <FormularioTransferencia
-          depositos={depositos}
-          productoInicial={productoTransferencia}
-          productoInicialDetalle={productoTransferenciaDetalle}
-          depositoOrigenInicial={depositoTransferencia}
-          onCerrar={() => setTransferenciaAbierta(false)}
-          onGuardado={guardadoTransferencia}
-        />
-      )}
-
       {cargaStockAbierta && (
         <FormularioCargaStock
           sucursales={sucursales}
@@ -1848,10 +1270,14 @@ export default function Inventario() {
               <p className="comercial-nota">{detalleProducto.descripcion}</p>
             )}
 
+            {detalleProductoData?.error && (
+              <p className="comercial-error">{detalleProductoData.error}</p>
+            )}
+
             {detalleProductoData?.cargando ? (
               <p className="comercial-nota">
                 <IconLoader2 className="icono-girando" size={18} /> Cargando
-                stock, costos y movimientos…
+                stock y costos…
               </p>
             ) : (
               <>
@@ -1920,40 +1346,6 @@ export default function Inventario() {
                         <tr>
                           <td colSpan="4" className="comercial-vacio">
                             Sin costos de proveedores cargados.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                <h3 className="inventario-subtitulo">Últimos movimientos</h3>
-                <div className="comercial-tabla-scroll">
-                  <table className="tabla-comercial tabla-lineas">
-                    <thead>
-                      <tr>
-                        <th>Fecha</th>
-                        <th>Tipo</th>
-                        <th className="numero">Cantidad</th>
-                        <th>Referencia</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(detalleProductoData?.movimientos || []).map((item) => (
-                        <tr key={item.id}>
-                          <td>{formatearFechaHora(item.fecha)}</td>
-                          <td>{item.tipo_detalle}</td>
-                          <td className="numero">
-                            {Number(item.cantidad) > 0 ? '+' : ''}
-                            {formatearNumero(item.cantidad)}
-                          </td>
-                          <td>{item.referencia || '—'}</td>
-                        </tr>
-                      ))}
-                      {(detalleProductoData?.movimientos || []).length === 0 && (
-                        <tr>
-                          <td colSpan="4" className="comercial-vacio">
-                            Sin movimientos.
                           </td>
                         </tr>
                       )}
@@ -2029,10 +1421,14 @@ export default function Inventario() {
               </div>
             </div>
 
+            {detalleStockData?.error && (
+              <p className="comercial-error">{detalleStockData.error}</p>
+            )}
+
             {detalleStockData?.cargando ? (
               <p className="comercial-nota">
                 <IconLoader2 className="icono-girando" size={18} /> Cargando
-                lotes y movimientos…
+                lotes…
               </p>
             ) : (
               <>
@@ -2064,16 +1460,28 @@ export default function Inventario() {
                             {item.observaciones || '—'}
                           </td>
                           <td>
-                            {puedeStock && (
-                              <button
-                                type="button"
-                                className="boton-icono"
-                                title="Editar lote"
-                                onClick={() => setDetalleLoteEditando(item)}
-                              >
-                                <IconPencil size={16} />
-                              </button>
-                            )}
+                            <div className="acciones-fila">
+                              {puedeStock && (
+                                <button
+                                  type="button"
+                                  className="boton-icono"
+                                  title="Editar lote"
+                                  onClick={() => setDetalleLoteEditando(item)}
+                                >
+                                  <IconPencil size={16} />
+                                </button>
+                              )}
+                              {puedeStock && Number(item.cantidad) > 0 && (
+                                <button
+                                  type="button"
+                                  className="boton-icono"
+                                  title="Mover lote a otro depósito"
+                                  onClick={() => setLoteMoviendo(item)}
+                                >
+                                  <IconArrowsExchange size={16} />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2081,40 +1489,6 @@ export default function Inventario() {
                         <tr>
                           <td colSpan="7" className="comercial-vacio">
                             Sin lotes registrados.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                <h3 className="inventario-subtitulo">Últimos movimientos</h3>
-                <div className="comercial-tabla-scroll">
-                  <table className="tabla-comercial tabla-lineas">
-                    <thead>
-                      <tr>
-                        <th>Fecha</th>
-                        <th>Tipo</th>
-                        <th className="numero">Cantidad</th>
-                        <th>Referencia</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(detalleStockData?.movimientos || []).map((item) => (
-                        <tr key={item.id}>
-                          <td>{formatearFechaHora(item.fecha)}</td>
-                          <td>{item.tipo_detalle}</td>
-                          <td className="numero">
-                            {Number(item.cantidad) > 0 ? '+' : ''}
-                            {formatearNumero(item.cantidad)}
-                          </td>
-                          <td>{item.referencia || '—'}</td>
-                        </tr>
-                      ))}
-                      {(detalleStockData?.movimientos || []).length === 0 && (
-                        <tr>
-                          <td colSpan="4" className="comercial-vacio">
-                            Sin movimientos.
                           </td>
                         </tr>
                       )}
@@ -2149,23 +1523,6 @@ export default function Inventario() {
               {puedeStock && (
                 <button
                   type="button"
-                  className="boton-comercial-secundario"
-                  onClick={() => {
-                    const stock = detalleStock
-                    setDetalleStock(null)
-                    abrirTransferencia(stock.producto, '', {
-                      id: stock.producto,
-                      nombre: stock.producto_detalle,
-                    })
-                  }}
-                >
-                  <IconArrowsExchange size={18} />
-                  Transferir
-                </button>
-              )}
-              {puedeStock && (
-                <button
-                  type="button"
                   className="boton-comercial-primario"
                   onClick={() => {
                     const stock = detalleStock
@@ -2188,6 +1545,22 @@ export default function Inventario() {
           onCerrar={() => setDetalleLoteEditando(null)}
           onGuardado={async () => {
             setDetalleLoteEditando(null)
+            if (detalleStock) {
+              await abrirDetalleStock(detalleStock)
+            }
+            refrescarListado()
+          }}
+        />
+      )}
+
+      {loteMoviendo && (
+        <FormularioMoverLote
+          detalle={loteMoviendo}
+          sucursal={detalleStock?.sucursal}
+          depositos={depositos}
+          onCerrar={() => setLoteMoviendo(null)}
+          onGuardado={async () => {
+            setLoteMoviendo(null)
             if (detalleStock) {
               await abrirDetalleStock(detalleStock)
             }

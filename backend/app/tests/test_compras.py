@@ -6,7 +6,6 @@ from django.utils import timezone
 from app.models import (
     Compra,
     Deposito,
-    MovimientoStock,
     ProductoXProveedor,
     Proveedor,
     Stock,
@@ -40,12 +39,6 @@ class CompraApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.data['estado_entrega'], 'RE')
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.cantidad, Decimal('110.000'))
-        self.assertTrue(
-            MovimientoStock.objects.filter(
-                compra_id=compra_id,
-                tipo=MovimientoStock.TipoMovimiento.COMPRA,
-            ).exists()
-        )
 
     def test_recibir_compra_no_cambia_el_estado_de_pago(self):
         creada = self.crear_compra(cantidad='10.000')
@@ -59,6 +52,28 @@ class CompraApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.data['estado_entrega'], 'RE')
 
     def test_recibir_compra_en_deposito_elegido(self):
+        deposito_destino = Deposito.objects.create(
+            sucursal=self.sucursal,
+            nombre='Deposito Destino',
+        )
+        creada = self.crear_compra(
+            cantidad='5.000',
+            deposito=deposito_destino.id,
+        )
+
+        self.autenticar(self.user_gerente)
+        respuesta = self.client.post(
+            f'/api/compras/{creada.data["id"]}/recibir/',
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.cantidad, Decimal('105.000'))
+        self.assertTrue(
+            self.stock.detalles.filter(deposito=deposito_destino).exists()
+        )
+
+    def test_rechaza_deposito_de_otra_sucursal(self):
         sucursal_destino = Sucursal.objects.create(
             empresa=self.empresa,
             ubicacion=self.ubicacion,
@@ -69,51 +84,14 @@ class CompraApiTests(BaseCorralonTestCase):
             nombre='Deposito Destino',
             es_predeterminado=True,
         )
-        creada = self.crear_compra(cantidad='5.000')
 
-        self.autenticar(self.user_gerente)
-        respuesta = self.client.post(
-            f'/api/compras/{creada.data["id"]}/recibir/',
-            {'deposito': deposito_destino.id},
-            format='json',
+        respuesta = self.crear_compra(
+            cantidad='5.000',
+            deposito=deposito_destino.id,
         )
 
-        self.assertEqual(respuesta.status_code, 200)
-        stock_destino = Stock.objects.get(
-            producto=self.producto,
-            sucursal=sucursal_destino,
-        )
-        self.assertEqual(stock_destino.cantidad, Decimal('5.000'))
-
-    def test_recibir_compra_usa_la_sucursal_central_por_defecto(self):
-        self.sucursal.es_central = True
-        self.sucursal.save(update_fields=['es_central'])
-        sucursal_destino = Sucursal.objects.create(
-            empresa=self.empresa,
-            ubicacion=self.ubicacion,
-            nombre='Sucursal Destino',
-        )
-        Deposito.objects.create(
-            sucursal=sucursal_destino,
-            nombre='Deposito Destino',
-            es_predeterminado=True,
-        )
-        creada = self.crear_compra(cantidad='5.000')
-
-        self.autenticar(self.user_gerente)
-        respuesta = self.client.post(
-            f'/api/compras/{creada.data["id"]}/recibir/',
-        )
-
-        self.assertEqual(respuesta.status_code, 200)
-        self.stock.refresh_from_db()
-        self.assertEqual(self.stock.cantidad, Decimal('105.000'))
-        self.assertFalse(
-            Stock.objects.filter(
-                producto=self.producto,
-                sucursal=sucursal_destino,
-            ).exists()
-        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('sucursal de la caja', str(respuesta.data))
 
     def test_compra_en_camino_no_toca_stock(self):
         respuesta = self.crear_compra(
@@ -170,7 +148,7 @@ class CompraApiTests(BaseCorralonTestCase):
         respuesta = self.client.post(
             '/api/compras/',
             {
-                'seccion_caja': self.seccion.id,
+                'movimiento_caja': self.seccion.id,
                 'proveedor': self.proveedor.id,
                 'items': [
                     {
@@ -301,7 +279,7 @@ class CompraApiTests(BaseCorralonTestCase):
         respuesta = self.client.post(
             '/api/compras/',
             {
-                'seccion_caja': self.seccion.id,
+                'movimiento_caja': self.seccion.id,
                 'proveedor': self.proveedor.id,
                 'items': [
                     {

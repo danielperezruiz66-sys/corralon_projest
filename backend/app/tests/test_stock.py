@@ -2,8 +2,9 @@ from decimal import Decimal
 
 from app.models import (
     DetalleStock,
-    MovimientoStock,
     ProductoXSucursal,
+    Stock,
+    Sucursal,
 )
 
 from .base import BaseCorralonTestCase
@@ -42,6 +43,30 @@ class StockApiTests(BaseCorralonTestCase):
         self.assertEqual(negativo.data['count'], 1)
         self.assertEqual(negativo.data['results'][0]['id'], self.stock.id)
 
+        critico = self.client.get('/api/stocks/', {'alerta': 'critico'})
+        self.assertEqual(critico.data['count'], 2)
+        self.assertEqual(
+            {item['id'] for item in critico.data['results']},
+            {self.stock.id, self.stock_poco.id},
+        )
+
+    def test_stock_sin_minimo_no_aparece_como_bajo(self):
+        self.stock.cantidad = Decimal('0.000')
+        self.stock.save(update_fields=['cantidad'])
+        self.autenticar(self.user_deposito)
+
+        minimo = self.client.get('/api/stocks/', {'alerta': 'minimo'})
+        self.assertEqual(minimo.data['count'], 0)
+
+        critico = self.client.get('/api/stocks/', {'alerta': 'critico'})
+        self.assertEqual(critico.data['count'], 0)
+
+        ok = self.client.get('/api/stocks/', {'alerta': 'ok'})
+        self.assertEqual(ok.data['count'], 2)
+
+        detalle = self.client.get(f'/api/stocks/{self.stock.id}/')
+        self.assertEqual(detalle.data['alerta'], 'OK')
+
     def _detalle_stock(self, stock=None):
         stock = stock or self.stock
         return DetalleStock.objects.filter(stock=stock).order_by('id').first()
@@ -66,13 +91,6 @@ class StockApiTests(BaseCorralonTestCase):
         self.assertEqual(suma.status_code, 200)
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.cantidad, Decimal('120.000'))
-        self.assertTrue(
-            MovimientoStock.objects.filter(
-                stock=self.stock,
-                tipo=MovimientoStock.TipoMovimiento.AJUSTE,
-                cantidad=Decimal('20.000'),
-            ).exists()
-        )
 
         # Reduce el lote original (100 -> 30), total queda 30 + 20 (nuevo lote) = 50.
         resta = self.client.post(
@@ -93,14 +111,6 @@ class StockApiTests(BaseCorralonTestCase):
         detalle.refresh_from_db()
         self.assertEqual(detalle.cantidad, Decimal('30.000'))
         self.assertEqual(self.stock.cantidad, Decimal('50.000'))
-        self.assertTrue(
-            MovimientoStock.objects.filter(
-                stock=self.stock,
-                tipo=MovimientoStock.TipoMovimiento.AJUSTE,
-                cantidad=Decimal('-70.000'),
-                detalle_stock=detalle,
-            ).exists()
-        )
 
     def test_ajuste_rechaza_reduccion_mayor_al_lote(self):
         self.autenticar(self.user_deposito)
@@ -165,21 +175,6 @@ class StockApiTests(BaseCorralonTestCase):
 
         self.assertEqual(respuesta.status_code, 403)
 
-    def test_filtra_movimientos_por_producto_y_sucursal(self):
-        self.crear_venta(cantidad='1.000')
-        self.autenticar(self.user_cajero)
-
-        respuesta = self.client.get(
-            '/api/movimientos-stock/',
-            {
-                'producto': self.producto.id,
-                'sucursal': self.sucursal.id,
-            },
-        )
-
-        self.assertEqual(respuesta.data['count'], 1)
-        self.assertEqual(respuesta.data['results'][0]['tipo'], 'VE')
-
     def test_no_elimina_deposito_con_stock(self):
         self.autenticar(self.user_deposito)
 
@@ -238,13 +233,6 @@ class StockApiTests(BaseCorralonTestCase):
         ).first()
         self.assertIsNotNone(detalle)
         self.assertTrue(detalle.lote.startswith('LOT-'))
-        self.assertTrue(
-            MovimientoStock.objects.filter(
-                stock=self.stock,
-                tipo=MovimientoStock.TipoMovimiento.AJUSTE,
-                referencia__startswith='carga-stock:',
-            ).exists()
-        )
 
     def test_carga_masiva_rechaza_deposito_de_otra_sucursal(self):
         self.autenticar(self.user_deposito)
@@ -299,3 +287,135 @@ class StockApiTests(BaseCorralonTestCase):
 
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('items', respuesta.data)
+
+    def test_cualquier_rol_ve_el_stock_de_todas_las_sucursales(self):
+        """La disponibilidad es estratégica: se ve aunque no sea la sucursal."""
+        otra = Sucursal.objects.create(
+            empresa=self.empresa,
+            ubicacion=self.ubicacion,
+            nombre='Sucursal Norte',
+        )
+        Stock.objects.create(
+            producto=self.producto,
+            sucursal=otra,
+            cantidad=Decimal('25.000'),
+            cant_negativa_max=Decimal('-10.000'),
+        )
+
+        for user in (
+            self.user_cajero,
+            self.user_vendedor,
+            self.user_deposito,
+            self.user_gerente,
+        ):
+            with self.subTest(rol=user.username):
+                self.autenticar(user)
+
+                respuesta = self.client.get('/api/stocks/')
+
+                self.assertEqual(respuesta.status_code, 200)
+                self.assertEqual(respuesta.data['count'], 3)
+                self.assertEqual(
+                    {item['sucursal_detalle'] for item in respuesta.data['results']},
+                    {'Central', 'Sucursal Norte'},
+                )
+
+    def test_el_filtro_por_sucursal_sigue_acotando_el_stock(self):
+        otra = Sucursal.objects.create(
+            empresa=self.empresa,
+            ubicacion=self.ubicacion,
+            nombre='Sucursal Norte',
+        )
+        Stock.objects.create(
+            producto=self.producto,
+            sucursal=otra,
+            cantidad=Decimal('25.000'),
+            cant_negativa_max=Decimal('-10.000'),
+        )
+        self.autenticar(self.user_vendedor)
+
+        respuesta = self.client.get(
+            '/api/stocks/',
+            {'sucursal': self.sucursal.id},
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['count'], 2)
+        self.assertEqual(
+            {item['sucursal_detalle'] for item in respuesta.data['results']},
+            {'Central'},
+        )
+
+
+class MoverLoteTests(BaseCorralonTestCase):
+    def setUp(self):
+        super().setUp()
+        from app.models import Deposito
+
+        self.deposito_mostrador = Deposito.objects.create(
+            sucursal=self.sucursal,
+            nombre='Mostrador',
+        )
+
+    def _detalle(self):
+        return DetalleStock.objects.filter(stock=self.stock).order_by('id').first()
+
+    def test_mueve_lote_completo_entre_depositos(self):
+        self.autenticar(self.user_deposito)
+        detalle = self._detalle()
+
+        respuesta = self.client.post(
+            f'/api/detalles-stock/{detalle.id}/mover/',
+            {'deposito': self.deposito_mostrador.id, 'motivo': 'Paso a mostrador'},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        detalle.refresh_from_db()
+        self.assertEqual(detalle.deposito_id, self.deposito_mostrador.id)
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.cantidad, Decimal('100.000'))
+
+    def test_rechaza_mover_al_mismo_deposito(self):
+        self.autenticar(self.user_deposito)
+        detalle = self._detalle()
+
+        respuesta = self.client.post(
+            f'/api/detalles-stock/{detalle.id}/mover/',
+            {'deposito': self.deposito.id, 'motivo': 'Mismo deposito'},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_rechaza_mover_a_deposito_de_otra_sucursal(self):
+        from app.models import Deposito, Sucursal
+
+        otra = Sucursal.objects.create(
+            empresa=self.empresa,
+            ubicacion=self.ubicacion,
+            nombre='Sucursal Norte',
+        )
+        deposito = Deposito.objects.create(sucursal=otra, nombre='Norte')
+        self.autenticar(self.user_deposito)
+        detalle = self._detalle()
+
+        respuesta = self.client.post(
+            f'/api/detalles-stock/{detalle.id}/mover/',
+            {'deposito': deposito.id, 'motivo': 'Cruce de sucursal'},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_vendedor_no_puede_mover_lotes(self):
+        self.autenticar(self.user_vendedor)
+        detalle = self._detalle()
+
+        respuesta = self.client.post(
+            f'/api/detalles-stock/{detalle.id}/mover/',
+            {'deposito': self.deposito_mostrador.id, 'motivo': 'Sin permiso'},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 403)

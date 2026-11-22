@@ -24,54 +24,6 @@ ESTILOS DE ENCABEZADO - FER-CONS
   gap: 0.75rem;
 }
 
-.selector-sucursal-encabezado {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border-radius: 9999px;
-  background-color: rgba(255, 255, 255, 0.16);
-  padding: 0.35rem 0.45rem 0.35rem 0.8rem;
-  color: #ffffff;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.selector-sucursal-encabezado .campo-comercial {
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.selector-sucursal-encabezado .campo-con-atajo,
-.selector-sucursal-encabezado .selector-buscable {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-width: 0;
-}
-
-.selector-sucursal-encabezado .selector-buscable input {
-  width: 9.5rem;
-  border: none;
-  border-radius: 9999px;
-  background-color: #ffffff;
-  padding: 0.35rem 0.65rem;
-  color: var(--color-oscuro);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.selector-sucursal-encabezado .selector-buscable input:focus-visible {
-  outline: 2px solid var(--color-sidebar);
-}
-
-.selector-sucursal-encabezado .selector-buscable-lista {
-  right: auto;
-  left: 0;
-  min-width: 12rem;
-}
-
 @media (min-width: 768px) {
   .encabezado-principal {
     border-radius: 0;
@@ -79,11 +31,6 @@ ESTILOS DE ENCABEZADO - FER-CONS
     padding-left: 3rem;
     padding-right: 3rem;
     color: var(--color-oscuro);
-  }
-
-  .selector-sucursal-encabezado {
-    background-color: var(--color-fondo);
-    color: var(--color-sidebar);
   }
 }
 
@@ -120,20 +67,76 @@ ESTILOS DE ENCABEZADO - FER-CONS
 
 .tarjeta-usuario-encabezado {
   display: none;
-  border-radius: 0.75rem;
+  max-width: 22rem;
+  align-items: center;
+  gap: 0.8rem;
+  border: 1px solid rgba(74, 157, 168, 0.18);
+  border-radius: 1rem;
   background-color: var(--color-fondo);
-  padding: 0.75rem 2rem;
+  padding: 0.55rem 1.05rem 0.55rem 0.55rem;
   color: var(--color-sidebar);
-  font-size: 1.05rem;
-  text-align: right;
+  text-align: left;
+  box-shadow: 0 4px 14px rgba(15, 42, 48, 0.08);
 }
 
-.tarjeta-usuario-encabezado p {
-  margin: 0;
+.avatar-usuario-encabezado {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 9999px;
+  background-color: #ffffff;
+  color: var(--color-sidebar);
+  font-size: 1.05rem;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(15, 42, 48, 0.16);
+}
+
+.datos-usuario-encabezado {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+  line-height: 1.15;
+}
+
+.datos-usuario-encabezado strong {
+  overflow: hidden;
+  color: var(--color-oscuro);
+  font-size: 1rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta-usuario-encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.rol-usuario-encabezado {
+  border-radius: 9999px;
+  background-color: rgba(74, 157, 168, 0.14);
+  padding: 0.12rem 0.5rem;
+  color: var(--color-sidebar);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.legajo-usuario-encabezado {
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 @media (min-width: 640px) {
   .tarjeta-usuario-encabezado {
-    display: block;
+    display: inline-flex;
   }
 }

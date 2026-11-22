@@ -3,11 +3,13 @@ import { IconPlus } from '@tabler/icons-react'
 import useDebounce from '../../hooks/useDebounce'
 import { formatearMoneda, formatearNumero } from '../../utils/formato'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
+import '../../styles/components/comercial/SelectorProductos.css'
 
 export default function SelectorProductos({
   productos = [],
   onBuscar = null,
   stocks = {},
+  disponibilidad = {},
   mostrarStock = false,
   precios = null,
   tituloPrecio = 'Precio',
@@ -142,6 +144,13 @@ export default function SelectorProductos({
             {filtrados.map((producto) => {
               const stock = stocks[producto.id]
               const cantidad = stock ? Number(stock.cantidad) : null
+              const otrasSucursales = (
+                disponibilidad[producto.id] ?? []
+              ).filter(
+                (fila) =>
+                  !stock || String(fila.sucursal_id) !== String(stock.sucursal),
+              )
+              const tieneDisponibilidad = otrasSucursales.length > 0
               return (
                 <tr key={producto.id}>
                   <td className="mono">{producto.codigo}</td>
@@ -165,6 +174,18 @@ export default function SelectorProductos({
                       }`}
                     >
                       {cantidad === null ? '—' : formatearNumero(cantidad)}
+                      {tieneDisponibilidad && (
+                        <small className="selector-disponibilidad">
+                          {otrasSucursales
+                            .map(
+                              (fila) =>
+                                `${fila.sucursal_detalle}: ${formatearNumero(
+                                  fila.cantidad,
+                                )}`,
+                            )
+                            .join(' · ')}
+                        </small>
+                      )}
                     </td>
                   )}
                   <td className="numero">

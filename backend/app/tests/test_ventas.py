@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.utils import timezone
 
-from app.models import DetalleStock, MovimientoStock, ProductoXProveedor, Venta
+from app.models import DetalleStock, DetalleVenta, ProductoXProveedor, Venta
 
 from .base import BaseCorralonTestCase
 
@@ -146,9 +146,12 @@ class VentaApiTests(BaseCorralonTestCase):
 
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.cantidad, Decimal('98.000'))
-        self.assertEqual(
-            MovimientoStock.objects.filter(venta_id=respuesta.data['id']).count(),
-            1,
+        self.assertEqual(len(respuesta.data['detalles']), 1)
+        self.assertTrue(
+            DetalleVenta.objects.filter(
+                venta_id=respuesta.data['id'],
+                consumos__isnull=False,
+            ).exists()
         )
 
     def test_venta_rechaza_stock_por_debajo_del_limite(self):
@@ -160,14 +163,14 @@ class VentaApiTests(BaseCorralonTestCase):
         self.assertEqual(self.stock_poco.cantidad, Decimal('5.000'))
         self.assertEqual(Venta.objects.count(), 0)
 
-    def test_venta_exige_seccion_abierta(self):
+    def test_venta_exige_movimiento_abierto(self):
         self.seccion.estado = 'CE'
         self.seccion.save(update_fields=['estado'])
 
         respuesta = self.crear_venta()
 
         self.assertEqual(respuesta.status_code, 400)
-        self.assertIn('no esta abierta', respuesta.data['detail'])
+        self.assertIn('no esta abierto', respuesta.data['detail'])
 
     def test_confirmar_venta_sin_pagos_devuelve_400(self):
         creada = self.crear_venta()
@@ -194,12 +197,6 @@ class VentaApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.data['estado'], 'AN')
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.cantidad, Decimal('100.000'))
-        self.assertTrue(
-            MovimientoStock.objects.filter(
-                venta_id=venta_id,
-                tipo=MovimientoStock.TipoMovimiento.CANCELACION,
-            ).exists()
-        )
 
     def test_cancelar_venta_con_pagos_devuelve_400(self):
         creada = self.crear_venta()

@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
-  IconBuildingWarehouse,
   IconCash,
   IconDownload,
   IconEye,
   IconLoader2,
   IconPencil,
+  IconPlayerPause,
+  IconPlayerPlay,
   IconPlus,
   IconSearch,
   IconSettings,
@@ -17,7 +18,6 @@ import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import DetalleSeccionCaja from '../components/caja/DetalleSeccionCaja.jsx'
-import FormularioAsignacionCaja from '../components/caja/FormularioAsignacionCaja.jsx'
 import FormularioAperturaSeccion from '../components/caja/FormularioAperturaSeccion.jsx'
 import FormularioCaja from '../components/caja/FormularioCaja.jsx'
 import FormularioCierreSeccion from '../components/caja/FormularioCierreSeccion.jsx'
@@ -48,18 +48,20 @@ const TABS = [
 const FILTROS_ESTADO = [
   { id: '', etiqueta: 'Todas' },
   { id: 'AB', etiqueta: 'Abiertas' },
+  { id: 'PA', etiqueta: 'En pausa' },
   { id: 'CE', etiqueta: 'Cerradas' },
   { id: 'AU', etiqueta: 'Auditadas' },
 ]
 
 const CLASE_ESTADO = {
   AB: 'estado-ab',
+  PA: 'estado-pa',
   CE: 'estado-ce',
   AU: 'estado-au',
 }
 
 export default function Caja() {
-  const { puedeEscribir } = useAuth()
+  const { user, puedeEscribir } = useAuth()
   const { sucursalActiva, sucursalDetalle } = useSucursal()
   const puedeOperar = puedeEscribir(['AD', 'GE', 'CA'])
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
@@ -73,11 +75,11 @@ export default function Caja() {
   )
 
   const [datos, setDatos] = useState(PAGINA_VACIA)
+  // Movimientos AB/PA: bloquean la caja y se muestran como "cajas abiertas".
   const [abiertas, setAbiertas] = useState([])
-  const [asignacionesBranch, setAsignacionesBranch] = useState([])
+  const [cajasSucursal, setCajasSucursal] = useState([])
   const [sucursales, setSucursales] = useState([])
   const [cajasFisicas, setCajasFisicas] = useState([])
-  const [asignaciones, setAsignaciones] = useState([])
 
   const [cargando, setCargando] = useState(true)
   const [actualizando, setActualizando] = useState(false)
@@ -89,7 +91,6 @@ export default function Caja() {
   const [cierreSeccion, setCierreSeccion] = useState(null)
   const [detalleSeccion, setDetalleSeccion] = useState(null)
   const [cajaEditando, setCajaEditando] = useState(null)
-  const [asignacionEditando, setAsignacionEditando] = useState(null)
 
   const busqueda = useDebounce(texto.trim(), 350)
   const buscando = texto.trim() !== busqueda || actualizando
@@ -111,21 +112,27 @@ export default function Caja() {
     setSearchParams(parametros, { replace: true })
   }, [tab, busqueda, estado, pagina, setSearchParams])
 
-  // Secciones abiertas (para el encabezado y la disponibilidad de cajas).
+  // Movimientos activos de la sucursal (abiertos o en pausa): bloquean la
+  // caja fisica y se muestran en el panel de cajas abiertas.
   useEffect(() => {
     if (tab !== 'listado') {
       return undefined
     }
     let vigente = true
-    const parametros = new URLSearchParams({ estado: 'AB' })
+    const base = new URLSearchParams()
     if (sucursalActiva) {
-      parametros.set('sucursal', sucursalActiva)
+      base.set('sucursal', sucursalActiva)
+    }
+    const conEstado = (estado) => {
+      const params = new URLSearchParams(base)
+      params.set('estado', estado)
+      return pedirTodas(`/movimientos-caja/?${params.toString()}`)
     }
 
-    pedirTodas(`/secciones-caja/?${parametros.toString()}`)
-      .then((secciones) => {
+    Promise.all([conEstado('AB'), conEstado('PA')])
+      .then(([abiertos, pausados]) => {
         if (vigente) {
-          setAbiertas(secciones)
+          setAbiertas([...abiertos, ...pausados])
         }
       })
       .catch((e) => {
@@ -139,7 +146,7 @@ export default function Caja() {
     }
   }, [tab, sucursalActiva, refresco])
 
-  // Cajas habilitadas de la sucursal elegida (para abrir una seccion).
+  // Cajas fisicas de la sucursal elegida (para abrir un movimiento).
   useEffect(() => {
     if (tab !== 'listado' || !sucursalActiva) {
       return undefined
@@ -147,13 +154,13 @@ export default function Caja() {
     let vigente = true
     const parametros = new URLSearchParams({
       sucursal: sucursalActiva,
-      habilitada: 'true',
+      estado: 'AC',
     })
 
-    pedirTodas(`/sucursales-cajas/?${parametros.toString()}`)
-      .then((asignacionesData) => {
+    pedirTodas(`/cajas/?${parametros.toString()}`)
+      .then((cajasData) => {
         if (vigente) {
-          setAsignacionesBranch(asignacionesData)
+          setCajasSucursal(cajasData)
         }
       })
       .catch((e) => {
@@ -185,7 +192,7 @@ export default function Caja() {
       parametros.set('estado', estado)
     }
 
-    pedir(`/secciones-caja/?${parametros.toString()}`, {
+    pedir(`/movimientos-caja/?${parametros.toString()}`, {
       signal: controlador.signal,
     })
       .then((respuesta) => {
@@ -213,7 +220,7 @@ export default function Caja() {
     }
   }, [tab, pagina, busqueda, estado, sucursalActiva, refresco])
 
-  // Gestion: cajas fisicas, asignaciones y sucursales.
+  // Gestion: cajas fisicas y sucursales.
   useEffect(() => {
     if (tab !== 'gestion') {
       return undefined
@@ -222,15 +229,13 @@ export default function Caja() {
 
     Promise.all([
       pedirTodas('/cajas/'),
-      pedirTodas('/sucursales-cajas/'),
       pedirTodas('/sucursales/'),
     ])
-      .then(([cajasData, asignacionesData, sucursalesData]) => {
+      .then(([cajasData, sucursalesData]) => {
         if (!vigente) {
           return
         }
         setCajasFisicas(cajasData)
-        setAsignaciones(asignacionesData)
         setSucursales(sucursalesData)
         setError('')
       })
@@ -304,6 +309,105 @@ export default function Caja() {
     refrescar()
   }
 
+  function esDueño(seccion) {
+    const id = user?.empleado?.id
+    return Boolean(id) && Number(seccion.empleado) === Number(id)
+  }
+
+  async function pausarSeccion(seccion) {
+    const resultado = await Swal.fire({
+      title: `¿Pausar la sección #${seccion.id}?`,
+      text: 'La caja queda bloqueada: no se pueden registrar ventas ni pagos hasta que la reanudes.',
+      icon: 'warning',
+      input: 'textarea',
+      inputLabel: 'Motivo de la pausa *',
+      inputPlaceholder: 'Indicá por qué dejás la caja en pausa',
+      inputAttributes: { maxlength: 500 },
+      showCancelButton: true,
+      confirmButtonColor: '#6d28d9',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Sí, pausar',
+      cancelButtonText: 'Cancelar',
+      inputValidator: (valor) => {
+        if (!valor || valor.trim().length < 10) {
+          return 'Explicá el motivo (10 caracteres o más).'
+        }
+        return null
+      },
+    })
+    if (!resultado.isConfirmed) {
+      return
+    }
+
+    try {
+      await pedir(`/movimientos-caja/${seccion.id}/pausar/`, {
+        method: 'POST',
+        body: JSON.stringify({ motivo: resultado.value }),
+      })
+      Swal.fire({
+        icon: 'success',
+        title: 'Sección en pausa',
+        text: 'Quedó registrada la pausa con su motivo.',
+        timer: 1800,
+        showConfirmButton: false,
+      })
+      refrescar()
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo pausar la sección',
+        text: e.message,
+        confirmButtonColor: '#4a9da8',
+      })
+    }
+  }
+
+  async function reanudarSeccion(seccion) {
+    const resultado = await Swal.fire({
+      title: `¿Reanudar la sección #${seccion.id}?`,
+      text: 'Poné tu contraseña para volver a abrir la caja.',
+      icon: 'question',
+      input: 'password',
+      inputLabel: 'Tu contraseña *',
+      inputAttributes: { autocapitalize: 'off', autocomplete: 'current-password' },
+      showCancelButton: true,
+      confirmButtonColor: '#4a9da8',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Reanudar',
+      cancelButtonText: 'Cancelar',
+      inputValidator: (valor) => {
+        if (!valor) {
+          return 'Ingresá tu contraseña.'
+        }
+        return null
+      },
+    })
+    if (!resultado.isConfirmed) {
+      return
+    }
+
+    try {
+      await pedir(`/movimientos-caja/${seccion.id}/reanudar/`, {
+        method: 'POST',
+        body: JSON.stringify({ clave: resultado.value }),
+      })
+      Swal.fire({
+        icon: 'success',
+        title: 'Sección reanudada',
+        timer: 1600,
+        showConfirmButton: false,
+      })
+      refrescar()
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo reanudar la sección',
+        text: e.message,
+        confirmButtonColor: '#4a9da8',
+      })
+    }
+  }
+
   function guardadoCaja(_, esEdicion) {
     setCajaEditando(null)
     Swal.fire({
@@ -315,56 +419,6 @@ export default function Caja() {
     refrescar()
   }
 
-  function guardadaAsignacion(_, esEdicion) {
-    setAsignacionEditando(null)
-    Swal.fire({
-      icon: 'success',
-      title: esEdicion ? 'Asignación actualizada' : 'Asignación creada',
-      timer: 1500,
-      showConfirmButton: false,
-    })
-    refrescar()
-  }
-
-  async function alternarHabilitada(asignacion) {
-    const nuevo = !asignacion.habilitada
-    const resultado = await Swal.fire({
-      title: nuevo ? '¿Habilitar?' : '¿Deshabilitar?',
-      text: nuevo
-        ? 'La caja podrá abrir secciones en esta sucursal.'
-        : 'La caja dejará de abrir secciones en esta sucursal.',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#4a9da8',
-      cancelButtonColor: '#6c757d',
-      confirmButtonText: nuevo ? 'Sí, habilitar' : 'Sí, deshabilitar',
-      cancelButtonText: 'Cancelar',
-    })
-    if (!resultado.isConfirmed) {
-      return
-    }
-    try {
-      await pedir(`/sucursales-cajas/${asignacion.id}/`, {
-        method: 'PATCH',
-        body: JSON.stringify({ habilitada: nuevo }),
-      })
-      Swal.fire({
-        icon: 'success',
-        title: nuevo ? 'Habilitada' : 'Deshabilitada',
-        timer: 1400,
-        showConfirmButton: false,
-      })
-      refrescar()
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo actualizar la asignación',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    }
-  }
-
   async function exportar() {
     setExportando(true)
     try {
@@ -373,21 +427,21 @@ export default function Caja() {
       if (busqueda) parametros.set('search', busqueda)
       if (estado) parametros.set('estado', estado)
       const todos = await pedirTodas(
-        `/secciones-caja/?${parametros.toString()}`,
+        `/movimientos-caja/?${parametros.toString()}`,
       )
 
       if (todos.length === 0) {
         Swal.fire({
           icon: 'info',
           title: 'Sin resultados',
-          text: 'No hay secciones para exportar.',
+          text: 'No hay movimientos de caja para exportar.',
           confirmButtonColor: '#4a9da8',
         })
         return
       }
 
       descargarCsv(
-        `secciones-caja-${new Date().toISOString().slice(0, 10)}.csv`,
+        `movimientos-caja-${new Date().toISOString().slice(0, 10)}.csv`,
         [
           'Caja física',
           'Sucursal',
@@ -430,9 +484,8 @@ export default function Caja() {
   }
 
   const cajasDisponibles = sucursalActiva
-    ? asignacionesBranch.filter(
-        (asignacion) =>
-          !abiertas.some((s) => s.caja === asignacion.caja),
+    ? cajasSucursal.filter(
+        (caja) => !abiertas.some((movimiento) => movimiento.caja === caja.id),
       )
     : []
 
@@ -444,7 +497,7 @@ export default function Caja() {
     <>
       <Encabezado
         titulo="Caja"
-        subtitulo="Apertura, cierre y auditoria de secciones de caja"
+        subtitulo="Apertura, cierre y auditoria de las secciones de caja"
       />
 
       <div className="comercial inventario">
@@ -733,6 +786,26 @@ export default function Caja() {
                             {puedeOperar && item.estado === 'AB' && (
                               <button
                                 type="button"
+                                className="boton-icono"
+                                onClick={() => pausarSeccion(item)}
+                                title="Pausar seccion"
+                              >
+                                <IconPlayerPause size={17} />
+                              </button>
+                            )}
+                            {item.estado === 'PA' && esDueño(item) && (
+                              <button
+                                type="button"
+                                className="boton-icono boton-icono-exito"
+                                onClick={() => reanudarSeccion(item)}
+                                title="Reanudar seccion"
+                              >
+                                <IconPlayerPlay size={17} />
+                              </button>
+                            )}
+                            {puedeOperar && item.estado === 'AB' && (
+                              <button
+                                type="button"
                                 className="boton-icono boton-icono-exito"
                                 onClick={() => setCierreSeccion(item)}
                                 title="Cerrar seccion"
@@ -798,9 +871,9 @@ export default function Caja() {
                 <table className="tabla-comercial">
                   <thead>
                     <tr>
-                      <th>Nombre</th>
+                      <th>Sucursal</th>
+                      <th>Número</th>
                       <th>Estado</th>
-                      <th>Asignaciones</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>
@@ -821,103 +894,15 @@ export default function Caja() {
                     )}
                     {cajasFisicas.map((caja) => (
                       <tr key={caja.id}>
-                        <td>
-                          <strong>{caja.nombre}</strong>
-                        </td>
+                        <td>{caja.sucursal_detalle}</td>
+                        <td className="mono">Caja {caja.numero_caja}</td>
                         <td>{caja.estado_detalle}</td>
-                        <td className="texto-chico">
-                          {asignaciones
-                            .filter((item) => item.caja === caja.id)
-                            .map((item) => item.sucursal_detalle)
-                            .join(', ') || '—'}
-                        </td>
                         <td>
                           <button
                             type="button"
                             className="boton-icono"
                             onClick={() => setCajaEditando(caja)}
                             title="Editar caja"
-                          >
-                            <IconPencil size={17} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="comercial-panel">
-              <div className="caja-panel-cabecera">
-                <h2 className="caja-panel-titulo">
-                  <IconBuildingWarehouse size={22} />
-                  Asignaciones sucursal ↔ caja
-                </h2>
-                <button
-                  type="button"
-                  className="boton-comercial-primario"
-                  onClick={() => setAsignacionEditando({})}
-                >
-                  <IconPlus size={18} />
-                  Nueva asignación
-                </button>
-              </div>
-
-              <div className="comercial-tabla-scroll">
-                <table className="tabla-comercial">
-                  <thead>
-                    <tr>
-                      <th>Caja</th>
-                      <th>Sucursal</th>
-                      <th>Habilitada</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cargando && (
-                      <tr>
-                        <td colSpan="4" className="comercial-vacio">
-                          Cargando asignaciones…
-                        </td>
-                      </tr>
-                    )}
-                    {!cargando && asignaciones.length === 0 && (
-                      <tr>
-                        <td colSpan="4" className="comercial-vacio">
-                          No hay asignaciones.
-                        </td>
-                      </tr>
-                    )}
-                    {asignaciones.map((asignacion) => (
-                      <tr key={asignacion.id}>
-                        <td>{asignacion.caja_detalle}</td>
-                        <td>{asignacion.sucursal_detalle}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className={`inventario-estado ${
-                              asignacion.habilitada ? 'activo' : 'inactivo'
-                            }`}
-                            aria-pressed={asignacion.habilitada}
-                            onClick={() => alternarHabilitada(asignacion)}
-                            title={
-                              asignacion.habilitada
-                                ? 'Deshabilitar'
-                                : 'Habilitar'
-                            }
-                          >
-                              {asignacion.habilitada
-                                ? 'Habilitada'
-                                : 'Deshabilitada'}
-                          </button>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="boton-icono"
-                            onClick={() => setAsignacionEditando(asignacion)}
-                            title="Editar asignación"
                           >
                             <IconPencil size={17} />
                           </button>
@@ -954,6 +939,10 @@ export default function Caja() {
         <DetalleSeccionCaja
           seccion={detalleSeccion}
           puedeAuditar={puedeGestionar}
+          puedePausar={puedeOperar}
+          puedeReanudar={esDueño(detalleSeccion)}
+          onPausar={pausarSeccion}
+          onReanudar={reanudarSeccion}
           onCerrar={() => setDetalleSeccion(null)}
           onAuditado={() => {
             setDetalleSeccion(null)
@@ -965,20 +954,10 @@ export default function Caja() {
       {cajaEditando !== null && (
         <FormularioCaja
           caja={cajaEditando}
+          sucursales={sucursales}
+          sucursalPorDefecto={sucursalActiva || ''}
           onCerrar={() => setCajaEditando(null)}
           onGuardado={guardadoCaja}
-        />
-      )}
-
-      {asignacionEditando !== null && (
-        <FormularioAsignacionCaja
-          asignacion={
-            asignacionEditando.id ? asignacionEditando : null
-          }
-          cajas={cajasFisicas}
-          sucursales={sucursales}
-          onCerrar={() => setAsignacionEditando(null)}
-          onGuardado={guardadaAsignacion}
         />
       )}
     </>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   IconAlertTriangle,
+  IconCalendar,
   IconCash,
   IconChartBar,
   IconClock,
@@ -35,6 +36,7 @@ const DATOS_VACIOS = {
   codigos: [],
   bloques: {
     ventas: false,
+    alertas_ventas: false,
     compras: false,
     stock: false,
     caja: false,
@@ -53,13 +55,27 @@ const DATOS_VACIOS = {
       ticket_promedio: '0',
       comparacion: { monto_anterior: '0', variacion_porcentaje: null },
     },
+    ultimos_7_dias: {
+      cantidad: 0,
+      monto: '0',
+      ticket_promedio: '0',
+      comparacion: { monto_anterior: '0', variacion_porcentaje: null },
+    },
+    mes: { cantidad: 0, monto: '0', ticket_promedio: '0' },
     pendientes: {
       cantidad: 0,
       monto: '0',
       ticket_promedio: '0',
+      saldo_pendiente: '0',
       por_vencer: 0,
       vencidas: 0,
       minutos_restantes: null,
+    },
+    parciales: {
+      cantidad: 0,
+      monto: '0',
+      ticket_promedio: '0',
+      saldo_pendiente: '0',
     },
   },
   compras: {
@@ -67,8 +83,8 @@ const DATOS_VACIOS = {
     mes: { cantidad: 0, monto: '0', ticket_promedio: '0' },
   },
   catalogo: { productos: 0 },
-  stock: { bajo: 0, negativo: 0 },
-  caja: { abiertas: 0 },
+  stock: { bajo: 0, negativo: 0, critico: 0 },
+  caja: { abiertas: 0, pausadas: 0, en_curso: 0 },
   equipo: { empleados_activos: 0, proveedores_activos: 0 },
   alertas: {
     ventas_por_vencer: 0,
@@ -76,8 +92,11 @@ const DATOS_VACIOS = {
     minutos_restantes: null,
     stock_negativo: 0,
     stock_bajo: 0,
+    stock_critico: 0,
     compras_por_recibir: 0,
     cajas_abiertas: 0,
+    cajas_pausadas: 0,
+    cajas_en_curso: 0,
   },
   serie_etiqueta: 'Últimos 7 días',
   ventas_por_dia: [],
@@ -87,6 +106,61 @@ const DATOS_VACIOS = {
   compras_por_recibir: [],
   cajas_abiertas: [],
 }
+
+function normalizarDashboard(recibido) {
+  const datos = recibido ?? {}
+  const ventas = datos.ventas ?? {}
+  return {
+    ...DATOS_VACIOS,
+    ...datos,
+    bloques: { ...DATOS_VACIOS.bloques, ...(datos.bloques ?? {}) },
+    ventas: {
+      ...DATOS_VACIOS.ventas,
+      ...ventas,
+      hoy: { ...DATOS_VACIOS.ventas.hoy, ...(ventas.hoy ?? {}) },
+      semana: { ...DATOS_VACIOS.ventas.semana, ...(ventas.semana ?? {}) },
+      ultimos_7_dias: {
+        ...DATOS_VACIOS.ventas.ultimos_7_dias,
+        ...(ventas.ultimos_7_dias ?? {}),
+      },
+      mes: { ...DATOS_VACIOS.ventas.mes, ...(ventas.mes ?? {}) },
+      pendientes: {
+        ...DATOS_VACIOS.ventas.pendientes,
+        ...(ventas.pendientes ?? {}),
+      },
+      parciales: {
+        ...DATOS_VACIOS.ventas.parciales,
+        ...(ventas.parciales ?? {}),
+      },
+    },
+    compras: {
+      ...DATOS_VACIOS.compras,
+      ...(datos.compras ?? {}),
+      mes: {
+        ...DATOS_VACIOS.compras.mes,
+        ...(datos.compras?.mes ?? {}),
+      },
+    },
+    catalogo: { ...DATOS_VACIOS.catalogo, ...(datos.catalogo ?? {}) },
+    stock: { ...DATOS_VACIOS.stock, ...(datos.stock ?? {}) },
+    caja: { ...DATOS_VACIOS.caja, ...(datos.caja ?? {}) },
+    equipo: { ...DATOS_VACIOS.equipo, ...(datos.equipo ?? {}) },
+    alertas: { ...DATOS_VACIOS.alertas, ...(datos.alertas ?? {}) },
+    ventas_por_dia: datos.ventas_por_dia ?? DATOS_VACIOS.ventas_por_dia,
+    ventas_recientes:
+      datos.ventas_recientes ?? DATOS_VACIOS.ventas_recientes,
+    ventas_por_vencer:
+      datos.ventas_por_vencer ?? DATOS_VACIOS.ventas_por_vencer,
+    stock_critico: datos.stock_critico ?? DATOS_VACIOS.stock_critico,
+    compras_por_recibir:
+      datos.compras_por_recibir ?? DATOS_VACIOS.compras_por_recibir,
+    cajas_abiertas: datos.cajas_abiertas ?? DATOS_VACIOS.cajas_abiertas,
+  }
+}
+
+// Cache en memoria del ultimo dashboard: al volver desde otro modulo se
+// muestra al instante y la actualizacion sigue en segundo plano.
+let cacheDashboard = null
 
 function TarjetaKpi({ icono: Icono, etiqueta, valor, detalle, tono = '' }) {
   return (
@@ -131,11 +205,18 @@ export default function Inicio() {
   const { user } = useAuth()
   const { sucursalActiva } = useSucursal()
   const location = useLocation()
-  const [datos, setDatos] = useState(DATOS_VACIOS)
-  const [cargando, setCargando] = useState(true)
-  const [actualizando, setActualizando] = useState(false)
-  const [tieneDatos, setTieneDatos] = useState(false)
-  const [ultimaActualizacion, setUltimaActualizacion] = useState(null)
+  const claveCache = `${user?.id ?? ''}|${sucursalActiva || ''}`
+  const cacheInicial =
+    cacheDashboard && cacheDashboard.clave === claveCache
+      ? cacheDashboard
+      : null
+  const [datos, setDatos] = useState(cacheInicial?.datos ?? DATOS_VACIOS)
+  const [cargando, setCargando] = useState(!cacheInicial)
+  const [actualizando, setActualizando] = useState(Boolean(cacheInicial))
+  const [tieneDatos, setTieneDatos] = useState(Boolean(cacheInicial))
+  const [ultimaActualizacion, setUltimaActualizacion] = useState(
+    cacheInicial?.actualizado ?? null,
+  )
   const [error, setError] = useState('')
   const solicitudRef = useRef(false)
 
@@ -148,6 +229,23 @@ export default function Inicio() {
     return pedir(`/dashboard/${consulta ? `?${consulta}` : ''}`)
   }, [sucursalActiva])
 
+  const aplicarRespuesta = useCallback(
+    (respuesta) => {
+      const normalizado = normalizarDashboard(respuesta)
+      const ahora = new Date()
+      setDatos(normalizado)
+      setError('')
+      setTieneDatos(true)
+      setUltimaActualizacion(ahora)
+      cacheDashboard = {
+        clave: claveCache,
+        datos: normalizado,
+        actualizado: ahora,
+      }
+    },
+    [claveCache],
+  )
+
   const cargar = useCallback(async () => {
     if (solicitudRef.current) {
       return
@@ -156,10 +254,7 @@ export default function Inicio() {
     solicitudRef.current = true
     try {
       const respuesta = await consultar()
-      setDatos(respuesta)
-      setError('')
-      setTieneDatos(true)
-      setUltimaActualizacion(new Date())
+      aplicarRespuesta(respuesta)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -167,7 +262,7 @@ export default function Inicio() {
       setCargando(false)
       setActualizando(false)
     }
-  }, [consultar])
+  }, [consultar, aplicarRespuesta])
 
   useEffect(() => {
     let vigente = true
@@ -175,10 +270,7 @@ export default function Inicio() {
     consultar()
       .then((respuesta) => {
         if (vigente) {
-          setDatos(respuesta)
-          setError('')
-          setTieneDatos(true)
-          setUltimaActualizacion(new Date())
+          aplicarRespuesta(respuesta)
         }
       })
       .catch((e) => {
@@ -196,7 +288,7 @@ export default function Inicio() {
     return () => {
       vigente = false
     }
-  }, [consultar])
+  }, [consultar, aplicarRespuesta])
 
   useEffect(() => {
     if (cargando || !location.hash) {
@@ -214,7 +306,7 @@ export default function Inicio() {
         setActualizando(true)
         cargar()
       }
-    }, 30000)
+    }, 15000)
 
     const alEnfocar = () => {
       setActualizando(true)
@@ -281,7 +373,7 @@ export default function Inicio() {
     )
   }
 
-  const { ventas, compras, catalogo, stock, caja, equipo, alertas } = datos
+  const { ventas, catalogo, stock, equipo, alertas } = datos
   const bloques = datos.bloques ?? DATOS_VACIOS.bloques
   const maximo = Math.max(
     ...datos.ventas_por_dia.map((dia) => Number(dia.monto) || 0),
@@ -292,29 +384,9 @@ export default function Inicio() {
     0,
   )
   const esSerieMensual = datos.ventas_por_dia.length > 10
-  const montoInicialCajas = datos.cajas_abiertas.reduce(
-    (total, item) => total + (Number(item.monto_inicial) || 0),
-    0,
-  )
-  const proximaPorVencer = datos.ventas_por_vencer?.[0]
-  const detalleVencimiento = proximaPorVencer
-    ? `Venta #${proximaPorVencer.id} · ${proximaPorVencer.cliente} · ${formatearMoneda(
-        proximaPorVencer.monto,
-      )} · ${proximaPorVencer.minutos_restantes} min`
-    : 'Revisar ventas pendientes'
 
   const alertasActivas = [
-    bloques.ventas && alertas.ventas_por_vencer > 0 && {
-      id: 'vencer',
-      tono: 'peligro',
-      icono: IconClock,
-      titulo: `${alertas.ventas_por_vencer} venta${
-        alertas.ventas_por_vencer === 1 ? '' : 's'
-      } por vencer`,
-      detalle: detalleVencimiento,
-      to: '/ventas?alerta=por_vencer',
-    },
-    bloques.ventas && alertas.ventas_vencidas > 0 && {
+    bloques.alertas_ventas && alertas.ventas_vencidas > 0 && {
       id: 'vencidas',
       tono: 'peligro',
       icono: IconClock,
@@ -333,8 +405,8 @@ export default function Inicio() {
       titulo: `${alertas.stock_negativo} producto${
         alertas.stock_negativo === 1 ? '' : 's'
       } con stock negativo`,
-      detalle: 'Revisar reposición urgente',
-      to: '/productos?tab=stock&alerta=negativo',
+      detalle: 'Ver en Stock crítico',
+      to: '#stock-critico',
     },
     bloques.stock && alertas.stock_bajo > 0 && {
       id: 'bajo',
@@ -343,8 +415,8 @@ export default function Inicio() {
       titulo: `${alertas.stock_bajo} producto${
         alertas.stock_bajo === 1 ? '' : 's'
       } bajo el mínimo`,
-      detalle: 'Programar compra',
-      to: '/productos?tab=stock&alerta=minimo',
+      detalle: 'Ver en Stock crítico',
+      to: '#stock-critico',
     },
     bloques.compras && alertas.compras_por_recibir > 0 && {
       id: 'compras',
@@ -353,18 +425,8 @@ export default function Inicio() {
       titulo: `${alertas.compras_por_recibir} compra${
         alertas.compras_por_recibir === 1 ? '' : 's'
       } sin recibir`,
-      detalle: 'Pendientes de recepción',
-      to: '/compras?por_recibir=1',
-    },
-    bloques.caja && alertas.cajas_abiertas > 0 && {
-      id: 'cajas',
-      tono: 'info',
-      icono: IconCash,
-      titulo: `${alertas.cajas_abiertas} caja${
-        alertas.cajas_abiertas === 1 ? '' : 's'
-      } abierta${alertas.cajas_abiertas === 1 ? '' : 's'}`,
-      detalle: 'Secciones en curso',
-      to: '#cajas-abiertas',
+      detalle: 'Ver en Compras por recibir',
+      to: '#compras-por-recibir',
     },
   ].filter(Boolean)
 
@@ -402,10 +464,6 @@ export default function Inicio() {
                 <Link to="/compras?nueva=1" className="boton-accion">
                   <IconPlus size={18} />
                   Nueva compra
-                </Link>
-                <Link to="/compras?por_recibir=1" className="boton-accion">
-                  <IconTruckDelivery size={18} />
-                  Recibir mercadería
                 </Link>
               </>
             )}
@@ -458,55 +516,7 @@ export default function Inicio() {
           </section>
         )}
 
-        {bloques.ventas && datos.ventas_por_vencer.length > 0 && (
-          <section className="panel panel-vencimientos">
-            <div className="panel-cabecera">
-              <h2 className="panel-titulo">
-                <IconClock size={24} />
-                Ventas por vencer
-              </h2>
-              <Link
-                to="/ventas?alerta=por_vencer"
-                className="panel-enlace"
-              >
-                Ver por vencer
-              </Link>
-            </div>
-            <ul className="vencimiento-lista">
-              {datos.ventas_por_vencer.map((venta) => (
-                <li key={venta.id}>
-                  <Link
-                    to={`/ventas?alerta=por_vencer&search=${venta.id}`}
-                    className="vencimiento-item vencimiento-item-enlace"
-                  >
-                    <div className="vencimiento-info">
-                      <strong>
-                        Venta #{venta.id} · {venta.cliente}
-                      </strong>
-                      <small>
-                        {venta.seccion_caja_detalle} · {venta.sucursal}
-                      </small>
-                    </div>
-                    <div className="vencimiento-tiempo">
-                      <span
-                        className={
-                          venta.minutos_restantes <= 5
-                            ? 'vencimiento-chip vencimiento-urgente'
-                            : 'vencimiento-chip'
-                        }
-                      >
-                        {venta.minutos_restantes} min
-                      </span>
-                      <small>{formatearMoneda(venta.monto)}</small>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {(bloques.ventas || bloques.caja || bloques.compras) && (
+        {bloques.ventas && (
           <section className="dashboard-kpis">
             {bloques.ventas && (
               <>
@@ -524,160 +534,192 @@ export default function Inicio() {
                 />
                 <TarjetaKpi
                   icono={IconChartBar}
-                  etiqueta="Ventas de la semana"
-                  valor={formatearMoneda(ventas.semana.monto)}
+                  etiqueta="Ventas de los últimos 7 días"
+                  valor={formatearMoneda(ventas.ultimos_7_dias.monto)}
                   detalle={
                     <>
                       <span>
-                        {ventas.semana.cantidad} venta
-                        {ventas.semana.cantidad === 1 ? '' : 's'} ·{' '}
-                        {formatearMoneda(ventas.semana.ticket_promedio)} ticket
+                        {ventas.ultimos_7_dias.cantidad} venta
+                        {ventas.ultimos_7_dias.cantidad === 1 ? '' : 's'} ·{' '}
+                        {formatearMoneda(
+                          ventas.ultimos_7_dias.ticket_promedio,
+                        )}{' '}
+                        ticket
                       </span>
                       <Comparacion
-                        valor={ventas.semana.comparacion.variacion_porcentaje}
-                        etiqueta="vs. semana anterior"
+                        valor={
+                          ventas.ultimos_7_dias.comparacion
+                            .variacion_porcentaje
+                        }
+                        etiqueta="vs. 7 días anteriores"
                       />
                     </>
                   }
                 />
                 <TarjetaKpi
-                  icono={IconClock}
-                  etiqueta="Pendientes de confirmar"
-                  valor={formatearNumero(ventas.pendientes.cantidad)}
+                  icono={IconCalendar}
+                  etiqueta="Ventas del mes"
+                  valor={formatearMoneda(ventas.mes.monto)}
                   detalle={
-                    <>
-                      <span>
-                        {formatearMoneda(ventas.pendientes.monto)} en juego
-                      </span>
-                      {ventas.pendientes.por_vencer > 0 && (
-                        <span className="kpi-alerta-texto">
-                          {ventas.pendientes.por_vencer} por vencer
-                          {ventas.pendientes.minutos_restantes !== null
-                            ? ` · ${ventas.pendientes.minutos_restantes} min`
-                            : ''}
-                        </span>
-                      )}
-                      {ventas.pendientes.vencidas > 0 && (
-                        <span className="kpi-alerta-texto">
-                          {ventas.pendientes.vencidas} vencida
-                          {ventas.pendientes.vencidas === 1 ? '' : 's'}{' '}
-                          pendiente
-                          {ventas.pendientes.vencidas === 1 ? '' : 's'} de
-                          anular
-                        </span>
-                      )}
-                    </>
+                    <span>
+                      {ventas.mes.cantidad} venta
+                      {ventas.mes.cantidad === 1 ? '' : 's'} ·{' '}
+                      {formatearMoneda(ventas.mes.ticket_promedio)} ticket
+                    </span>
                   }
-                  tono={ventas.pendientes.cantidad > 0 ? 'kpi-aviso' : ''}
+                />
+                <TarjetaKpi
+                  icono={IconShoppingCart}
+                  etiqueta="Parciales"
+                  valor={formatearNumero(ventas.parciales.cantidad)}
+                  detalle={
+                    <span>
+                      {formatearMoneda(ventas.parciales.saldo_pendiente)}{' '}
+                      pendiente
+                    </span>
+                  }
+                  tono={ventas.parciales.cantidad > 0 ? 'kpi-aviso' : ''}
                 />
               </>
-            )}
-            {bloques.caja && (
-              <TarjetaKpi
-                icono={IconCash}
-                etiqueta="Cajas abiertas"
-                valor={formatearNumero(caja.abiertas)}
-                detalle={
-                  <span>
-                    {caja.abiertas > 0
-                      ? `${formatearMoneda(montoInicialCajas)} inicial`
-                      : 'Sin secciones abiertas'}
-                  </span>
-                }
-                tono={caja.abiertas === 0 ? 'kpi-neutro' : ''}
-              />
-            )}
-            {bloques.compras && (
-              <TarjetaKpi
-                icono={IconTruckDelivery}
-                etiqueta="Compras por recibir"
-                valor={formatearNumero(compras.pendientes_recepcion)}
-                detalle={
-                  <span>
-                    {formatearMoneda(compras.mes.monto)} comprado este mes
-                  </span>
-                }
-                tono={compras.pendientes_recepcion > 0 ? 'kpi-aviso' : ''}
-              />
             )}
           </section>
         )}
 
         {(bloques.ventas || bloques.caja) && (
-          <section className="dashboard-grid">
+          <section
+            className={`dashboard-grid ${
+              bloques.ventas && bloques.caja ? '' : 'dashboard-grid-solo'
+            }`}
+          >
             {bloques.ventas && (
               <article className="panel panel-grafico">
-            <div className="panel-cabecera">
-              <h2 className="panel-titulo">
-                <IconChartBar size={24} />
-                Evolución de ventas
-              </h2>
-              <span className="panel-nota">{datos.serie_etiqueta}</span>
-            </div>
+                <div className="panel-cabecera">
+                  <h2 className="panel-titulo">
+                    <IconChartBar size={24} />
+                    Evolución de ventas
+                  </h2>
+                  <span className="panel-nota">{datos.serie_etiqueta}</span>
+                </div>
 
-            {totalSerie === 0 ? (
-              <p className="panel-vacio">
-                No hay ventas registradas en los últimos 7 días.
-              </p>
-            ) : (
-              <div
-                className={`grafico-barras ${
-                  esSerieMensual ? 'grafico-barras-mes' : ''
-                }`}
-              >
-                {datos.ventas_por_dia.map((dia) => {
-                  const monto = Number(dia.monto) || 0
-                  const alto = monto > 0 ? Math.max((monto / maximo) * 100, 6) : 2
-                  return (
-                    <div className="grafico-columna" key={dia.fecha}>
-                      <div className="grafico-barra-caja">
-                        <div
-                          className={`grafico-barra ${monto > 0 ? '' : 'grafico-barra-vacia'}`}
-                          style={{ height: `${alto}%` }}
-                          title={`${dia.fecha}: ${formatearMoneda(monto)} · ${dia.cantidad} ventas`}
-                        />
-                      </div>
-                      <span className="grafico-etiqueta">
-                        {esSerieMensual ? dia.fecha.slice(8, 10) : etiquetaDia(dia.fecha)}
-                      </span>
-                      <span className="grafico-cantidad">{dia.cantidad}</span>
-                    </div>
-                  )
-                })}
-              </div>
+                {totalSerie === 0 ? (
+                  <p className="panel-vacio">
+                    No hay ventas registradas en los últimos 7 días.
+                  </p>
+                ) : (
+                  <div
+                    className={`grafico-barras ${
+                      esSerieMensual ? 'grafico-barras-mes' : ''
+                    }`}
+                  >
+                    {datos.ventas_por_dia.map((dia) => {
+                      const monto = Number(dia.monto) || 0
+                      const alto =
+                        monto > 0 ? Math.max((monto / maximo) * 100, 6) : 2
+                      return (
+                        <div className="grafico-columna" key={dia.fecha}>
+                          <div className="grafico-barra-caja">
+                            <div
+                              className={`grafico-barra ${
+                                monto > 0 ? '' : 'grafico-barra-vacia'
+                              }`}
+                              style={{ height: `${alto}%` }}
+                              title={`${dia.fecha}: ${formatearMoneda(
+                                monto,
+                              )} · ${dia.cantidad} ventas`}
+                            />
+                          </div>
+                          <span className="grafico-etiqueta">
+                            {esSerieMensual
+                              ? dia.fecha.slice(8, 10)
+                              : etiquetaDia(dia.fecha)}
+                          </span>
+                          <span className="grafico-cantidad">
+                            {dia.cantidad}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </article>
             )}
 
-            <div className="dashboard-mini">
-              {bloques.stock && (
-                <>
-                  <div className="mini-dato">
-                    <IconPackage size={20} />
-                    <span>
-                      <strong>{formatearNumero(catalogo.productos)}</strong>
-                      Productos
-                    </span>
-                  </div>
-                  <div className="mini-dato">
-                    <IconAlertTriangle size={20} />
-                    <span>
-                      <strong>{formatearNumero(stock.bajo)}</strong>
-                      Stock bajo
-                    </span>
-                  </div>
-                </>
-              )}
-              {bloques.compras && (
+            {bloques.caja && (
+              <article className="panel" id="cajas-abiertas">
+                <div className="panel-cabecera">
+                  <h2 className="panel-titulo">
+                    <IconCash size={24} />
+                    Cajas en curso
+                  </h2>
+                  <Link to="/caja?estado=AB" className="panel-enlace">
+                    Ver Caja
+                  </Link>
+                </div>
+
+                {datos.cajas_abiertas.length === 0 ? (
+                  <p className="panel-vacio">
+                    No hay cajas abiertas ni en pausa.
+                  </p>
+                ) : (
+                  <ul className="caja-lista">
+                    {datos.cajas_abiertas.map((item) => (
+                      <li className="caja-item" key={item.id}>
+                        <div className="caja-item-info">
+                          <strong>{item.caja}</strong>
+                          <small>
+                            Sección #{item.id} · {item.sucursal} ·{' '}
+                            {item.empleado}
+                          </small>
+                          {item.estado === 'PA' && (
+                            <span className="caja-item-pausa">En pausa</span>
+                          )}
+                        </div>
+                        <div className="caja-item-horario">
+                          <span>
+                            {formatearHora(item.fecha_hora_apertura)}
+                          </span>
+                          <small>
+                            {formatearMoneda(item.monto_inicial)} inicial
+                          </small>
+                        </div>
+                        <div className="caja-item-ventas">
+                          <strong>{formatearMoneda(item.ventas_monto)}</strong>
+                          <small>
+                            {item.ventas_cantidad} venta
+                            {item.ventas_cantidad === 1 ? '' : 's'}
+                          </small>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+            )}
+          </section>
+        )}
+
+        {(bloques.stock || bloques.equipo) && (
+          <section className="dashboard-mini">
+            {bloques.stock && (
+              <>
                 <div className="mini-dato">
-                  <IconTruckDelivery size={20} />
+                  <IconPackage size={20} />
                   <span>
-                    <strong>
-                      {formatearNumero(compras.pendientes_recepcion)}
-                    </strong>
-                    Compras por recibir
+                    <strong>{formatearNumero(catalogo.productos)}</strong>
+                    Productos
                   </span>
                 </div>
-              )}
-              {bloques.equipo && (
+                <div className="mini-dato">
+                  <IconAlertTriangle size={20} />
+                  <span>
+                    <strong>{formatearNumero(stock.bajo)}</strong>
+                    Stock bajo
+                  </span>
+                </div>
+              </>
+            )}
+            {bloques.equipo && (
+              <>
                 <div className="mini-dato">
                   <IconUsers size={20} />
                   <span>
@@ -685,57 +727,26 @@ export default function Inicio() {
                     Empleados activos
                   </span>
                 </div>
-              )}
-            </div>
-              </article>
-            )}
-
-            {bloques.caja && (
-              <article className="panel" id="cajas-abiertas">
-            <div className="panel-cabecera">
-              <h2 className="panel-titulo">
-                <IconCash size={24} />
-                Cajas abiertas
-              </h2>
-              <Link to="/caja" className="panel-enlace">
-                Ver Caja
-              </Link>
-            </div>
-
-            {datos.cajas_abiertas.length === 0 ? (
-              <p className="panel-vacio">No hay cajas con secciones abiertas.</p>
-            ) : (
-              <ul className="caja-lista">
-                {datos.cajas_abiertas.map((item) => (
-                  <li className="caja-item" key={item.id}>
-                    <div className="caja-item-info">
-                      <strong>{item.caja}</strong>
-                      <small>
-                        Sección #{item.id} · {item.sucursal} · {item.empleado}
-                      </small>
-                    </div>
-                    <div className="caja-item-horario">
-                      <span>{formatearHora(item.fecha_hora_apertura)}</span>
-                      <small>{formatearMoneda(item.monto_inicial)} inicial</small>
-                    </div>
-                    <div className="caja-item-ventas">
-                      <strong>{formatearMoneda(item.ventas_monto)}</strong>
-                      <small>
-                        {item.ventas_cantidad} venta
-                        {item.ventas_cantidad === 1 ? '' : 's'}
-                      </small>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-              </article>
+                <div className="mini-dato">
+                  <IconTruckDelivery size={20} />
+                  <span>
+                    <strong>
+                      {formatearNumero(equipo.proveedores_activos)}
+                    </strong>
+                    Proveedores activos
+                  </span>
+                </div>
+              </>
             )}
           </section>
         )}
 
         {(bloques.ventas || bloques.stock) && (
-          <section className="dashboard-grid dashboard-grid-inferior">
+          <section
+            className={`dashboard-grid dashboard-grid-inferior ${
+              bloques.ventas && bloques.stock ? '' : 'dashboard-grid-solo'
+            }`}
+          >
             {bloques.ventas && (
               <article className="panel">
                 <div className="panel-cabecera">
@@ -743,178 +754,192 @@ export default function Inicio() {
                     <IconShoppingCart size={24} />
                     Últimas ventas
                   </h2>
-              <Link to="/ventas" className="panel-enlace">
-                Ver todas
-              </Link>
-            </div>
+                  <Link to="/ventas" className="panel-enlace">
+                    Ver todas
+                  </Link>
+                </div>
 
-            {datos.ventas_recientes.length === 0 ? (
-              <p className="panel-vacio">Todavía no hay ventas registradas.</p>
-            ) : (
-              <div className="tabla-scroll">
-                <table className="tabla-mini">
-                  <thead>
-                    <tr>
-                      <th>Fecha</th>
-                      <th>Cliente</th>
-                      <th className="alinear-derecha">Monto</th>
-                      <th>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {datos.ventas_recientes.map((venta) => (
-                      <tr key={venta.id}>
-                        <td className="texto-suave">
-                          {formatearFechaHora(venta.fecha)}
-                        </td>
-                        <td>{venta.cliente}</td>
-                        <td className="alinear-derecha">
-                          {formatearMoneda(venta.monto)}
-                        </td>
-                        <td>
-                          <EstadoVenta
-                            estado={venta.estado}
-                            etiqueta={venta.estado_detalle}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                {datos.ventas_recientes.length === 0 ? (
+                  <p className="panel-vacio">
+                    Todavía no hay ventas registradas.
+                  </p>
+                ) : (
+                  <div className="tabla-scroll">
+                    <table className="tabla-mini">
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Cliente</th>
+                          <th className="alinear-derecha">Monto</th>
+                          <th>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {datos.ventas_recientes.map((venta) => (
+                          <tr key={venta.id}>
+                            <td className="texto-suave">
+                              {formatearFechaHora(venta.fecha)}
+                            </td>
+                            <td>{venta.cliente}</td>
+                            <td className="alinear-derecha">
+                              {formatearMoneda(venta.monto)}
+                            </td>
+                            <td>
+                              <EstadoVenta
+                                estado={venta.estado}
+                                etiqueta={venta.estado_detalle}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </article>
             )}
 
             {bloques.stock && (
-              <article className="panel">
+              <article className="panel" id="stock-critico">
                 <div className="panel-cabecera">
                   <h2 className="panel-titulo">
                     <IconAlertTriangle size={24} />
                     Stock crítico
                   </h2>
-              <Link
-                to="/productos?tab=stock"
-                className="panel-enlace"
-              >
-                Ver stock
-              </Link>
-            </div>
-
-            {datos.stock_critico.length === 0 ? (
-              <p className="panel-vacio">
-                No hay productos por debajo del mínimo. El stock está al día.
-              </p>
-            ) : (
-              <ul className="stock-lista">
-                {datos.stock_critico.map((item) => (
-                  <li key={item.id}>
+                  {stock.critico > 0 && (
                     <Link
-                      to={`/productos?tab=stock&alerta=${
-                        item.alerta === 'NEGATIVO' ? 'negativo' : 'minimo'
-                      }&producto=${item.producto_id}`}
-                      className="stock-item stock-item-enlace"
-                      title={`Ver ${item.producto} en Inventario`}
+                      to="/productos?tab=stock&alerta=critico"
+                      className="panel-enlace"
                     >
-                      <div>
-                        <strong>{item.producto}</strong>
-                        <small>{item.sucursal}</small>
-                      </div>
-                      <div className="stock-cantidades">
-                        <span className="stock-cantidad">
-                          {formatearNumero(item.cantidad)}
-                        </span>
-                        <small>mín. {formatearNumero(item.cant_min)}</small>
-                      </div>
-                      <span
-                        className={`badge ${
-                          item.alerta === 'NEGATIVO'
-                            ? 'badge-peligro'
-                            : 'badge-aviso'
-                        }`}
-                      >
-                        {item.alerta === 'NEGATIVO' ? 'Negativo' : 'Mínimo'}
-                      </span>
+                      Ver todos
                     </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  )}
+                </div>
 
-            {stock.negativo > 0 && (
-              <Link
-                to="/productos?tab=stock&alerta=negativo"
-                className="panel-alerta panel-alerta-enlace"
-              >
-                Hay {stock.negativo} registro
-                {stock.negativo === 1 ? '' : 's'} con stock negativo. Ver en
-                Inventario.
-              </Link>
-            )}
+                {datos.stock_critico.length === 0 ? (
+                  <p className="panel-vacio">
+                    No hay productos críticos. El stock está al día.
+                  </p>
+                ) : (
+                  <ul className="stock-lista">
+                    {datos.stock_critico.map((item) => {
+                      const esNegativo = item.alerta === 'NEGATIVO'
+                      const sinStock =
+                        item.sin_stock ?? Number(item.cantidad) === 0
+                      return (
+                        <li key={item.id}>
+                          <div className="stock-item">
+                            <div>
+                              <strong>{item.producto}</strong>
+                              <small>{item.sucursal}</small>
+                            </div>
+                            <div className="stock-cantidades">
+                              <span className="stock-cantidad">
+                                {formatearNumero(item.cantidad)}
+                              </span>
+                              <small>
+                                mín. {formatearNumero(item.cant_min)}
+                              </small>
+                            </div>
+                            <span
+                              className={`badge ${
+                                esNegativo || sinStock
+                                  ? 'badge-peligro'
+                                  : 'badge-aviso'
+                              }`}
+                            >
+                              {esNegativo
+                                ? 'Negativo'
+                                : sinStock
+                                  ? 'Sin stock'
+                                  : 'Mínimo'}
+                            </span>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+
+                {stock.critico > datos.stock_critico.length && (
+                  <p className="panel-nota panel-nota-pie">
+                    Mostrando {datos.stock_critico.length} de {stock.critico}.
+                  </p>
+                )}
+
+                {stock.negativo > 0 && (
+                  <Link
+                    to="/productos?tab=stock&alerta=negativo"
+                    className="panel-alerta panel-alerta-enlace"
+                  >
+                    Hay {stock.negativo} registro
+                    {stock.negativo === 1 ? '' : 's'} con stock negativo. Ver
+                    en Inventario.
+                  </Link>
+                )}
               </article>
             )}
           </section>
         )}
 
         {bloques.compras && (
-          <article className="panel">
+          <article className="panel" id="compras-por-recibir">
             <div className="panel-cabecera">
               <h2 className="panel-titulo">
                 <IconTruckDelivery size={24} />
                 Compras por recibir
               </h2>
-            <Link
-              to="/compras?por_recibir=1"
-              className="panel-enlace"
-            >
-              Ver compras
-            </Link>
-          </div>
+              <Link to="/compras?por_recibir=1" className="panel-enlace">
+                Ver compras
+              </Link>
+            </div>
 
-          {datos.compras_por_recibir.length === 0 ? (
-            <p className="panel-vacio">
-              No hay compras pendientes de recepción.
-            </p>
-          ) : (
-            <ul className="compra-lista">
-              {datos.compras_por_recibir.map((item) => (
-                <li key={item.id}>
-                  <Link
-                    to={`/compras?por_recibir=1&search=${item.id}`}
-                    className="compra-item compra-item-enlace"
-                    title={`Ver compra #${item.id}`}
-                  >
-                    <div className="compra-info">
-                      <strong>{item.proveedor}</strong>
-                      <small>
-                        {formatearFecha(item.fecha_compra)} ·{' '}
-                        {item.dias_esperando} día
-                        {item.dias_esperando === 1 ? '' : 's'} esperando
-                        {item.fecha_estimada_llegada
-                          ? ` · llega ${formatearFecha(item.fecha_estimada_llegada)}`
-                          : ''}
-                      </small>
-                    </div>
-                    <div className="compra-monto">
-                      <strong>{formatearMoneda(item.monto)}</strong>
-                      <span
-                        className={`badge ${
-                          item.estado_entrega === 'EC'
-                            ? 'badge-aviso'
-                            : 'badge-pe'
-                        }`}
-                      >
-                        {item.estado_entrega_detalle ||
-                          (item.estado_entrega === 'EC'
-                            ? 'En camino'
-                            : 'Por recibir')}
-                      </span>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+            {datos.compras_por_recibir.length === 0 ? (
+              <p className="panel-vacio">
+                No hay compras pendientes de recepción.
+              </p>
+            ) : (
+              <ul className="compra-lista">
+                {datos.compras_por_recibir.map((item) => (
+                  <li key={item.id}>
+                    <Link
+                      to={`/compras?por_recibir=1&search=${item.id}`}
+                      className="compra-item compra-item-enlace"
+                      title={`Ver compra #${item.id}`}
+                    >
+                      <div className="compra-info">
+                        <strong>{item.proveedor}</strong>
+                        <small>
+                          {formatearFecha(item.fecha_compra)} ·{' '}
+                          {item.dias_esperando} día
+                          {item.dias_esperando === 1 ? '' : 's'} esperando
+                          {item.fecha_estimada_llegada
+                            ? ` · llega ${formatearFecha(
+                                item.fecha_estimada_llegada,
+                              )}`
+                            : ''}
+                        </small>
+                      </div>
+                      <div className="compra-monto">
+                        <strong>{formatearMoneda(item.monto)}</strong>
+                        <span
+                          className={`badge ${
+                            item.estado_entrega === 'EC'
+                              ? 'badge-aviso'
+                              : 'badge-pe'
+                          }`}
+                        >
+                          {item.estado_entrega_detalle ||
+                            (item.estado_entrega === 'EC'
+                              ? 'En camino'
+                              : 'Por recibir')}
+                        </span>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </article>
         )}
       </div>

@@ -1,0 +1,18 @@
+/* Formulario de compra (extraído de Comercial.css) */
+.comercial-nota-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.comercial-nota-acciones p {
+  margin: 0;
+}
+
+.productos-proveedor-acciones {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}

@@ -37,7 +37,7 @@ from .models import (
     MetodoPago,
     MetodoPagoXCompra,
     MetodoPagoXVenta,
-    MovimientoStock,
+    MovimientoCaja,
     Pais,
     Producto,
     ProductoXProveedor,
@@ -45,13 +45,11 @@ from .models import (
     Provincia,
     Proveedor,
     ProveedorXSucursal,
+    RegistroActividad,
     Rol,
-    SeccionCaja,
     Stock,
     Sucursal,
-    SucursalXCaja,
     SucursalXEmpleado,
-    TransferenciaStock,
     Ubicacion,
     Unidad,
     Usuario,
@@ -146,6 +144,27 @@ class SucursalSerializer(serializers.ModelSerializer):
             'email_suc',
             'es_central',
         ]
+
+    def validate(self, attrs):
+        """El sistema opera con una sola sucursal por empresa."""
+        empresa = attrs.get('empresa')
+        if empresa is None and self.instance is not None:
+            empresa = self.instance.empresa
+        if empresa is None:
+            return attrs
+        existentes = Sucursal.objects.filter(empresa=empresa)
+        if self.instance is not None:
+            existentes = existentes.exclude(pk=self.instance.pk)
+        if existentes.exists():
+            raise serializers.ValidationError(
+                {
+                    'empresa': (
+                        'La empresa ya tiene una sucursal. El sistema opera con '
+                        'una sola sucursal.'
+                    )
+                }
+            )
+        return attrs
 
 
 class UsuarioSerializer(serializers.ModelSerializer):
@@ -249,6 +268,16 @@ class CambiarPasswordSerializer(serializers.Serializer):
     password_admin = serializers.CharField(
         max_length=128,
         style={'input_type': 'password'},
+        required=False,
+        allow_blank=True,
+        default='',
+    )
+    password_actual = serializers.CharField(
+        max_length=128,
+        style={'input_type': 'password'},
+        required=False,
+        allow_blank=True,
+        default='',
     )
 
     def validate(self, attrs):
@@ -257,6 +286,70 @@ class CambiarPasswordSerializer(serializers.Serializer):
                 {'password_confirmacion': 'Las contraseñas no coinciden.'}
             )
         return attrs
+
+
+class EmpleadoPerfilSerializer(serializers.Serializer):
+    """Datos personales que el usuario puede editar de su propio empleado."""
+
+    nombre = serializers.CharField(max_length=50, required=False)
+    apellido = serializers.CharField(max_length=50, required=False)
+    dni = serializers.CharField(max_length=15, required=False)
+    telefono = serializers.CharField(
+        max_length=30,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+
+
+class UsuarioPerfilSerializer(serializers.Serializer):
+    """Serializer para que el usuario autenticado edite su propio perfil.
+
+    Acepta `email` y un objeto `empleado` con `nombre`, `apellido`, `dni`
+    y `telefono`. No permite cambiar username, roles ni estado.
+    """
+    email = serializers.EmailField(required=False, allow_blank=True)
+    empleado = EmpleadoPerfilSerializer(required=False)
+
+    def validate_empleado(self, value):
+        """Evita DNI duplicado con otro empleado."""
+        dni = value.get('dni')
+        if not dni:
+            return value
+        existentes = Empleado.objects.filter(dni=dni)
+        if self.instance is not None:
+            empleado = getattr(self.instance, 'empleado', None)
+            if empleado is not None:
+                existentes = existentes.exclude(pk=empleado.pk)
+        if existentes.exists():
+            raise serializers.ValidationError(
+                {'dni': 'El DNI ya está en uso por otro empleado.'}
+            )
+        return value
+
+    def update(self, instance, validated_data):
+        empleado_data = validated_data.pop('empleado', None)
+        email = validated_data.get('email')
+
+        if email is not None:
+            instance.email = email
+            instance.save(update_fields=['email'])
+
+        if empleado_data is not None:
+            empleado = getattr(instance, 'empleado', None)
+            if empleado is None:
+                raise serializers.ValidationError(
+                    {'empleado': 'El usuario no tiene un empleado asociado.'}
+                )
+            empleado.nombre = empleado_data.get('nombre', empleado.nombre)
+            empleado.apellido = empleado_data.get('apellido', empleado.apellido)
+            if 'dni' in empleado_data:
+                empleado.dni = empleado_data['dni']
+            if 'telefono' in empleado_data:
+                empleado.telefono = empleado_data['telefono'] or None
+            empleado.save()
+
+        return instance
 
 
 class EmpleadoSerializer(serializers.ModelSerializer):
@@ -470,30 +563,53 @@ class SucursalXEmpleadoSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 class CajaSerializer(serializers.ModelSerializer):
-    estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
-
-    class Meta:
-        model = Caja
-        fields = ['id', 'nombre', 'estado', 'estado_detalle']
-
-
-class SucursalXCajaSerializer(serializers.ModelSerializer):
     sucursal_detalle = serializers.StringRelatedField(
         source='sucursal',
         read_only=True,
     )
-    caja_detalle = serializers.StringRelatedField(source='caja', read_only=True)
+    estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
 
     class Meta:
-        model = SucursalXCaja
+        model = Caja
         fields = [
             'id',
             'sucursal',
             'sucursal_detalle',
-            'caja',
-            'caja_detalle',
-            'habilitada',
+            'numero_caja',
+            'estado',
+            'estado_detalle',
         ]
+
+    def validate_numero_caja(self, value):
+        if value is None or value < 1:
+            raise serializers.ValidationError(
+                'El número de caja debe ser mayor que cero.'
+            )
+        return value
+
+    def validate(self, attrs):
+        sucursal = attrs.get('sucursal') or getattr(self.instance, 'sucursal', None)
+        numero = attrs.get('numero_caja') or getattr(
+            self.instance,
+            'numero_caja',
+            None,
+        )
+        if sucursal is not None and numero is not None:
+            existentes = Caja.objects.filter(
+                sucursal=sucursal,
+                numero_caja=numero,
+            )
+            if self.instance is not None:
+                existentes = existentes.exclude(pk=self.instance.pk)
+            if existentes.exists():
+                raise serializers.ValidationError(
+                    {
+                        'numero_caja': (
+                            'Ya existe una caja con ese número en la sucursal.'
+                        )
+                    }
+                )
+        return attrs
 
 
 class DetalleCierreCajaSerializer(serializers.ModelSerializer):
@@ -511,7 +627,7 @@ class DetalleCierreCajaSerializer(serializers.ModelSerializer):
         model = DetalleCierreCaja
         fields = [
             'id',
-            'seccion_caja',
+            'movimiento_caja',
             'metodo_pago',
             'metodo_pago_detalle',
             'monto_sistema',
@@ -520,28 +636,25 @@ class DetalleCierreCajaSerializer(serializers.ModelSerializer):
         ]
 
 
-class SeccionCajaSerializer(serializers.ModelSerializer):
-    sucursal_caja = serializers.PrimaryKeyRelatedField(read_only=True)
-    caja = serializers.IntegerField(
-        source='sucursal_caja.caja_id',
-        read_only=True,
-    )
+class MovimientoCajaSerializer(serializers.ModelSerializer):
+    caja = serializers.PrimaryKeyRelatedField(read_only=True)
     caja_detalle = serializers.StringRelatedField(
-        source='sucursal_caja.caja',
+        source='caja',
         read_only=True,
     )
     sucursal = serializers.IntegerField(
-        source='sucursal_caja.sucursal_id',
+        source='caja.sucursal_id',
+        read_only=True,
+    )
+    sucursal_detalle = serializers.StringRelatedField(
+        source='caja.sucursal',
         read_only=True,
     )
     abierta_por = serializers.SerializerMethodField()
     motivo_apertura = serializers.SerializerMethodField()
-    sucursal_detalle = serializers.StringRelatedField(
-        source='sucursal_caja.sucursal',
-        read_only=True,
-    )
     empleado_detalle = serializers.StringRelatedField(source='empleado', read_only=True)
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
+    motivo_pausa = serializers.CharField(read_only=True)
     detalles_cierre = DetalleCierreCajaSerializer(many=True, read_only=True)
 
     @staticmethod
@@ -569,10 +682,9 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
         return apertura.history_change_reason if apertura else None
 
     class Meta:
-        model = SeccionCaja
+        model = MovimientoCaja
         fields = [
             'id',
-            'sucursal_caja',
             'caja',
             'caja_detalle',
             'sucursal',
@@ -588,10 +700,30 @@ class SeccionCajaSerializer(serializers.ModelSerializer):
             'observaciones_apertura',
             'estado',
             'estado_detalle',
+            'motivo_pausa',
             'detalles_cierre',
             'abierta_por',
             'motivo_apertura',
         ]
+
+
+class PausaCajaSerializer(serializers.Serializer):
+    motivo = serializers.CharField()
+
+    def validate_motivo(self, value):
+        texto = str(value or '').strip()
+        if len(texto) < 10:
+            raise serializers.ValidationError(
+                'Explicá el motivo de la pausa (10 caracteres o más).'
+            )
+        return texto
+
+
+class ReanudarCajaSerializer(serializers.Serializer):
+    clave = serializers.CharField(
+        write_only=True,
+        help_text='Contraseña del empleado que abrió la sección.',
+    )
 
 
 class AperturaCajaSerializer(serializers.Serializer):
@@ -615,6 +747,16 @@ class AperturaCajaSerializer(serializers.Serializer):
         allow_null=True,
     )
 
+    def validate(self, attrs):
+        caja = attrs.get('caja')
+        sucursal = attrs.get('sucursal')
+        if caja is not None and sucursal is not None:
+            if caja.sucursal_id != sucursal.pk:
+                raise serializers.ValidationError(
+                    {'sucursal': 'La caja no pertenece a la sucursal indicada.'}
+                )
+        return attrs
+
 
 class CierreCajaSerializer(serializers.Serializer):
     montos_reales = serializers.DictField(
@@ -629,6 +771,18 @@ class CierreCajaSerializer(serializers.Serializer):
         required=False,
         allow_blank=True,
         allow_null=True,
+    )
+    clave = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default='',
+        max_length=64,
+        help_text='Clave de idempotencia: reintentar el mismo cierre no repite el arqueo.',
+    )
+    password = serializers.CharField(
+        write_only=True,
+        trim_whitespace=False,
+        help_text='Contraseña del usuario autenticado.',
     )
 
     def validate_montos_reales(self, value):
@@ -1108,7 +1262,7 @@ class StockSerializer(serializers.ModelSerializer):
     def get_alerta(self, obj):
         if obj.cantidad < 0:
             return 'NEGATIVO'
-        if obj.cantidad <= obj.cant_min:
+        if obj.cant_min > 0 and obj.cantidad <= obj.cant_min:
             return 'MINIMO'
         return 'OK'
 
@@ -1378,161 +1532,17 @@ class DetalleStockUpdateSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class TransferenciaStockSerializer(serializers.ModelSerializer):
-    producto_detalle = serializers.StringRelatedField(
-        source='producto',
-        read_only=True,
-    )
-    deposito_origen_detalle = serializers.StringRelatedField(
-        source='deposito_origen',
-        read_only=True,
-    )
-    deposito_destino_detalle = serializers.StringRelatedField(
-        source='deposito_destino',
-        read_only=True,
-    )
-    sucursal_origen_detalle = serializers.CharField(
-        source='deposito_origen.sucursal.nombre',
-        read_only=True,
-    )
-    sucursal_destino_detalle = serializers.CharField(
-        source='deposito_destino.sucursal.nombre',
-        read_only=True,
-    )
-    estado_detalle = serializers.CharField(
-        source='get_estado_display',
-        read_only=True,
-    )
-    lote_origen = serializers.CharField(source='lote', read_only=True)
-    detalle_origen_detalle = serializers.StringRelatedField(
-        source='detalle_origen',
-        read_only=True,
-    )
-    lote_destino = serializers.SerializerMethodField()
-    observaciones_destino = serializers.SerializerMethodField()
+class MoverLoteSerializer(serializers.Serializer):
+    deposito = serializers.PrimaryKeyRelatedField(queryset=Deposito.objects.all())
+    motivo = serializers.CharField(min_length=3, max_length=500)
 
-    class Meta:
-        model = TransferenciaStock
-        fields = [
-            'id',
-            'producto',
-            'producto_detalle',
-            'stock_origen',
-            'deposito_origen',
-            'deposito_origen_detalle',
-            'sucursal_origen_detalle',
-            'deposito_destino',
-            'deposito_destino_detalle',
-            'sucursal_destino_detalle',
-            'detalle_origen',
-            'detalle_origen_detalle',
-            'cantidad',
-            'lote',
-            'lote_origen',
-            'lote_destino',
-            'observaciones_destino',
-            'estado',
-            'estado_detalle',
-            'motivo',
-            'fecha_creacion',
-            'fecha_recepcion',
-            'fecha_cancelacion',
-        ]
-        read_only_fields = [
-            'producto',
-            'stock_origen',
-            'deposito_origen',
-            'detalle_origen',
-            'lote',
-            'estado',
-            'fecha_creacion',
-            'fecha_recepcion',
-            'fecha_cancelacion',
-        ]
-
-    def _detalle_destino(self, obj):
-        if obj.estado != TransferenciaStock.EstadoTransferencia.RECIBIDA:
-            return None
-        if hasattr(obj, '_detalle_destino_cache'):
-            return obj._detalle_destino_cache
-        movimiento = (
-            MovimientoStock.objects.select_related('detalle_stock')
-            .filter(
-                referencia=f'transferencia:{obj.id}',
-                tipo=MovimientoStock.TipoMovimiento.TRANSFERENCIA,
-                cantidad__gt=0,
-                detalle_stock__deposito_id=obj.deposito_destino_id,
-            )
-            .order_by('-id')
-            .first()
-        )
-        obj._detalle_destino_cache = (
-            movimiento.detalle_stock if movimiento else None
-        )
-        return obj._detalle_destino_cache
-
-    def get_lote_destino(self, obj):
-        detalle = self._detalle_destino(obj)
-        return detalle.lote if detalle else None
-
-    def get_observaciones_destino(self, obj):
-        detalle = self._detalle_destino(obj)
-        return detalle.observaciones if detalle else ''
-
-
-class TransferenciaStockCreateSerializer(serializers.Serializer):
-    detalle_origen = serializers.PrimaryKeyRelatedField(
-        queryset=DetalleStock.objects.select_related(
-            'stock__producto__unidad',
-            'deposito__sucursal',
-        ),
-    )
-    deposito_destino = serializers.PrimaryKeyRelatedField(
-        queryset=Deposito.objects.all(),
-    )
-    cantidad = serializers.DecimalField(
-        max_digits=12,
-        decimal_places=3,
-        min_value=Decimal('0.001'),
-    )
-    motivo = serializers.CharField(
-        max_length=500,
-        required=False,
-        allow_blank=True,
-    )
-
-    def validate(self, attrs):
-        detalle = attrs['detalle_origen']
-        deposito_destino = attrs['deposito_destino']
-        cantidad = attrs['cantidad']
-
-        if detalle.cantidad <= 0:
+    def validate_motivo(self, value):
+        texto = str(value or '').strip()
+        if len(texto) < 3:
             raise serializers.ValidationError(
-                {'detalle_origen': 'El lote de origen no tiene stock disponible.'}
+                'Indicá el motivo del movimiento (mínimo 3 caracteres).'
             )
-        if detalle.deposito_id == deposito_destino.id:
-            raise serializers.ValidationError(
-                'El deposito de origen y destino deben ser distintos.'
-            )
-        if cantidad > detalle.cantidad:
-            raise serializers.ValidationError(
-                {
-                    'cantidad': (
-                        'La cantidad supera el disponible del lote '
-                        f'({detalle.cantidad}).'
-                    )
-                }
-            )
-        producto = detalle.stock.producto
-        nombre_unidad = str(getattr(producto, 'unidad', '') or '')
-        error_cantidad = validar_cantidad_por_unidad(
-            cantidad,
-            nombre_unidad,
-            etiqueta='La cantidad a transferir',
-        )
-        if error_cantidad:
-            raise serializers.ValidationError({'cantidad': error_cantidad})
-        return attrs
+        return texto
 
 
 # =============================================================================
@@ -1993,7 +2003,10 @@ class MetodoPagoXVentaSerializer(serializers.ModelSerializer):
 
 
 class VentaSerializer(serializers.ModelSerializer):
-    seccion_caja_detalle = serializers.StringRelatedField(source='seccion_caja', read_only=True)
+    movimiento_caja_detalle = serializers.StringRelatedField(
+        source='movimiento_caja',
+        read_only=True,
+    )
     cliente_detalle = serializers.StringRelatedField(source='cliente', read_only=True)
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
     detalles = DetalleVentaSerializer(many=True, read_only=True)
@@ -2003,8 +2016,8 @@ class VentaSerializer(serializers.ModelSerializer):
         model = Venta
         fields = [
             'id',
-            'seccion_caja',
-            'seccion_caja_detalle',
+            'movimiento_caja',
+            'movimiento_caja_detalle',
             'cliente',
             'cliente_detalle',
             'cliente_venta',
@@ -2044,7 +2057,9 @@ class VentaItemSerializer(serializers.Serializer):
 
 
 class VentaCreateSerializer(serializers.Serializer):
-    seccion_caja = serializers.PrimaryKeyRelatedField(queryset=SeccionCaja.objects.all())
+    movimiento_caja = serializers.PrimaryKeyRelatedField(
+        queryset=MovimientoCaja.objects.all(),
+    )
     cliente = serializers.PrimaryKeyRelatedField(
         queryset=Cliente.objects.all(),
         required=False,
@@ -2100,6 +2115,7 @@ class PagoVentaCreateSerializer(serializers.Serializer):
         decimal_places=2,
         min_value=Decimal('0.01'),
     )
+    clave = serializers.CharField(required=False, allow_blank=True, default='', max_length=64)
 
 
 class PagoVentaItemSerializer(serializers.Serializer):
@@ -2114,6 +2130,13 @@ class PagoVentaItemSerializer(serializers.Serializer):
 class CobroVentaSerializer(serializers.Serializer):
     pagos = PagoVentaItemSerializer(many=True, allow_empty=False)
     confirmar = serializers.BooleanField(required=False, default=False)
+    clave = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default='',
+        max_length=64,
+        help_text='Clave de idempotencia: reintentar la misma clave no cobra dos veces.',
+    )
 
 
 class VentaCancelarSerializer(serializers.Serializer):
@@ -2157,7 +2180,14 @@ class MetodoPagoXCompraSerializer(serializers.ModelSerializer):
 
 
 class CompraSerializer(serializers.ModelSerializer):
-    seccion_caja_detalle = serializers.StringRelatedField(source='seccion_caja', read_only=True)
+    movimiento_caja_detalle = serializers.StringRelatedField(
+        source='movimiento_caja',
+        read_only=True,
+    )
+    deposito_detalle = serializers.StringRelatedField(
+        source='deposito',
+        read_only=True,
+    )
     proveedor_detalle = serializers.StringRelatedField(source='proveedor', read_only=True)
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
     estado_entrega_detalle = serializers.CharField(
@@ -2172,8 +2202,10 @@ class CompraSerializer(serializers.ModelSerializer):
         model = Compra
         fields = [
             'id',
-            'seccion_caja',
-            'seccion_caja_detalle',
+            'movimiento_caja',
+            'movimiento_caja_detalle',
+            'deposito',
+            'deposito_detalle',
             'proveedor',
             'proveedor_detalle',
             'fecha_compra',
@@ -2214,8 +2246,15 @@ class CompraItemSerializer(serializers.Serializer):
 
 
 class CompraCreateSerializer(serializers.Serializer):
-    seccion_caja = serializers.PrimaryKeyRelatedField(queryset=SeccionCaja.objects.all())
+    movimiento_caja = serializers.PrimaryKeyRelatedField(
+        queryset=MovimientoCaja.objects.all(),
+    )
     proveedor = serializers.PrimaryKeyRelatedField(queryset=Proveedor.objects.all())
+    deposito = serializers.PrimaryKeyRelatedField(
+        queryset=Deposito.objects.all(),
+        required=False,
+        allow_null=True,
+    )
     estado_entrega = serializers.ChoiceField(
         choices=[
             Compra.EstadoEntrega.PENDIENTE,
@@ -2323,14 +2362,6 @@ class CompraEnCaminoSerializer(serializers.Serializer):
         return value
 
 
-class CompraRecepcionSerializer(serializers.Serializer):
-    deposito = serializers.PrimaryKeyRelatedField(
-        queryset=Deposito.objects.all(),
-        required=False,
-        allow_null=True,
-    )
-
-
 class PagoCompraCreateSerializer(serializers.Serializer):
     compra = serializers.PrimaryKeyRelatedField(queryset=Compra.objects.all())
     metodo_pago = serializers.PrimaryKeyRelatedField(queryset=MetodoPago.objects.all())
@@ -2339,6 +2370,7 @@ class PagoCompraCreateSerializer(serializers.Serializer):
         decimal_places=2,
         min_value=Decimal('0.01'),
     )
+    clave = serializers.CharField(required=False, allow_blank=True, default='', max_length=64)
 
 
 class PagoCompraItemSerializer(serializers.Serializer):
@@ -2352,34 +2384,44 @@ class PagoCompraItemSerializer(serializers.Serializer):
 
 class PagoCompraMultipleSerializer(serializers.Serializer):
     pagos = PagoCompraItemSerializer(many=True, allow_empty=False)
+    clave = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default='',
+        max_length=64,
+        help_text='Clave de idempotencia: reintentar la misma clave no cobra dos veces.',
+    )
 
 
 # =============================================================================
 # STOCK — MOVIMIENTOS
 # =============================================================================
 
-class MovimientoStockSerializer(serializers.ModelSerializer):
-    stock_detalle = serializers.StringRelatedField(source='stock', read_only=True)
-    detalle_stock_detalle = serializers.StringRelatedField(
-        source='detalle_stock',
-        read_only=True,
+class RegistroActividadSerializer(serializers.ModelSerializer):
+    usuario_detalle = serializers.CharField(
+        source='usuario.username', read_only=True, allow_null=True
     )
-    tipo_detalle = serializers.CharField(source='get_tipo_display', read_only=True)
+    accion_detalle = serializers.CharField(
+        source='get_accion_display', read_only=True
+    )
+    modelo_detalle = serializers.SerializerMethodField()
+
+    def get_modelo_detalle(self, obj):
+        return (obj.modelo or '').replace('-', ' ').title()
 
     class Meta:
-        model = MovimientoStock
+        model = RegistroActividad
         fields = [
             'id',
-            'stock',
-            'stock_detalle',
-            'detalle_stock',
-            'detalle_stock_detalle',
-            'tipo',
-            'tipo_detalle',
-            'cantidad',
-            'venta',
-            'compra',
-            'referencia',
             'fecha',
+            'usuario',
+            'usuario_detalle',
+            'modelo',
+            'modelo_detalle',
+            'objeto_id',
+            'objeto',
+            'accion',
+            'accion_detalle',
+            'detalle',
         ]
         read_only_fields = fields
