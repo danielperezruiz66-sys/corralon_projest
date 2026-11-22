@@ -334,3 +334,213 @@
   cursor: not-allowed;
 }
 
+.empleados-modulo .comercial-panel {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 1rem;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.empleados-modulo .comercial-tabla-scroll {
+  overflow-x: auto;
+}
+
+.empleados-modulo .tabla-comercial {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.92rem;
+}
+
+.empleados-modulo .tabla-empleados {
+  min-width: 1120px;
+}
+
+.empleados-modulo .tabla-comercial th {
+  padding: 0.95rem 0.85rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.2);
+  color: var(--color-oscuro);
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.empleados-modulo .tabla-comercial td {
+  padding: 0.9rem 0.85rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.1);
+  color: var(--color-oscuro);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  text-align: left;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.empleados-modulo .tabla-comercial tr:last-child td {
+  border-bottom: none;
+}
+
+.empleados-modulo .tabla-empleados th:nth-child(1),
+.empleados-modulo .tabla-empleados td:nth-child(1) {
+  width: 7%;
+}
+
+.empleados-modulo .tabla-empleados th:nth-child(2),
+.empleados-modulo .tabla-empleados td:nth-child(2) {
+  width: 22%;
+}
+
+.empleados-modulo .tabla-empleados th:nth-child(3),
+.empleados-modulo .tabla-empleados td:nth-child(3) {
+  width: 9%;
+}
+
+.empleados-modulo .tabla-empleados th:nth-child(4),
+.empleados-modulo .tabla-empleados td:nth-child(4) {
+  width: 11%;
+}
+
+.empleados-modulo .tabla-empleados th:nth-child(5),
+.empleados-modulo .tabla-empleados td:nth-child(5) {
+  width: 16%;
+}
+
+.empleados-modulo .tabla-empleados th:nth-child(6),
+.empleados-modulo .tabla-empleados td:nth-child(6) {
+  width: 16%;
+}
+
+.empleados-modulo .tabla-empleados th:nth-child(7),
+.empleados-modulo .tabla-empleados td:nth-child(7) {
+  width: 9%;
+  text-align: center;
+}
+
+.empleados-modulo .tabla-empleados th:nth-child(8),
+.empleados-modulo .tabla-empleados td:nth-child(8) {
+  width: 10%;
+  text-align: center;
+}
+
+.empleados-modulo .tabla-empleados td:nth-child(1) {
+  color: rgba(15, 42, 48, 0.72);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.empleados-modulo .tabla-empleados td:nth-child(2) strong {
+  font-weight: 600;
+}
+
+.empleados-modulo .tabla-empleados td:nth-child(3) {
+  color: rgba(15, 42, 48, 0.78);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.empleados-modulo .tabla-empleados td:nth-child(4) {
+  color: rgba(15, 42, 48, 0.78);
+  white-space: nowrap;
+}
+
+.empleados-modulo .tabla-empleados td:nth-child(5) {
+  white-space: normal;
+}
+
+.empleados-modulo .tabla-empleados td:nth-child(6) {
+  color: rgba(15, 42, 48, 0.78);
+  white-space: normal;
+}
+
+.empleados-modulo .tabla-empleados td:nth-child(7),
+.empleados-modulo .tabla-empleados td:nth-child(8) {
+  white-space: nowrap;
+}
+
+.empleados-modulo .empleados-roles {
+  gap: 0.3rem;
+}
+
+.empleados-modulo .empleados-rol {
+  padding: 0.22rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.empleados-modulo .empleados-badge {
+  padding: 0.24rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.empleados-modulo .empleados-badge.ac {
+  background-color: #bbf7d0;
+  color: #166534;
+}
+
+.empleados-modulo .empleados-badge.bt {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.empleados-modulo .empleados-badge.su {
+  background-color: #ffedd5;
+  color: #c2410c;
+}
+
+.empleados-modulo .empleados-badge.in {
+  background-color: #fecaca;
+  color: #991b1b;
+}
+
+.empleados-modulo .acciones-fila {
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.empleados-modulo .boton-icono {
+  border-radius: 0.55rem;
+}
+
+.empleados-modulo .comercial-vacio {
+  padding: 3rem 1rem !important;
+  color: rgba(15, 42, 48, 0.7) !important;
+  font-size: 0.95rem;
+}
+
+.empleados-modulo .comercial-paginacion {
+  margin-top: 0;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(15, 42, 48, 0.1);
+  color: rgba(15, 42, 48, 0.7);
+  font-size: 0.9rem;
+}
+
+.empleados-modulo .comercial-panel.panel-actualizando {
+  display: block;
+  align-items: normal;
+  gap: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+@media (max-width: 640px) {
+  .empleados-modulo .comercial-paginacion {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+}
+

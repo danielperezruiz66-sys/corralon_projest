@@ -29,6 +29,7 @@ import { descargarCsv, numeroCsv } from '../utils/csv'
 import { nuevaClave } from '../utils/clave'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/Ventas.css'
 import '../styles/components/comercial/Cobro.css'
 
 const PAGINA_VACIA = {
@@ -630,7 +631,7 @@ export default function Ventas() {
         subtitulo="Seguimiento, confirmación y presupuestos"
       />
 
-      <div className="comercial">
+      <div className="comercial ventas">
         <section className="comercial-barra">
           <form
             className="comercial-busqueda"

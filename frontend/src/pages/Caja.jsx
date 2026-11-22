@@ -26,7 +26,9 @@ import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
 import {
+  formatearFecha,
   formatearFechaHora,
+  formatearHora,
   formatearMoneda,
   sinSucursal,
 } from '../utils/formato'
@@ -59,6 +61,19 @@ const CLASE_ESTADO = {
   PA: 'estado-pa',
   CE: 'estado-ce',
   AU: 'estado-au',
+}
+
+function FechaHoraCelda({ valor }) {
+  if (!valor) {
+    return <span className="caja-hora">—</span>
+  }
+
+  return (
+    <span className="caja-fecha-hora">
+      <span className="caja-fecha">{formatearFecha(valor)}</span>
+      <span className="caja-hora">{formatearHora(valor)}</span>
+    </span>
+  )
 }
 
 export default function Caja() {
@@ -483,12 +498,12 @@ export default function Caja() {
         subtitulo="Apertura, cierre y auditoria de las secciones de caja"
       />
 
-      <div className="comercial inventario">
+      <div className="comercial inventario caja-modulo">
         {tab === 'listado' && (
           <>           
             <section
               id="cajas-abiertas"
-              className="comercial-panel"
+              className="comercial-panel caja-panel-abiertas"
               aria-label="Cajas abiertas"
             >
               <div className="caja-panel-cabecera">
@@ -665,10 +680,12 @@ export default function Caja() {
 
         {tab === 'listado' && (
           <section
-            className={`comercial-panel ${actualizando ? 'panel-actualizando' : ''}`}
+            className={`comercial-panel caja-panel-tabla ${
+              actualizando ? 'panel-actualizando' : ''
+            }`}
           >
             <div className="comercial-tabla-scroll">
-              <table className="tabla-comercial">
+              <table className="tabla-comercial tabla-caja-secciones">
                 <thead>
                   <tr>
                     <th>Sección</th>
@@ -715,10 +732,10 @@ export default function Caja() {
                         </td>
                         <td>{item.empleado_detalle}</td>
                         <td className="mono">
-                          {formatearFechaHora(item.fecha_hora_apertura)}
+                          <FechaHoraCelda valor={item.fecha_hora_apertura} />
                         </td>
                         <td className="mono">
-                          {formatearFechaHora(item.fecha_hora_cierre)}
+                          <FechaHoraCelda valor={item.fecha_hora_cierre} />
                         </td>
                         <td className="numero">
                           {formatearMoneda(item.monto_inicial)}
@@ -837,7 +854,7 @@ export default function Caja() {
 
         {tab === 'gestion' && puedeGestionar && (
           <>
-            <section className="comercial-panel">
+            <section className="comercial-panel caja-panel-tabla">
               <div className="caja-panel-cabecera">
                 <h2 className="caja-panel-titulo">
                   <IconCash size={22} />
@@ -854,7 +871,7 @@ export default function Caja() {
               </div>
 
               <div className="comercial-tabla-scroll">
-                <table className="tabla-comercial">
+                <table className="tabla-comercial tabla-cajas-fisicas">
                   <thead>
                     <tr>
                       <th>Número</th>

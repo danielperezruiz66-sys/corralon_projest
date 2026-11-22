@@ -221,7 +221,7 @@ export default function Empleados() {
         subtitulo="Administración de empleados, roles y accesos"
       />
 
-      <div className="comercial inventario">
+      <div className="comercial inventario empleados-modulo">
         <section className="comercial-barra">
           <form
             className="comercial-busqueda"
@@ -308,7 +308,7 @@ export default function Empleados() {
 
         <section className={`comercial-panel ${actualizando ? 'panel-actualizando' : ''}`}>
           <div className="comercial-tabla-scroll">
-            <table className="tabla-comercial">
+            <table className="tabla-comercial tabla-empleados">
               <thead>
                 <tr>
                   <th>Legajo</th>

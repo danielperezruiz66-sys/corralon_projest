@@ -12,6 +12,9 @@ import { useAuth } from '../context/auth-context'
 import { formatearFechaHora } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Placeholder.css'
+import '../styles/Facturacion.css'
+
+const COMPROBANTES_POR_PAGINA = 10
 
 export default function Facturacion() {
   const { puedeEscribir } = useAuth()
@@ -19,6 +22,7 @@ export default function Facturacion() {
   const [facturas, setFacturas] = useState([])
   const [empresa, setEmpresa] = useState(null)
   const [cargando, setCargando] = useState(true)
+  const [paginaFacturas, setPaginaFacturas] = useState(1)
 
   useEffect(() => {
     let vigente = true
@@ -27,11 +31,13 @@ export default function Facturacion() {
       .then((datos) => {
         if (vigente) {
           setFacturas(datos)
+          setPaginaFacturas(1)
         }
       })
       .catch(() => {
         if (vigente) {
           setFacturas([])
+          setPaginaFacturas(1)
         }
       })
 
@@ -61,6 +67,17 @@ export default function Facturacion() {
     }
   }, [puedeVerEmisor])
 
+  const totalPaginasFacturas = Math.max(
+    1,
+    Math.ceil(facturas.length / COMPROBANTES_POR_PAGINA),
+  )
+  const indiceInicioFacturas =
+    (paginaFacturas - 1) * COMPROBANTES_POR_PAGINA
+  const facturasVisibles = facturas.slice(
+    indiceInicioFacturas,
+    indiceInicioFacturas + COMPROBANTES_POR_PAGINA,
+  )
+
   return (
     <>
       <Encabezado
@@ -68,74 +85,9 @@ export default function Facturacion() {
         subtitulo="Comprobantes electrónicos"
       />
 
-      <div className="placeholder-contenido facturacion-contenido">
-        <article className="facturacion-panel">
-          <span className="facturacion-icono facturacion-icono-bloqueado">
-            <IconLock size={34} stroke={1.5} />
-          </span>
-          <h2>Emitir comprobante</h2>
-          <p>
-            La emisión de comprobantes electrónicos queda a la espera de las
-            credenciales de ARCA: CUIT del emisor, certificado digital y punto
-            de venta habilitado.
-          </p>
-          <button
-            type="button"
-            className="boton-comercial-primario"
-            disabled
-            title="Faltan credenciales de ARCA"
-          >
-            <IconFileText size={18} />
-            Emitir comprobante
-          </button>
-          <p className="placeholder-nota">
-            Mientras tanto se pueden consultar los comprobantes ya emitidos que
-            figuren en el listado de abajo.
-          </p>
-        </article>
-
-        <article className="facturacion-panel">
-          <span className="facturacion-icono">
-            <IconFileText size={34} stroke={1.5} />
-          </span>
-          <h2>Comprobantes emitidos</h2>
-          {cargando ? (
-            <p className="facturacion-cargando">
-              <IconLoader2 className="icono-girando" size={18} />
-              Cargando comprobantes…
-            </p>
-          ) : facturas.length === 0 ? (
-            <p className="placeholder-nota">
-              Todavía no hay comprobantes emitidos.
-            </p>
-          ) : (
-            <div className="comercial-tabla-scroll">
-              <table className="tabla-comercial tabla-lineas">
-                <thead>
-                  <tr>
-                    <th>Comprobante</th>
-                    <th>Venta</th>
-                    <th>Tipo</th>
-                    <th>Fecha de emisión</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {facturas.map((factura) => (
-                    <tr key={factura.id}>
-                      <td>#{factura.id}</td>
-                      <td>#{factura.venta}</td>
-                      <td>{factura.tipo_detalle}</td>
-                      <td>{formatearFechaHora(factura.fecha_emision)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </article>
-
+      <div className="placeholder-contenido facturacion-contenido facturacion-modulo">
         {puedeVerEmisor && (
-          <article className="facturacion-panel">
+          <article className="facturacion-panel facturacion-panel-emisor">
             <span className="facturacion-icono">
               <IconRosetteDiscountCheck size={34} stroke={1.5} />
             </span>
@@ -169,11 +121,115 @@ export default function Facturacion() {
               </p>
             )}
             <p className="placeholder-nota">
-              Esta información se completa con los datos de ARCA y es la que
-              se usa para firmar los comprobantes. Solo la ve administración.
+              Esta información se completa con los datos de ARCA y es la que se
+              usa para firmar los comprobantes. Solo la ve administración.
             </p>
           </article>
         )}
+
+        <article className="facturacion-panel facturacion-panel-emision">
+          <span className="facturacion-icono facturacion-icono-bloqueado">
+            <IconLock size={34} stroke={1.5} />
+          </span>
+          <h2>Emitir comprobante</h2>
+          <p>
+            La emisión de comprobantes electrónicos queda a la espera de las
+            credenciales de ARCA: CUIT del emisor, certificado digital y punto de
+            venta habilitado.
+          </p>
+          <button
+            type="button"
+            className="boton-comercial-primario"
+            disabled
+            title="Faltan credenciales de ARCA"
+          >
+            <IconFileText size={18} />
+            Emitir comprobante
+          </button>
+          <p className="placeholder-nota">
+            Mientras tanto se pueden consultar los comprobantes ya emitidos que
+            figuren en el listado de abajo.
+          </p>
+        </article>
+
+        <article className="facturacion-panel facturacion-panel-listado">
+          <span className="facturacion-icono">
+            <IconFileText size={34} stroke={1.5} />
+          </span>
+          <h2>Comprobantes emitidos</h2>
+          {cargando ? (
+            <p className="facturacion-cargando">
+              <IconLoader2 className="icono-girando" size={18} />
+              Cargando comprobantes…
+            </p>
+          ) : facturas.length === 0 ? (
+            <p className="placeholder-nota">
+              Todavía no hay comprobantes emitidos.
+            </p>
+          ) : (
+            <>
+              <div className="comercial-tabla-scroll">
+                <table className="tabla-comercial tabla-facturacion">
+                  <thead>
+                    <tr>
+                      <th>Comprobante</th>
+                      <th>Venta</th>
+                      <th>Tipo</th>
+                      <th>Fecha de emisión</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {facturasVisibles.map((factura) => (
+                      <tr key={factura.id}>
+                        <td>#{factura.id}</td>
+                        <td>#{factura.venta}</td>
+                        <td>
+                          <span className="facturacion-tipo">
+                            {factura.tipo_detalle}
+                          </span>
+                        </td>
+                        <td>{formatearFechaHora(factura.fecha_emision)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="comercial-paginacion">
+                <span>
+                  {facturas.length} comprobante{facturas.length === 1 ? '' : 's'}
+                </span>
+                <div>
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    disabled={paginaFacturas === 1}
+                    onClick={() =>
+                      setPaginaFacturas((actual) => Math.max(1, actual - 1))
+                    }
+                  >
+                    Anterior
+                  </button>
+                  <span>
+                    Página {paginaFacturas} de {totalPaginasFacturas}
+                  </span>
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    disabled={paginaFacturas === totalPaginasFacturas}
+                    onClick={() =>
+                      setPaginaFacturas((actual) =>
+                        Math.min(totalPaginasFacturas, actual + 1),
+                      )
+                    }
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </article>
       </div>
     </>
   )

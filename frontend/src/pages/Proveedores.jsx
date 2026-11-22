@@ -23,6 +23,7 @@ import { descargarCsv, numeroCsv } from '../utils/csv'
 import { formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
+import '../styles/Proveedores.css'
 
 const PAGINA_VACIA = {
   count: 0,
@@ -328,7 +329,7 @@ export default function Proveedores() {
         subtitulo="Información y costos"
       />
 
-      <div className="comercial inventario">
+      <div className="comercial inventario proveedores">
         <section className="comercial-barra">
           <form
             className="comercial-busqueda"
@@ -435,7 +436,7 @@ export default function Proveedores() {
         <section className={`comercial-panel ${actualizando ? 'panel-actualizando' : ''}`}>
           <div className="comercial-tabla-scroll">
             {tab === 'proveedores' ? (
-              <table className="tabla-comercial">
+              <table className="tabla-comercial tabla-proveedores">
                 <thead>
                   <tr>
                     <th>Razón social</th>
@@ -514,7 +515,7 @@ export default function Proveedores() {
                 </tbody>
               </table>
             ) : (
-              <table className="tabla-comercial">
+              <table className="tabla-comercial tabla-costos-proveedor">
                 <thead>
                   <tr>
                     <th>Proveedor</th>
@@ -550,7 +551,15 @@ export default function Proveedores() {
                       <td className="numero">
                         {formatearMoneda(item.precio_lista)}
                       </td>
-                      <td>{item.estado ? 'Activo' : 'Inactivo'}</td>
+                      <td>
+                        <span
+                          className={`inventario-estado ${
+                            item.estado ? 'activo' : 'inactivo'
+                          }`}
+                        >
+                          {item.estado ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
                       <td>
                         {puedeEditar && (
                           <button

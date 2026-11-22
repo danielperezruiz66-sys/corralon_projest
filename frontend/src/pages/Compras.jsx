@@ -28,6 +28,7 @@ import { descargarCsv, numeroCsv } from '../utils/csv'
 import { nuevaClave } from '../utils/clave'
 import { formatearFecha, formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/Compras.css'
 import '../styles/components/comercial/Cobro.css'
 
 const PAGINA_VACIA = {
@@ -658,7 +659,7 @@ export default function Compras() {
         subtitulo="Registro, recepción y control de compras"
       />
 
-      <div className="comercial">
+      <div className="comercial compras">
             <section className="comercial-barra">
               <form
                 className="comercial-busqueda"

@@ -931,3 +931,118 @@ DASHBOARD DE INICIO - FER-CONS
   background-color: #fee2e2;
   color: var(--color-peligro);
 }
+
+/* Ajustes de presentación de la tabla y los listados del dashboard */
+.dashboard .tabla-scroll {
+  overflow-x: auto;
+}
+
+.dashboard .tabla-mini {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.92rem;
+}
+
+.dashboard .tabla-mini th {
+  padding: 0.85rem 0.75rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.2);
+  color: var(--color-oscuro);
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.dashboard .tabla-mini td {
+  padding: 0.85rem 0.75rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.1);
+  color: var(--color-oscuro);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.dashboard .tabla-mini tr:last-child td {
+  border-bottom: none;
+}
+
+.dashboard .tabla-mini th:nth-child(1),
+.dashboard .tabla-mini td:nth-child(1) {
+  width: 24%;
+}
+
+.dashboard .tabla-mini th:nth-child(2),
+.dashboard .tabla-mini td:nth-child(2) {
+  width: 34%;
+}
+
+.dashboard .tabla-mini th:nth-child(3),
+.dashboard .tabla-mini td:nth-child(3) {
+  width: 22%;
+}
+
+.dashboard .tabla-mini th:nth-child(4),
+.dashboard .tabla-mini td:nth-child(4) {
+  width: 20%;
+  text-align: center;
+}
+
+.dashboard .tabla-mini td:nth-child(1) {
+  color: rgba(15, 42, 48, 0.72);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard .tabla-mini td:nth-child(2) {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.dashboard .tabla-mini .alinear-derecha {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.dashboard .tabla-mini .texto-suave {
+  color: rgba(15, 42, 48, 0.72);
+}
+
+.dashboard .badge {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.dashboard .caja-item,
+.dashboard .stock-item,
+.dashboard .compra-item {
+  border: 1px solid rgba(15, 42, 48, 0.08);
+  border-radius: 0.75rem;
+  background-color: #f8fcfc;
+  padding: 0.85rem 1rem;
+}
+
+.dashboard .caja-item-info strong,
+.dashboard .stock-item strong,
+.dashboard .compra-info strong {
+  font-size: 0.95rem;
+}
+
+.dashboard .caja-item small,
+.dashboard .stock-item small,
+.dashboard .compra-info small {
+  color: rgba(15, 42, 48, 0.62);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.dashboard .caja-item-horario span,
+.dashboard .compra-monto strong {
+  font-variant-numeric: tabular-nums;
+}

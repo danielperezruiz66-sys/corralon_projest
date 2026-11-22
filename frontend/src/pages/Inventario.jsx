@@ -42,6 +42,7 @@ import {
 } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
+import '../styles/InventarioModulo.css'
 
 const PAGINA_VACIA = {
   count: 0,
@@ -638,7 +639,7 @@ export default function Inventario() {
         subtitulo="Productos, stock y depósitos"
       />
 
-      <div className="comercial inventario">
+      <div className="comercial inventario inventario-modulo">
         {tab !== 'catalogos' && (
           <section className="comercial-barra">
             <form
@@ -819,7 +820,7 @@ export default function Inventario() {
           >
             <div className="comercial-tabla-scroll">
               {tab === 'productos' && (
-                <table className="tabla-comercial">
+                <table className="tabla-comercial tabla-inventario-productos">
                   <thead>
                     <tr>
                       <th>Código</th>
@@ -911,7 +912,7 @@ export default function Inventario() {
               )}
 
               {tab === 'stock' && (
-                <table className="tabla-comercial">
+                <table className="tabla-comercial tabla-inventario-stock">
                   <thead>
                     <tr>
                       <th>Producto</th>
@@ -997,7 +998,7 @@ export default function Inventario() {
               )}
 
               {tab === 'depositos' && (
-                <table className="tabla-comercial">
+                <table className="tabla-comercial tabla-inventario-depositos">
                   <thead>
                     <tr>
                       <th>Depósito</th>

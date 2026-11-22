@@ -15,6 +15,7 @@ import useDebounce from '../hooks/useDebounce'
 import { descargarCsv } from '../utils/csv'
 import { formatearFecha, formatearFechaHora, formatearNumero } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/Actividad.css'
 
 const PAGINA_VACIA = {
   count: 0,
@@ -214,7 +215,7 @@ export default function Actividad() {
         subtitulo="Registro de cambios del sistema"
       />
 
-      <div className="comercial">
+      <div className="comercial actividad">
         {/* KPIs superiores (totales reales del filtro) */}
         <section className="comercial-barra">
           <div className="comercial-kpis">
