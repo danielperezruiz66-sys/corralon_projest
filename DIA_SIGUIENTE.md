@@ -23,6 +23,19 @@
       obligatorio sin cliente / oculto con cliente, con nombre y documento en
       el selector.
 
+## Integración visual (combinacion-etapas)
+
+- [ ] Inventario: quitar toggle “todas las sucursales”, columnas y filtros de
+      sucursal, y aplicar el nuevo sistema de filtros/tablas.
+- [ ] Ventas y Compras: layout de filtros nuevo sin sucursal, conservando
+      `useCacheModulo`, fechas y validaciones.
+- [ ] Inicio: quitar el parámetro y las etiquetas de sucursal manteniendo
+      `useCacheModulo`.
+- [ ] `FiltrosFecha`, `FormularioVenta` y `FormularioProductoProveedor`:
+      fusionar cambios visuales con nuestras validaciones.
+- [ ] Retrofitar `useCacheModulo` en Inventario y Compras; revisar el tiempo de
+      carga de Facturación (hoy recorre todas las páginas de facturas).
+
 ## Revisión módulo por módulo
 
 - [ ] Compras.

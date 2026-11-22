@@ -81,7 +81,7 @@ export const menuCategories = [
       {
         name: 'Proveedores',
         path: '/proveedores',
-        detalle: 'Información, sucursales y costos',
+        detalle: 'Información y costos',
         icono: IconTruck,
         roles: ['AD', 'GE', 'CA', 'VE', 'ED'],
       },
@@ -134,6 +134,13 @@ export const menuCategories = [
         detalle: 'Registro de movimientos',
         icono: IconHistory,
         roles: ['AD', 'GE'],
+      },
+      {
+        name: 'Configuración',
+        path: '/configuracion',
+        detalle: 'Datos de la empresa',
+        icono: IconSettings,
+        roles: ['AD'],
       },
     ],
   },

@@ -20,9 +20,9 @@
 
 Estado: backend consolidado (35 modelos, 34 viewsets, suite en `app.tests`),
 una sola sucursal operativa por empresa. Frontend con Dashboard, Ventas,
-Compras, Clientes, Inventario, Proveedores, Caja, Empleados, Perfil y
-Actividad. Falta la revisión/QA visual módulo por módulo y las métricas del
-Dashboard V2. Facturación ARCA está bloqueada.
+Compras, Clientes, Inventario, Proveedores, Caja, Empleados, Perfil,
+Configuración y Actividad. Falta la revisión/QA visual módulo por módulo y las
+métricas del Dashboard V2. Facturación ARCA está bloqueada.
 
 ## 2. Estructura
 
@@ -36,7 +36,7 @@ backend/
     ├── management/commands/# seed_data, cancelar_ventas_vencidas
     ├── migrations/         # 0001 esquema + 0002/0003 estado Parcial
     │                       # + 0004/0005 unicidad del catálogo
-    ├── tests/              # suite en app.tests (249 tests)
+    ├── tests/              # suite en app.tests (259 tests)
     ├── permissions.py  backends.py  exceptions.py
     └── serializers.py  views.py  urls.py
 frontend/src/
@@ -211,24 +211,35 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
   - `POST /api/empleados/`, `/{id}/cambiar-password/`.
 - `Usuario` exige `IsAdminUser`; contraseña write-only. `Producto` acepta
   `sucursales` y sincroniza `ProductoXSucursal`.
+- `GET/PATCH /api/empresas/` es solo para `AD`/superuser (`SoloAdministrador`);
+  alimenta el módulo Configuración.
 
 ## 6. Frontend
 
 - Rutas protegidas; `/login` pública. `useAuth()` expone `user`, `login`,
   `logout`, `puedeVer(modulo)` y `puedeEscribir(roles)`.
-- Sin selector de sucursal en el encabezado: `SucursalContext` usa la única
-  sucursal asignada y los listados filtran con `sucursalActiva`.
+- **Sin sucursales en la UI**: no hay selector, filtros, columnas ni checklists
+  de sucursal. `SucursalContext` resuelve automáticamente la sucursal central
+  (`es_central`) o la única asignada, y la usa solo para operar (caja, ventas,
+  compras, altas). Los listados y el dashboard no envían `?sucursal=`. El
+  backend conserva el soporte multi-sucursal para una etapa futura.
 - Tokens en `localStorage` (`corralon.acceso` / `corralon.refresco`); ante 401,
   `pedir()` renueva y reintenta una vez.
 - Módulos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores, Caja,
-  Empleados, Perfil, Actividad. Facturación muestra mantenimiento.
+  Empleados, Perfil, Configuración (solo `AD`) y Actividad. Facturación muestra
+  mantenimiento.
 - **Cache en memoria + actualización en segundo plano**: patrón obligatorio en
   cada módulo que se revise, implementado en `hooks/useCacheModulo.js`. Se
-  cachea la última respuesta por usuario, sucursal y filtros; se muestra al
-  volver o cambiar de pestaña y se refresca al enfocar la ventana (e Inicio
-  además cada 15 s). Tras escribir se invalida el prefijo del módulo y se
-  recarga. Inicio y Ventas ya lo usan; al iniciar sesión se precarga la primera
-  página de Ventas (`api/ventas.js`) para que el módulo abra al instante.
+  cachea la última respuesta por usuario y filtros (y sucursal cuando aplique);
+  se muestra al volver o cambiar de pestaña y se refresca al enfocar la ventana
+  (e Inicio además cada 15 s). Tras escribir se invalida el prefijo del módulo y
+  se recarga. Inicio y Ventas ya lo usan; al iniciar sesión se precarga la
+  primera página de Ventas (`api/ventas.js`) para que el módulo abra al
+  instante.
+- **Regla obligatoria**: todo módulo, página, listado o formulario, incluidos los
+  nuevos (Perfil, Configuración, Facturación, Actividad), debe implementarse con
+  `useCacheModulo` desde su creación. No se aceptan cachés locales ad-hoc ni
+  fetch directos sin el patrón de cache + refresco en segundo plano.
 - Ventas: pestañas Pendientes/Parciales/Confirmadas/Anuladas y filtro Vencidas.
   Pago parcial → Parcial; pago total → Confirmada. El cobro no pide confirmación
   extra. No existe “Por vencer” en la UI.
@@ -268,7 +279,7 @@ cd backend
 ../venv/Scripts/python.exe manage.py check
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 249 tests
+../venv/Scripts/python.exe manage.py test app              # 259 tests
 ../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 

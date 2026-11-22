@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -24,13 +24,18 @@ import FormularioCierreSeccion from '../components/caja/FormularioCierreSeccion.
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
+import useCacheModulo from '../hooks/useCacheModulo'
 import { descargarCsv, numeroCsv } from '../utils/csv'
 import {
+  formatearFecha,
   formatearFechaHora,
+  formatearHora,
   formatearMoneda,
+  sinSucursal,
 } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
+import '../styles/Filtros.css'
 import '../styles/Caja.css'
 
 const PAGINA_VACIA = {
@@ -38,6 +43,12 @@ const PAGINA_VACIA = {
   next: null,
   previous: null,
   results: [],
+}
+
+const CAJA_VACIA = {
+  datos: PAGINA_VACIA,
+  abiertas: [],
+  cajasSucursal: [],
 }
 
 const TABS = [
@@ -60,9 +71,22 @@ const CLASE_ESTADO = {
   AU: 'estado-au',
 }
 
+function FechaHoraCelda({ valor }) {
+  if (!valor) {
+    return <span className="caja-hora">—</span>
+  }
+
+  return (
+    <span className="caja-fecha-hora">
+      <span className="caja-fecha">{formatearFecha(valor)}</span>
+      <span className="caja-hora">{formatearHora(valor)}</span>
+    </span>
+  )
+}
+
 export default function Caja() {
   const { user, puedeEscribir } = useAuth()
-  const { sucursalActiva, sucursalDetalle } = useSucursal()
+  const { sucursalActiva } = useSucursal()
   const puedeOperar = puedeEscribir(['AD', 'GE', 'CA'])
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
 
@@ -74,18 +98,7 @@ export default function Caja() {
     Number(searchParams.get('page')) || 1,
   )
 
-  const [datos, setDatos] = useState(PAGINA_VACIA)
-  // Movimientos AB/PA: bloquean la caja y se muestran como "cajas abiertas".
-  const [abiertas, setAbiertas] = useState([])
-  const [cajasSucursal, setCajasSucursal] = useState([])
-  const [sucursales, setSucursales] = useState([])
-  const [cajasFisicas, setCajasFisicas] = useState([])
-
-  const [cargando, setCargando] = useState(true)
-  const [actualizando, setActualizando] = useState(false)
   const [exportando, setExportando] = useState(false)
-  const [error, setError] = useState('')
-  const [refresco, setRefresco] = useState(0)
 
   const [aperturaAbierta, setAperturaAbierta] = useState(false)
   const [cierreSeccion, setCierreSeccion] = useState(null)
@@ -93,7 +106,6 @@ export default function Caja() {
   const [cajaEditando, setCajaEditando] = useState(null)
 
   const busqueda = useDebounce(texto.trim(), 350)
-  const buscando = texto.trim() !== busqueda || actualizando
 
   useEffect(() => {
     const parametros = new URLSearchParams()
@@ -112,79 +124,8 @@ export default function Caja() {
     setSearchParams(parametros, { replace: true })
   }, [tab, busqueda, estado, pagina, setSearchParams])
 
-  // Movimientos activos de la sucursal (abiertos o en pausa): bloquean la
-  // caja fisica y se muestran en el panel de cajas abiertas.
-  useEffect(() => {
-    if (tab !== 'listado') {
-      return undefined
-    }
-    let vigente = true
-    const base = new URLSearchParams()
-    if (sucursalActiva) {
-      base.set('sucursal', sucursalActiva)
-    }
-    const conEstado = (estado) => {
-      const params = new URLSearchParams(base)
-      params.set('estado', estado)
-      return pedirTodas(`/movimientos-caja/?${params.toString()}`)
-    }
-
-    Promise.all([conEstado('AB'), conEstado('PA')])
-      .then(([abiertos, pausados]) => {
-        if (vigente) {
-          setAbiertas([...abiertos, ...pausados])
-        }
-      })
-      .catch((e) => {
-        if (vigente) {
-          setError(e.message)
-        }
-      })
-
-    return () => {
-      vigente = false
-    }
-  }, [tab, sucursalActiva, refresco])
-
-  // Cajas fisicas de la sucursal elegida (para abrir un movimiento).
-  useEffect(() => {
-    if (tab !== 'listado' || !sucursalActiva) {
-      return undefined
-    }
-    let vigente = true
-    const parametros = new URLSearchParams({
-      sucursal: sucursalActiva,
-      estado: 'AC',
-    })
-
-    pedirTodas(`/cajas/?${parametros.toString()}`)
-      .then((cajasData) => {
-        if (vigente) {
-          setCajasSucursal(cajasData)
-        }
-      })
-      .catch((e) => {
-        if (vigente) {
-          setError(e.message)
-        }
-      })
-
-    return () => {
-      vigente = false
-    }
-  }, [tab, sucursalActiva, refresco])
-
-  // Listado e historial.
-  useEffect(() => {
-    if (tab !== 'listado') {
-      return undefined
-    }
-    let vigente = true
-    const controlador = new AbortController()
+  const consultarListado = useCallback(async () => {
     const parametros = new URLSearchParams({ page: String(pagina) })
-    if (sucursalActiva) {
-      parametros.set('sucursal', sucursalActiva)
-    }
     if (busqueda) {
       parametros.set('search', busqueda)
     }
@@ -192,73 +133,81 @@ export default function Caja() {
       parametros.set('estado', estado)
     }
 
-    pedir(`/movimientos-caja/?${parametros.toString()}`, {
-      signal: controlador.signal,
-    })
-      .then((respuesta) => {
-        if (vigente) {
-          setDatos(respuesta)
-          setError('')
-        }
-      })
-      .catch((e) => {
-        if (!vigente || e.name === 'AbortError') {
-          return
-        }
-        setError(e.message)
-      })
-      .finally(() => {
-        if (vigente) {
-          setCargando(false)
-          setActualizando(false)
-        }
-      })
+    const consultarCajas = sucursalActiva
+      ? pedirTodas(
+          `/cajas/?${new URLSearchParams({
+            sucursal: sucursalActiva,
+            estado: 'AC',
+          }).toString()}`,
+        )
+      : Promise.resolve([])
 
-    return () => {
-      vigente = false
-      controlador.abort()
-    }
-  }, [tab, pagina, busqueda, estado, sucursalActiva, refresco])
-
-  // Gestion: cajas fisicas y sucursales.
-  useEffect(() => {
-    if (tab !== 'gestion') {
-      return undefined
-    }
-    let vigente = true
-
-    Promise.all([
-      pedirTodas('/cajas/'),
-      pedirTodas('/sucursales/'),
+    const [respuesta, abiertos, pausados, cajasData] = await Promise.all([
+      pedir(`/movimientos-caja/?${parametros.toString()}`),
+      pedirTodas('/movimientos-caja/?estado=AB'),
+      pedirTodas('/movimientos-caja/?estado=PA'),
+      consultarCajas,
     ])
-      .then(([cajasData, sucursalesData]) => {
-        if (!vigente) {
-          return
-        }
-        setCajasFisicas(cajasData)
-        setSucursales(sucursalesData)
-        setError('')
-      })
-      .catch((e) => {
-        if (vigente) {
-          setError(e.message)
-        }
-      })
-      .finally(() => {
-        if (vigente) {
-          setCargando(false)
-          setActualizando(false)
-        }
-      })
 
-    return () => {
-      vigente = false
+    return {
+      datos: respuesta,
+      abiertas: [...abiertos, ...pausados],
+      cajasSucursal: cajasData,
     }
-  }, [tab, refresco])
+  }, [pagina, busqueda, estado, sucursalActiva])
+
+  const consultarGestion = useCallback(() => pedirTodas('/cajas/'), [])
+
+  const listado = useCacheModulo({
+    clave:
+      tab === 'listado'
+        ? `caja-listado|${user?.id ?? ''}|${sucursalActiva || ''}|${pagina}|${busqueda}|${estado}`
+        : '',
+    consultar: consultarListado,
+    inicial: CAJA_VACIA,
+    activo: tab === 'listado',
+  })
+
+  const gestion = useCacheModulo({
+    clave: tab === 'gestion' ? `caja-gestion|${user?.id ?? ''}` : '',
+    consultar: consultarGestion,
+    inicial: [],
+    activo: tab === 'gestion',
+  })
+
+  const datos = listado.datos.datos
+  const abiertas = listado.datos.abiertas
+  const cajasSucursal = listado.datos.cajasSucursal
+  const cajasFisicas = gestion.datos
+  const cargando =
+    tab === 'listado'
+      ? listado.cargando
+      : tab === 'gestion'
+        ? gestion.cargando
+        : false
+  const actualizando =
+    tab === 'listado'
+      ? listado.actualizando
+      : tab === 'gestion'
+        ? gestion.actualizando
+        : false
+  const error =
+    tab === 'listado'
+      ? listado.error
+      : tab === 'gestion'
+        ? gestion.error
+        : ''
+  const buscando = texto.trim() !== busqueda || actualizando
 
   function refrescar() {
-    setRefresco((valor) => valor + 1)
-    setActualizando(true)
+    if (tab === 'listado') {
+      listado.refrescar(true)
+      listado.invalidar(`caja-listado|${user?.id ?? ''}`)
+    }
+    if (tab === 'gestion') {
+      gestion.refrescar(true)
+      gestion.invalidar(`caja-gestion|${user?.id ?? ''}`)
+    }
   }
 
   function cambiarTab(nuevoTab) {
@@ -266,8 +215,6 @@ export default function Caja() {
     setTexto('')
     setEstado('')
     setPagina(1)
-    setError('')
-    setCargando(true)
   }
 
   function cambiarEstado(nuevoEstado) {
@@ -276,14 +223,10 @@ export default function Caja() {
     }
     setEstado(nuevoEstado)
     setPagina(1)
-    setError('')
-    setActualizando(true)
   }
 
   function irAPagina(nueva) {
     setPagina(nueva)
-    setError('')
-    setActualizando(true)
   }
 
   function seccionAbiertaGuardada(seccion) {
@@ -291,7 +234,7 @@ export default function Caja() {
     Swal.fire({
       icon: 'success',
       title: 'Seccion abierta',
-      text: `${seccion.caja_detalle} · Sección #${seccion.id} · a nombre de ${seccion.empleado_detalle}`,
+      text: `${sinSucursal(seccion.caja_detalle, seccion.sucursal_detalle)} · Sección #${seccion.id} · a nombre de ${seccion.empleado_detalle}`,
       timer: 1800,
       showConfirmButton: false,
     })
@@ -423,7 +366,6 @@ export default function Caja() {
     setExportando(true)
     try {
       const parametros = new URLSearchParams()
-      if (sucursalActiva) parametros.set('sucursal', sucursalActiva)
       if (busqueda) parametros.set('search', busqueda)
       if (estado) parametros.set('estado', estado)
       const todos = await pedirTodas(
@@ -444,7 +386,6 @@ export default function Caja() {
         `movimientos-caja-${new Date().toISOString().slice(0, 10)}.csv`,
         [
           'Caja física',
-          'Sucursal',
           'Sección',
           'Empleado',
           'Apertura',
@@ -456,8 +397,7 @@ export default function Caja() {
           'Estado',
         ],
         todos.map((item) => [
-          item.caja_detalle,
-          item.sucursal_detalle,
+          sinSucursal(item.caja_detalle, item.sucursal_detalle),
           item.id,
           item.empleado_detalle,
           item.fecha_hora_apertura ?? '',
@@ -500,197 +440,198 @@ export default function Caja() {
         subtitulo="Apertura, cierre y auditoria de las secciones de caja"
       />
 
-      <div className="comercial inventario">
-        {tab === 'listado' && (
-          <>           
-            <section
-              id="cajas-abiertas"
-              className="comercial-panel"
-              aria-label="Cajas abiertas"
+      <div className="comercial inventario caja-modulo">
+        <section className="filtros-area">
+          <section className="comercial-barra">
+            <form
+              className="comercial-busqueda"
+              onSubmit={(evento) => evento.preventDefault()}
             >
-              <div className="caja-panel-cabecera">
-                <h2 className="caja-panel-titulo">
-                  <IconCash size={22} />
-                  Cajas abiertas
-                </h2>
-                {puedeOperar && (
-                  <button
-                    type="button"
-                    className="boton-comercial-primario"
-                    disabled={!sucursalActiva}
-                    onClick={() => setAperturaAbierta(true)}
-                    title={
-                      sucursalActiva
-                        ? 'Abrir una seccion de caja'
-                        : 'Elegí una sucursal en el encabezado'
-                    }
-                  >
-                    <IconPlus size={18} />
-                    Abrir seccion
-                  </button>
-                )}
-              </div>
-
-              {!sucursalActiva && (
-                <p className="caja-nota-total">
-                  Elegí una sucursal en el encabezado para abrir una seccion.
-                </p>
-              )}
-
-              <div className="caja-abiertas">
-                {abiertas.length === 0 && (
-                  <p className="caja-abierta-vacia">
-                    No hay cajas con secciones abiertas.
-                  </p>
-                )}
-                {abiertas.map((seccion) => (
-                  <article className="caja-abierta" key={seccion.id}>
-                    <div className="caja-abierta-cabecera">
-                      <div>
-                        <strong>{seccion.caja_detalle}</strong>
-                        <small>
-                          Sección #{seccion.id} · {seccion.sucursal_detalle}
-                        </small>
-                      </div>
-                      <span className={`estado-badge ${CLASE_ESTADO[seccion.estado]}`}>
-                        {seccion.estado_detalle}
-                      </span>
-                    </div>
-                    <div className="caja-abierta-detalles">
-                      <span>
-                        Empleado{' '}
-                        <strong>{seccion.empleado_detalle}</strong>
-                      </span>
-                      <span>
-                        Apertura{' '}
-                        <strong>
-                          {formatearFechaHora(seccion.fecha_hora_apertura)}
-                        </strong>
-                      </span>
-                      <span>
-                        Inicial{' '}
-                        <strong>{formatearMoneda(seccion.monto_inicial)}</strong>
-                      </span>
-                    </div>
-                    <div className="caja-abierta-acciones">
-                      <button
-                        type="button"
-                        className="boton-comercial-secundario"
-                        onClick={() => setDetalleSeccion(seccion)}
-                      >
-                        <IconEye size={17} />
-                        Ver
-                      </button>
-                      {puedeOperar && (
-                        <button
-                          type="button"
-                          className="boton-comercial-primario"
-                          onClick={() => setCierreSeccion(seccion)}
-                        >
-                          <IconCash size={17} />
-                          Cerrar seccion
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          </>
-        )}
-
-        <section className="comercial-barra">
-          <form
-            className="comercial-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-              }}
-              placeholder="Buscar por sucursal, caja o empleado"
-              aria-label="Buscar secciones de caja"
-            />
-            {buscando && (
-              <IconLoader2 className="icono-girando" size={18} />
-            )}
-            {texto && (
-              <button
-                type="button"
-                className="boton-limpiar-busqueda"
-                onClick={() => {
-                  setTexto('')
+              <IconSearch size={20} />
+              <input
+                type="search"
+                value={texto}
+                onChange={(evento) => {
+                  setTexto(evento.target.value)
                   setPagina(1)
                 }}
-                aria-label="Limpiar búsqueda"
-              >
-                <IconX size={16} />
-              </button>
-            )}
-          </form>
+                placeholder="Buscar por caja o empleado"
+                aria-label="Buscar secciones de caja"
+              />
+              {buscando && (
+                <IconLoader2 className="icono-girando" size={18} />
+              )}
+              {texto && (
+                <button
+                  type="button"
+                  className="boton-limpiar-busqueda"
+                  onClick={() => {
+                    setTexto('')
+                    setPagina(1)
+                  }}
+                  aria-label="Limpiar búsqueda"
+                >
+                  <IconX size={16} />
+                </button>
+              )}
+            </form>
 
-          <div className="comercial-acciones-barra">
-            <button
-              type="button"
-              className="boton-comercial-secundario"
-              onClick={exportar}
-              disabled={exportando}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-          </div>
-        </section>
-
-        <section className="inventario-tabs">
-          {tabsVisibles.map((item) => {
-            const Icono = item.icono
-            return (
+            <div className="comercial-acciones-barra">
               <button
-                key={item.id}
                 type="button"
-                className={tab === item.id ? 'activo' : ''}
-                onClick={() => cambiarTab(item.id)}
+                className="boton-comercial-secundario"
+                onClick={exportar}
+                disabled={exportando}
               >
-                <Icono size={18} />
-                {item.etiqueta}
+                <IconDownload size={18} />
+                {exportando ? 'Exportando…' : 'Exportar CSV'}
               </button>
-            )
-          })}
-        </section>
-
-        {tab === 'listado' && (
-          <section className="inventario-filtros">
-            {FILTROS_ESTADO.map((opcion) => (
-              <button
-                key={opcion.id || 'todas'}
-                type="button"
-                className={estado === opcion.id ? 'activo' : ''}
-                onClick={() => cambiarEstado(opcion.id)}
-              >
-                {opcion.etiqueta}
-              </button>
-            ))}
+            </div>
           </section>
-        )}
+
+          <section className="filtros-tabs filtros-pills">
+            {tabsVisibles.map((item) => {
+              const Icono = item.icono
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={tab === item.id ? 'activo' : ''}
+                  onClick={() => cambiarTab(item.id)}
+                >
+                  <Icono size={18} />
+                  {item.etiqueta}
+                </button>
+              )
+            })}
+          </section>
+
+          {tab === 'listado' && (
+            <section className="filtros-tabs filtros-pills">
+              {FILTROS_ESTADO.map((opcion) => (
+                <button
+                  key={opcion.id || 'todas'}
+                  type="button"
+                  className={estado === opcion.id ? 'activo' : ''}
+                  onClick={() => cambiarEstado(opcion.id)}
+                >
+                  {opcion.etiqueta}
+                </button>
+              ))}
+            </section>
+          )}
+        </section>
 
         {error && <p className="comercial-error">{error}</p>}
 
         {tab === 'listado' && (
           <section
-            className={`comercial-panel ${actualizando ? 'panel-actualizando' : ''}`}
+            id="cajas-abiertas"
+            className="comercial-panel caja-panel-abiertas"
+            aria-label="Cajas abiertas"
+          >
+            <div className="caja-panel-cabecera">
+              <h2 className="caja-panel-titulo">
+                <IconCash size={22} />
+                Cajas abiertas
+              </h2>
+              {puedeOperar && (
+                <button
+                  type="button"
+                  className="boton-comercial-primario"
+                  disabled={!sucursalActiva}
+                  onClick={() => setAperturaAbierta(true)}
+                  title="Abrir una seccion de caja"
+                >
+                  <IconPlus size={18} />
+                  Abrir seccion
+                </button>
+              )}
+            </div>
+
+            {!sucursalActiva && (
+              <p className="caja-nota-total">
+                Faltan datos de configuración de tu usuario. Contactá al
+                administrador.
+              </p>
+            )}
+
+            <div className="caja-abiertas">
+              {abiertas.length === 0 && (
+                <p className="caja-abierta-vacia">
+                  No hay cajas con secciones abiertas.
+                </p>
+              )}
+              {abiertas.map((seccion) => (
+                <article className="caja-abierta" key={seccion.id}>
+                  <div className="caja-abierta-cabecera">
+                    <div>
+                      <strong>
+                        {sinSucursal(
+                          seccion.caja_detalle,
+                          seccion.sucursal_detalle,
+                        )}
+                      </strong>
+                      <small>Sección #{seccion.id}</small>
+                    </div>
+                    <span className={`estado-badge ${CLASE_ESTADO[seccion.estado]}`}>
+                      {seccion.estado_detalle}
+                    </span>
+                  </div>
+                  <div className="caja-abierta-detalles">
+                    <span>
+                      Empleado{' '}
+                      <strong>{seccion.empleado_detalle}</strong>
+                    </span>
+                    <span>
+                      Apertura{' '}
+                      <strong>
+                        {formatearFechaHora(seccion.fecha_hora_apertura)}
+                      </strong>
+                    </span>
+                    <span>
+                      Inicial{' '}
+                      <strong>{formatearMoneda(seccion.monto_inicial)}</strong>
+                    </span>
+                  </div>
+                  <div className="caja-abierta-acciones">
+                    <button
+                      type="button"
+                      className="boton-comercial-secundario"
+                      onClick={() => setDetalleSeccion(seccion)}
+                    >
+                      <IconEye size={17} />
+                      Ver
+                    </button>
+                    {puedeOperar && (
+                      <button
+                        type="button"
+                        className="boton-comercial-primario"
+                        onClick={() => setCierreSeccion(seccion)}
+                      >
+                        <IconCash size={17} />
+                        Cerrar seccion
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tab === 'listado' && (
+          <section
+            className={`comercial-panel caja-panel-tabla ${
+              actualizando ? 'panel-actualizando' : ''
+            }`}
           >
             <div className="comercial-tabla-scroll">
-              <table className="tabla-comercial">
+              <table className="tabla-comercial tabla-caja-secciones">
                 <thead>
                   <tr>
                     <th>Sección</th>
                     <th>Caja</th>
-                    <th>Sucursal</th>
                     <th>Empleado</th>
                     <th>Apertura</th>
                     <th>Cierre</th>
@@ -705,14 +646,14 @@ export default function Caja() {
                 <tbody>
                   {cargando && (
                     <tr>
-                      <td colSpan="12" className="comercial-vacio">
+                      <td colSpan="11" className="comercial-vacio">
                         Cargando secciones…
                       </td>
                     </tr>
                   )}
                   {!cargando && datos.results.length === 0 && (
                     <tr>
-                      <td colSpan="12" className="comercial-vacio">
+                      <td colSpan="11" className="comercial-vacio">
                         No se encontraron secciones.
                       </td>
                     </tr>
@@ -725,14 +666,18 @@ export default function Caja() {
                     return (
                       <tr key={item.id}>
                         <td className="mono">#{item.id}</td>
-                        <td>{item.caja_detalle}</td>
-                        <td>{item.sucursal_detalle}</td>
+                        <td>
+                          {sinSucursal(
+                            item.caja_detalle,
+                            item.sucursal_detalle,
+                          )}
+                        </td>
                         <td>{item.empleado_detalle}</td>
                         <td className="mono">
-                          {formatearFechaHora(item.fecha_hora_apertura)}
+                          <FechaHoraCelda valor={item.fecha_hora_apertura} />
                         </td>
                         <td className="mono">
-                          {formatearFechaHora(item.fecha_hora_cierre)}
+                          <FechaHoraCelda valor={item.fecha_hora_cierre} />
                         </td>
                         <td className="numero">
                           {formatearMoneda(item.monto_inicial)}
@@ -851,7 +796,7 @@ export default function Caja() {
 
         {tab === 'gestion' && puedeGestionar && (
           <>
-            <section className="comercial-panel">
+            <section className="comercial-panel caja-panel-tabla">
               <div className="caja-panel-cabecera">
                 <h2 className="caja-panel-titulo">
                   <IconCash size={22} />
@@ -868,10 +813,9 @@ export default function Caja() {
               </div>
 
               <div className="comercial-tabla-scroll">
-                <table className="tabla-comercial">
+                <table className="tabla-comercial tabla-cajas-fisicas">
                   <thead>
                     <tr>
-                      <th>Sucursal</th>
                       <th>Número</th>
                       <th>Estado</th>
                       <th>Acciones</th>
@@ -880,21 +824,20 @@ export default function Caja() {
                   <tbody>
                     {cargando && (
                       <tr>
-                        <td colSpan="4" className="comercial-vacio">
+                        <td colSpan="3" className="comercial-vacio">
                           Cargando cajas…
                         </td>
                       </tr>
                     )}
                     {!cargando && cajasFisicas.length === 0 && (
                       <tr>
-                        <td colSpan="4" className="comercial-vacio">
+                        <td colSpan="3" className="comercial-vacio">
                           No hay cajas físicas.
                         </td>
                       </tr>
                     )}
                     {cajasFisicas.map((caja) => (
                       <tr key={caja.id}>
-                        <td>{caja.sucursal_detalle}</td>
                         <td className="mono">Caja {caja.numero_caja}</td>
                         <td>{caja.estado_detalle}</td>
                         <td>
@@ -920,7 +863,6 @@ export default function Caja() {
       {aperturaAbierta && sucursalActiva && (
         <FormularioAperturaSeccion
           sucursalActiva={sucursalActiva}
-          sucursalNombre={sucursalDetalle?.nombre ?? ''}
           cajasDisponibles={cajasDisponibles}
           onCerrar={() => setAperturaAbierta(false)}
           onGuardado={seccionAbiertaGuardada}
@@ -954,8 +896,6 @@ export default function Caja() {
       {cajaEditando !== null && (
         <FormularioCaja
           caja={cajaEditando}
-          sucursales={sucursales}
-          sucursalPorDefecto={sucursalActiva || ''}
           onCerrar={() => setCajaEditando(null)}
           onGuardado={guardadoCaja}
         />

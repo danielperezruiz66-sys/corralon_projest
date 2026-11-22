@@ -1,0 +1,238 @@
+/* Estilos de presentación del módulo Proveedores. */
+
+.proveedores .comercial-panel {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 1rem;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.proveedores .comercial-tabla-scroll {
+  overflow-x: auto;
+}
+
+.proveedores .tabla-comercial {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.92rem;
+}
+
+.proveedores .tabla-comercial th {
+  padding: 0.95rem 0.85rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.2);
+  color: var(--color-oscuro);
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.proveedores .tabla-comercial td {
+  padding: 0.9rem 0.85rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.1);
+  color: var(--color-oscuro);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  text-align: left;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.proveedores .tabla-comercial tr:last-child td {
+  border-bottom: none;
+}
+
+.proveedores .acciones-fila {
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.proveedores .boton-icono {
+  border-radius: 0.55rem;
+}
+
+.proveedores .comercial-vacio {
+  padding: 3rem 1rem !important;
+  color: rgba(15, 42, 48, 0.7) !important;
+  font-size: 0.95rem;
+}
+
+.proveedores .comercial-paginacion {
+  margin-top: 0;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(15, 42, 48, 0.1);
+  color: rgba(15, 42, 48, 0.7);
+  font-size: 0.9rem;
+}
+
+.proveedores .comercial-panel.panel-actualizando {
+  display: block;
+  align-items: normal;
+  gap: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+/* Proveedores */
+.proveedores .tabla-proveedores {
+  min-width: 1060px;
+}
+
+.proveedores .tabla-proveedores th:nth-child(1),
+.proveedores .tabla-proveedores td:nth-child(1) {
+  width: 21%;
+}
+
+.proveedores .tabla-proveedores th:nth-child(2),
+.proveedores .tabla-proveedores td:nth-child(2) {
+  width: 17%;
+}
+
+.proveedores .tabla-proveedores th:nth-child(3),
+.proveedores .tabla-proveedores td:nth-child(3) {
+  width: 13%;
+}
+
+.proveedores .tabla-proveedores th:nth-child(4),
+.proveedores .tabla-proveedores td:nth-child(4) {
+  width: 14%;
+}
+
+.proveedores .tabla-proveedores th:nth-child(5),
+.proveedores .tabla-proveedores td:nth-child(5) {
+  width: 15%;
+}
+
+.proveedores .tabla-proveedores th:nth-child(6),
+.proveedores .tabla-proveedores td:nth-child(6) {
+  width: 9%;
+  text-align: center;
+}
+
+.proveedores .tabla-proveedores th:nth-child(7),
+.proveedores .tabla-proveedores td:nth-child(7) {
+  width: 11%;
+  text-align: center;
+}
+
+.proveedores .tabla-proveedores td:nth-child(1) strong {
+  font-weight: 600;
+}
+
+.proveedores .tabla-proveedores td:nth-child(1),
+.proveedores .tabla-proveedores td:nth-child(2),
+.proveedores .tabla-proveedores td:nth-child(4),
+.proveedores .tabla-proveedores td:nth-child(5) {
+  white-space: normal;
+}
+
+.proveedores .tabla-proveedores td:nth-child(3) {
+  color: rgba(15, 42, 48, 0.72);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.proveedores .tabla-proveedores td:nth-child(4),
+.proveedores .tabla-proveedores td:nth-child(5) {
+  color: rgba(15, 42, 48, 0.78);
+}
+
+.proveedores .tabla-proveedores td:nth-child(6),
+.proveedores .tabla-proveedores td:nth-child(7) {
+  white-space: nowrap;
+}
+
+.proveedores .inventario-estado {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.proveedores .inventario-estado.activo {
+  background-color: #bbf7d0;
+  color: #166534;
+}
+
+.proveedores .inventario-estado.inactivo {
+  background-color: #fecaca;
+  color: #991b1b;
+}
+
+/* Costos por proveedor */
+.proveedores .tabla-costos-proveedor {
+  min-width: 1000px;
+}
+
+.proveedores .tabla-costos-proveedor th:nth-child(1),
+.proveedores .tabla-costos-proveedor td:nth-child(1) {
+  width: 24%;
+}
+
+.proveedores .tabla-costos-proveedor th:nth-child(2),
+.proveedores .tabla-costos-proveedor td:nth-child(2) {
+  width: 24%;
+}
+
+.proveedores .tabla-costos-proveedor th:nth-child(3),
+.proveedores .tabla-costos-proveedor td:nth-child(3) {
+  width: 15%;
+}
+
+.proveedores .tabla-costos-proveedor th:nth-child(4),
+.proveedores .tabla-costos-proveedor td:nth-child(4) {
+  width: 14%;
+  text-align: right;
+}
+
+.proveedores .tabla-costos-proveedor th:nth-child(5),
+.proveedores .tabla-costos-proveedor td:nth-child(5) {
+  width: 11%;
+  text-align: center;
+}
+
+.proveedores .tabla-costos-proveedor th:nth-child(6),
+.proveedores .tabla-costos-proveedor td:nth-child(6) {
+  width: 12%;
+  text-align: center;
+}
+
+.proveedores .tabla-costos-proveedor td:nth-child(1) strong {
+  font-weight: 600;
+}
+
+.proveedores .tabla-costos-proveedor td:nth-child(1),
+.proveedores .tabla-costos-proveedor td:nth-child(2),
+.proveedores .tabla-costos-proveedor td:nth-child(3) {
+  white-space: normal;
+}
+
+.proveedores .tabla-costos-proveedor td:nth-child(4) {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.proveedores .tabla-costos-proveedor td:nth-child(5),
+.proveedores .tabla-costos-proveedor td:nth-child(6) {
+  white-space: nowrap;
+}
+
+.proveedores .tabla-costos-proveedor span.inventario-estado {
+  cursor: default;
+}
+
+@media (max-width: 640px) {
+  .proveedores .comercial-paginacion {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+}

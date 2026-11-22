@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -16,11 +16,14 @@ import {
 import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
+import { useAuth } from '../context/auth-context'
 import FormularioCliente from '../components/clientes/FormularioCliente.jsx'
 import useDebounce from '../hooks/useDebounce'
+import useCacheModulo from '../hooks/useCacheModulo'
 import { descargarCsv } from '../utils/csv'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Clientes.css'
+import '../styles/Filtros.css'
 
 const PAGINA_VACIA = {
   count: 0,
@@ -63,9 +66,9 @@ function telefonoWhatsapp(telefono) {
 }
 
 export default function Clientes() {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [datos, setDatos] = useState(PAGINA_VACIA)
   const [texto, setTexto] = useState(() => searchParams.get('search') || '')
   const [pagina, setPagina] = useState(
     () => Number(searchParams.get('page')) || 1,
@@ -73,11 +76,7 @@ export default function Clientes() {
   const [estado, setEstado] = useState(
     () => searchParams.get('estado') || '',
   )
-  const [refresco, setRefresco] = useState(0)
-  const [cargando, setCargando] = useState(true)
-  const [actualizando, setActualizando] = useState(false)
   const [exportando, setExportando] = useState(false)
-  const [error, setError] = useState('')
   const [modalAbierto, setModalAbierto] = useState(
     () => searchParams.get('nuevo') === '1',
   )
@@ -88,7 +87,6 @@ export default function Clientes() {
   const solicitudResumen = useRef(0)
 
   const busqueda = useDebounce(texto.trim(), 350)
-  const buscando = texto.trim() !== busqueda || actualizando
 
   useEffect(() => {
     const parametros = new URLSearchParams()
@@ -104,9 +102,7 @@ export default function Clientes() {
     setSearchParams(parametros, { replace: true })
   }, [busqueda, estado, pagina, setSearchParams])
 
-  useEffect(() => {
-    let vigente = true
-    const controlador = new AbortController()
+  const consulta = useCallback(() => {
     const parametros = new URLSearchParams({ page: String(pagina) })
     if (busqueda) {
       parametros.set('search', busqueda)
@@ -114,39 +110,32 @@ export default function Clientes() {
     if (estado) {
       parametros.set('estado', estado)
     }
+    return parametros.toString()
+  }, [pagina, busqueda, estado])
 
-    pedir(`/clientes/?${parametros.toString()}`, {
-      signal: controlador.signal,
-    })
-      .then((respuesta) => {
-        if (vigente) {
-          setDatos(respuesta)
-          setError('')
-        }
-      })
-      .catch((e) => {
-        if (!vigente || e.name === 'AbortError') {
-          return
-        }
-        setError(e.message)
-      })
-      .finally(() => {
-        if (vigente) {
-          setCargando(false)
-          setActualizando(false)
-        }
-      })
+  const consultar = useCallback(
+    ({ signal } = {}) => pedir(`/clientes/?${consulta()}`, { signal }),
+    [consulta],
+  )
 
-    return () => {
-      vigente = false
-      controlador.abort()
-    }
-  }, [pagina, busqueda, estado, refresco])
+  const {
+    datos,
+    cargando,
+    actualizando,
+    error,
+    refrescar,
+    invalidar,
+  } = useCacheModulo({
+    clave: `clientes|${user?.id ?? ''}|${consulta()}`,
+    consultar,
+    inicial: PAGINA_VACIA,
+  })
+
+  const buscando = texto.trim() !== busqueda || actualizando
 
   function limpiarTexto() {
     setTexto('')
     setPagina(1)
-    setError('')
   }
 
   function cambiarEstado(nuevoEstado) {
@@ -155,14 +144,10 @@ export default function Clientes() {
     }
     setEstado(nuevoEstado)
     setPagina(1)
-    setError('')
-    setActualizando(true)
   }
 
   function irAPagina(nueva) {
     setPagina(nueva)
-    setError('')
-    setActualizando(true)
   }
 
   function abrirNuevo() {
@@ -191,8 +176,8 @@ export default function Clientes() {
       showConfirmButton: false,
     })
     cerrarModal()
-    setActualizando(true)
-    setRefresco((valor) => valor + 1)
+    invalidar(`clientes|${user?.id ?? ''}`)
+    refrescar(true)
   }
 
   async function alternarEstadoCliente(cliente) {
@@ -218,19 +203,11 @@ export default function Clientes() {
         method: 'PATCH',
         body: JSON.stringify({ estado: nuevoEstado }),
       })
-      setDatos((actual) => ({
-        ...actual,
-        results: actual.results.map((item) =>
-          item.id === actualizado.id ? actualizado : item,
-        ),
-      }))
       setClienteDetalle((actual) =>
         actual && actual.id === actualizado.id ? actualizado : actual,
       )
-      if (estado) {
-        setActualizando(true)
-        setRefresco((valor) => valor + 1)
-      }
+      invalidar(`clientes|${user?.id ?? ''}`)
+      refrescar(true)
       Swal.fire({
         icon: 'success',
         title: nuevoEstado ? 'Cliente activado' : 'Cliente desactivado',
@@ -353,69 +330,71 @@ export default function Clientes() {
       />
 
       <div className="clientes">
-        <section className="clientes-barra">
-          <form
-            className="clientes-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-              }}
-              placeholder="Buscar por DNI, razón social, nombre o email"
-              aria-label="Buscar clientes"
-            />
-            {buscando && (
-              <IconLoader2 className="icono-girando" size={18} />
-            )}
-            {texto && (
+        <section className="filtros-area">
+          <section className="comercial-barra">
+            <form
+              className="comercial-busqueda"
+              onSubmit={(evento) => evento.preventDefault()}
+            >
+              <IconSearch size={20} />
+              <input
+                type="search"
+                value={texto}
+                onChange={(evento) => {
+                  setTexto(evento.target.value)
+                  setPagina(1)
+                }}
+                placeholder="Buscar por DNI, razón social, nombre o email"
+                aria-label="Buscar clientes"
+              />
+              {buscando && (
+                <IconLoader2 className="icono-girando" size={18} />
+              )}
+              {texto && (
+                <button
+                  type="button"
+                  className="boton-limpiar-busqueda"
+                  onClick={limpiarTexto}
+                  aria-label="Limpiar búsqueda"
+                >
+                  <IconX size={16} />
+                </button>
+              )}
+            </form>
+
+            <div className="comercial-acciones-barra">
               <button
                 type="button"
-                className="boton-limpiar-busqueda"
-                onClick={limpiarTexto}
-                aria-label="Limpiar búsqueda"
+                className="boton-comercial-secundario"
+                onClick={exportar}
+                disabled={exportando}
               >
-                <IconX size={16} />
+                <IconDownload size={18} />
+                {exportando ? 'Exportando…' : 'Exportar CSV'}
               </button>
-            )}
-          </form>
+              <button
+                type="button"
+                className="boton-comercial-primario"
+                onClick={abrirNuevo}
+              >
+                <IconPlus size={18} />
+                Nuevo cliente
+              </button>
+            </div>
+          </section>
 
-          <div className="clientes-acciones">
-            <button
-              type="button"
-              className="boton-secundario"
-              onClick={exportar}
-              disabled={exportando}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-            <button
-              type="button"
-              className="boton-primario"
-              onClick={abrirNuevo}
-            >
-              <IconPlus size={18} />
-              Nuevo cliente
-            </button>
-          </div>
-        </section>
-
-        <section className="clientes-filtros">
-          {ESTADOS.map((opcion) => (
-            <button
-              key={opcion.id || 'todos'}
-              type="button"
-              className={estado === opcion.id ? 'activo' : ''}
-              onClick={() => cambiarEstado(opcion.id)}
-            >
-              {opcion.etiqueta}
-            </button>
-          ))}
+          <section className="filtros-tabs filtros-pills">
+            {ESTADOS.map((opcion) => (
+              <button
+                key={opcion.id || 'todos'}
+                type="button"
+                className={estado === opcion.id ? 'activo' : ''}
+                onClick={() => cambiarEstado(opcion.id)}
+              >
+                {opcion.etiqueta}
+              </button>
+            ))}
+          </section>
         </section>
 
         {error && <p className="clientes-error">{error}</p>}

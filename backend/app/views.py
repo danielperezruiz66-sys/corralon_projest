@@ -75,6 +75,7 @@ from .permissions import (
     GERENTE,
     GESTION,
     PermisoPorRol,
+    SoloAdministrador,
     VENDEDOR,
     codigos_activos,
     es_admin,
@@ -187,12 +188,17 @@ def perfil(request):
             'username': request.user.username,
             'email': request.user.email,
             'is_superuser': request.user.is_superuser,
+            'is_active': request.user.is_active,
             'empleado': (
                 {
                     'id': empleado.id,
                     'legajo': empleado.legajo,
+                    'dni': empleado.dni,
                     'nombre': empleado.nombre,
                     'apellido': empleado.apellido,
+                    'telefono': empleado.telefono,
+                    'estado': empleado.estado,
+                    'estado_detalle': empleado.get_estado_display(),
                 }
                 if empleado is not None
                 else None
@@ -838,11 +844,25 @@ class UbicacionViewSet(viewsets.ModelViewSet):
 class EmpresaViewSet(viewsets.ModelViewSet):
     queryset = Empresa.objects.all()
     serializer_class = serializers.EmpresaSerializer
-    permission_classes = [PermisoPorRol]
-    roles_escritura = GESTION
+    permission_classes = [SoloAdministrador]
     filterset_fields = ['condicion_iva']
     search_fields = ['cuit', 'nombre', 'razon_social']
     ordering_fields = ['razon_social', 'nombre']
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Empresa.objects.all()
+        empleado = getattr(user, 'empleado', None)
+        if empleado is None:
+            return Empresa.objects.none()
+        return (
+            Empresa.objects.filter(
+                sucursales__empleados_asignados__empleado=empleado,
+                sucursales__empleados_asignados__estado=True,
+            )
+            .distinct()
+        )
 
 
 class SucursalViewSet(viewsets.ModelViewSet):
@@ -864,12 +884,11 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     ordering_fields = ['username', 'date_joined']
 
     def get_permissions(self):
-        """El usuario autenticado puede editar su propio perfil; el resto
-        requiere ser administrador."""
+        """Editar el propio perfil requiere ser administrador o superusuario."""
         if self.action in ('partial_update', 'update') and str(
             self.kwargs.get('pk')
         ) == str(self.request.user.id):
-            self.permission_classes = [IsAuthenticated]
+            self.permission_classes = [SoloAdministrador]
         return super().get_permissions()
 
     def get_serializer_class(self):

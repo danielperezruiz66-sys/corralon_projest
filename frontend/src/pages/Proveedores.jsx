@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -18,12 +18,14 @@ import Encabezado from '../components/Encabezado.jsx'
 import FormularioProductoProveedor from '../components/proveedores/FormularioProductoProveedor.jsx'
 import FormularioProveedor from '../components/proveedores/FormularioProveedor.jsx'
 import { useAuth } from '../context/auth-context'
-import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
+import useCacheModulo from '../hooks/useCacheModulo'
 import { descargarCsv, numeroCsv } from '../utils/csv'
 import { formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
+import '../styles/Filtros.css'
+import '../styles/Proveedores.css'
 
 const PAGINA_VACIA = {
   count: 0,
@@ -44,8 +46,7 @@ const ESTADOS = [
 ]
 
 export default function Proveedores() {
-  const { puedeEscribir } = useAuth()
-  const { sucursalActiva } = useSucursal()
+  const { user, puedeEscribir } = useAuth()
   const puedeEditar = puedeEscribir(['GE', 'ED'])
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState(() => searchParams.get('tab') || 'proveedores')
@@ -56,14 +57,7 @@ export default function Proveedores() {
   const [estado, setEstado] = useState(
     () => searchParams.get('estado') || '',
   )
-  const [datos, setDatos] = useState(PAGINA_VACIA)
-  const [cargando, setCargando] = useState(true)
-  const [actualizando, setActualizando] = useState(false)
   const [exportando, setExportando] = useState(false)
-  const [error, setError] = useState('')
-  const [refresco, setRefresco] = useState(0)
-
-  const [sucursales, setSucursales] = useState([])
 
   const [proveedorEditando, setProveedorEditando] = useState(null)
   const [costoEditando, setCostoEditando] = useState(null)
@@ -71,27 +65,6 @@ export default function Proveedores() {
   const [detalleCostos, setDetalleCostos] = useState([])
 
   const busqueda = useDebounce(texto.trim(), 350)
-  const buscando = texto.trim() !== busqueda || actualizando
-
-  useEffect(() => {
-    let vigente = true
-    pedirTodas('/sucursales/')
-      .then((sucursalesData) => {
-        if (!vigente) {
-          return
-        }
-        setSucursales(sucursalesData)
-      })
-      .catch((e) => {
-        if (vigente) {
-          setError(e.message)
-        }
-      })
-
-    return () => {
-      vigente = false
-    }
-  }, [])
 
   useEffect(() => {
     const parametros = new URLSearchParams()
@@ -110,58 +83,44 @@ export default function Proveedores() {
     setSearchParams(parametros, { replace: true })
   }, [tab, busqueda, estado, pagina, setSearchParams])
 
-  useEffect(() => {
-    let vigente = true
-    const controlador = new AbortController()
+  const consulta = useCallback(() => {
     const parametros = new URLSearchParams({ page: String(pagina) })
     if (busqueda) {
       parametros.set('search', busqueda)
     }
-
-    let ruta = '/proveedores/'
-    if (tab === 'proveedores') {
-      if (estado) {
-        parametros.set('estado_prov', estado)
-      }
-    } else {
-      ruta = '/productos-proveedores/'
+    const ruta =
+      tab === 'proveedores' ? '/proveedores/' : '/productos-proveedores/'
+    if (tab === 'proveedores' && estado) {
+      parametros.set('estado_prov', estado)
     }
+    return `${ruta}?${parametros.toString()}`
+  }, [tab, pagina, busqueda, estado])
 
-    pedir(`${ruta}?${parametros.toString()}`, {
-      signal: controlador.signal,
-    })
-      .then((respuesta) => {
-        if (vigente) {
-          setDatos(respuesta)
-          setError('')
-        }
-      })
-      .catch((e) => {
-        if (!vigente || e.name === 'AbortError') {
-          return
-        }
-        setError(e.message)
-      })
-      .finally(() => {
-        if (vigente) {
-          setCargando(false)
-          setActualizando(false)
-        }
-      })
+  const consultar = useCallback(
+    ({ signal } = {}) => pedir(consulta(), { signal }),
+    [consulta],
+  )
 
-    return () => {
-      vigente = false
-      controlador.abort()
-    }
-  }, [tab, pagina, busqueda, estado, refresco])
+  const {
+    datos,
+    cargando,
+    actualizando,
+    error,
+    refrescar,
+    invalidar,
+  } = useCacheModulo({
+    clave: `proveedores|${user?.id ?? ''}|${consulta()}`,
+    consultar,
+    inicial: PAGINA_VACIA,
+  })
+
+  const buscando = texto.trim() !== busqueda || actualizando
 
   function cambiarTab(nuevoTab) {
     setTab(nuevoTab)
     setTexto('')
     setEstado('')
     setPagina(1)
-    setError('')
-    setCargando(true)
   }
 
   function cambiarEstado(nuevoEstado) {
@@ -170,20 +129,12 @@ export default function Proveedores() {
     }
     setEstado(nuevoEstado)
     setPagina(1)
-    setError('')
-    setActualizando(true)
   }
 
   function irAPagina(nueva) {
     setPagina(nueva)
-    setError('')
-    setActualizando(true)
   }
 
-  function refrescar() {
-    setRefresco((valor) => valor + 1)
-    setActualizando(true)
-  }
 
   async function alternarEstado(proveedor) {
     const nuevo = !proveedor.estado_prov
@@ -207,18 +158,11 @@ export default function Proveedores() {
         method: 'PATCH',
         body: JSON.stringify({ estado_prov: nuevo }),
       })
-      setDatos((actual) => ({
-        ...actual,
-        results: actual.results.map((item) =>
-          item.id === actualizado.id ? actualizado : item,
-        ),
-      }))
       setDetalleProveedor((actual) =>
         actual && actual.id === actualizado.id ? actualizado : actual,
       )
-      if (estado) {
-        refrescar()
-      }
+      invalidar(`proveedores|${user?.id ?? ''}`)
+      refrescar(true)
       Swal.fire({
         icon: 'success',
         title: nuevo ? 'Proveedor activado' : 'Proveedor desactivado',
@@ -243,7 +187,8 @@ export default function Proveedores() {
       showConfirmButton: false,
     })
     setProveedorEditando(null)
-    refrescar()
+    invalidar(`proveedores|${user?.id ?? ''}`)
+    refrescar(true)
   }
 
   function guardadoCosto(_, esEdicion) {
@@ -254,7 +199,8 @@ export default function Proveedores() {
       showConfirmButton: false,
     })
     setCostoEditando(null)
-    refrescar()
+    invalidar(`proveedores|${user?.id ?? ''}`)
+    refrescar(true)
   }
 
   async function abrirDetalle(proveedor) {
@@ -266,7 +212,12 @@ export default function Proveedores() {
       )
       setDetalleCostos(costos)
     } catch (e) {
-      setError(e.message)
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo cargar el detalle',
+        text: e.message,
+        confirmButtonColor: '#4a9da8',
+      })
     }
   }
 
@@ -301,7 +252,6 @@ export default function Proveedores() {
           'CUIT',
           'Contacto',
           'Email',
-          'Sucursales',
           'Estado',
         ]
         filas = todos.map((item) => [
@@ -310,7 +260,6 @@ export default function Proveedores() {
           item.cuit,
           item.contacto || '',
           item.email_prov || '',
-          (item.sucursales_detalle || []).join(' / '),
           item.estado_prov ? 'Activo' : 'Inactivo',
         ])
       } else {
@@ -351,117 +300,119 @@ export default function Proveedores() {
     <>
       <Encabezado
         titulo="Proveedores"
-        subtitulo="Información, sucursales y costos"
+        subtitulo="Información y costos"
       />
 
-      <div className="comercial inventario">
-        <section className="comercial-barra">
-          <form
-            className="comercial-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-              }}
-              placeholder={
-                tab === 'proveedores'
-                  ? 'Buscar por CUIT, nombre o razón social'
-                  : 'Buscar por proveedor, producto o código'
-              }
-              aria-label="Buscar proveedores"
-            />
-            {buscando && <IconLoader2 className="icono-girando" size={18} />}
-            {texto && (
-              <button
-                type="button"
-                className="boton-limpiar-busqueda"
-                onClick={() => {
-                  setTexto('')
+      <div className="comercial inventario proveedores">
+        <section className="filtros-area">
+          <section className="comercial-barra">
+            <form
+              className="comercial-busqueda"
+              onSubmit={(evento) => evento.preventDefault()}
+            >
+              <IconSearch size={20} />
+              <input
+                type="search"
+                value={texto}
+                onChange={(evento) => {
+                  setTexto(evento.target.value)
                   setPagina(1)
                 }}
-                aria-label="Limpiar búsqueda"
-              >
-                <IconX size={16} />
-              </button>
-            )}
-          </form>
+                placeholder={
+                  tab === 'proveedores'
+                    ? 'Buscar por CUIT, nombre o razón social'
+                    : 'Buscar por proveedor, producto o código'
+                }
+                aria-label="Buscar proveedores"
+              />
+              {buscando && <IconLoader2 className="icono-girando" size={18} />}
+              {texto && (
+                <button
+                  type="button"
+                  className="boton-limpiar-busqueda"
+                  onClick={() => {
+                    setTexto('')
+                    setPagina(1)
+                  }}
+                  aria-label="Limpiar búsqueda"
+                >
+                  <IconX size={16} />
+                </button>
+              )}
+            </form>
 
-          <div className="comercial-acciones-barra">
-            <button
-              type="button"
-              className="boton-comercial-secundario"
-              onClick={exportar}
-              disabled={exportando}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-            {puedeEditar && tab === 'proveedores' && (
+            <div className="comercial-acciones-barra">
               <button
                 type="button"
-                className="boton-comercial-primario"
-                onClick={() => setProveedorEditando({})}
+                className="boton-comercial-secundario"
+                onClick={exportar}
+                disabled={exportando}
               >
-                <IconPlus size={18} />
-                Nuevo proveedor
+                <IconDownload size={18} />
+                {exportando ? 'Exportando…' : 'Exportar CSV'}
               </button>
-            )}
-            {puedeEditar && tab === 'costos' && (
-              <button
-                type="button"
-                className="boton-comercial-primario"
-                onClick={() => setCostoEditando({})}
-              >
-                <IconPlus size={18} />
-                Asociar producto
-              </button>
-            )}
-          </div>
-        </section>
-
-        <section className="inventario-tabs">
-          {TABS.map((item) => {
-            const Icono = item.icono
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={tab === item.id ? 'activo' : ''}
-                onClick={() => cambiarTab(item.id)}
-              >
-                <Icono size={18} />
-                {item.etiqueta}
-              </button>
-            )
-          })}
-        </section>
-
-        {tab === 'proveedores' && (
-          <section className="inventario-filtros">
-            {ESTADOS.map((opcion) => (
-              <button
-                key={opcion.id || 'todos'}
-                type="button"
-                className={estado === opcion.id ? 'activo' : ''}
-                onClick={() => cambiarEstado(opcion.id)}
-              >
-                {opcion.etiqueta}
-              </button>
-            ))}
+              {puedeEditar && tab === 'proveedores' && (
+                <button
+                  type="button"
+                  className="boton-comercial-primario"
+                  onClick={() => setProveedorEditando({})}
+                >
+                  <IconPlus size={18} />
+                  Nuevo proveedor
+                </button>
+              )}
+              {puedeEditar && tab === 'costos' && (
+                <button
+                  type="button"
+                  className="boton-comercial-primario"
+                  onClick={() => setCostoEditando({})}
+                >
+                  <IconPlus size={18} />
+                  Asociar producto
+                </button>
+              )}
+            </div>
           </section>
-        )}
+
+          <section className="filtros-tabs filtros-pills">
+            {TABS.map((item) => {
+              const Icono = item.icono
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={tab === item.id ? 'activo' : ''}
+                  onClick={() => cambiarTab(item.id)}
+                >
+                  <Icono size={18} />
+                  {item.etiqueta}
+                </button>
+              )
+            })}
+          </section>
+
+          {tab === 'proveedores' && (
+            <section className="filtros-tabs filtros-pills">
+              {ESTADOS.map((opcion) => (
+                <button
+                  key={opcion.id || 'todos'}
+                  type="button"
+                  className={estado === opcion.id ? 'activo' : ''}
+                  onClick={() => cambiarEstado(opcion.id)}
+                >
+                  {opcion.etiqueta}
+                </button>
+              ))}
+            </section>
+          )}
+        </section>
 
         {error && <p className="comercial-error">{error}</p>}
 
         <section className={`comercial-panel ${actualizando ? 'panel-actualizando' : ''}`}>
           <div className="comercial-tabla-scroll">
             {tab === 'proveedores' ? (
-              <table className="tabla-comercial">
+              <table className="tabla-comercial tabla-proveedores">
                 <thead>
                   <tr>
                     <th>Razón social</th>
@@ -469,7 +420,6 @@ export default function Proveedores() {
                     <th>CUIT</th>
                     <th>Contacto</th>
                     <th>Email</th>
-                    <th>Sucursales</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
@@ -477,14 +427,14 @@ export default function Proveedores() {
                 <tbody>
                   {cargando && (
                     <tr>
-                      <td colSpan="8" className="comercial-vacio">
+                      <td colSpan="7" className="comercial-vacio">
                         Cargando proveedores…
                       </td>
                     </tr>
                   )}
                   {!cargando && datos.results.length === 0 && (
                     <tr>
-                      <td colSpan="8" className="comercial-vacio">
+                      <td colSpan="7" className="comercial-vacio">
                         No se encontraron proveedores.
                       </td>
                     </tr>
@@ -498,9 +448,6 @@ export default function Proveedores() {
                       <td className="mono">{item.cuit}</td>
                       <td>{item.contacto || '—'}</td>
                       <td>{item.email_prov || '—'}</td>
-                      <td className="texto-chico">
-                        {(item.sucursales_detalle || []).join(' / ') || '—'}
-                      </td>
                       <td>
                         <button
                           type="button"
@@ -544,7 +491,7 @@ export default function Proveedores() {
                 </tbody>
               </table>
             ) : (
-              <table className="tabla-comercial">
+              <table className="tabla-comercial tabla-costos-proveedor">
                 <thead>
                   <tr>
                     <th>Proveedor</th>
@@ -580,7 +527,15 @@ export default function Proveedores() {
                       <td className="numero">
                         {formatearMoneda(item.precio_lista)}
                       </td>
-                      <td>{item.estado ? 'Activo' : 'Inactivo'}</td>
+                      <td>
+                        <span
+                          className={`inventario-estado ${
+                            item.estado ? 'activo' : 'inactivo'
+                          }`}
+                        >
+                          {item.estado ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
                       <td>
                         {puedeEditar && (
                           <button
@@ -629,10 +584,8 @@ export default function Proveedores() {
 
       {proveedorEditando !== null && (
         <FormularioProveedor
-          key={sucursalActiva || 'todas'}
+          key={proveedorEditando.id ?? 'nuevo'}
           proveedor={proveedorEditando}
-          sucursales={sucursales}
-          sucursalActiva={sucursalActiva}
           onCerrar={() => setProveedorEditando(null)}
           onGuardado={guardadoProveedor}
         />
@@ -641,8 +594,6 @@ export default function Proveedores() {
       {costoEditando !== null && (
         <FormularioProductoProveedor
           asociacion={costoEditando}
-          sucursales={sucursales}
-          sucursalActiva={sucursalActiva}
           onCerrar={() => setCostoEditando(null)}
           onGuardado={guardadoCosto}
         />
@@ -682,13 +633,6 @@ export default function Proveedores() {
               <div>
                 <span>Email</span>
                 <strong>{detalleProveedor.email_prov || '—'}</strong>
-              </div>
-              <div>
-                <span>Sucursales</span>
-                <strong>
-                  {(detalleProveedor.sucursales_detalle || []).join(' / ') ||
-                    '—'}
-                </strong>
               </div>
               <div>
                 <span>Estado</span>

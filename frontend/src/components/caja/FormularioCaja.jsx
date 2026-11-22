@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Swal from 'sweetalert2'
 import { IconCash, IconLoader2, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
+import { useSucursal } from '../../context/sucursal-context'
 import MensajeError from '../common/MensajeError.jsx'
 import { validarNumero } from '../../utils/validaciones'
 
@@ -13,17 +14,11 @@ const ESTADOS = [
 
 export default function FormularioCaja({
   caja = null,
-  sucursales = [],
-  sucursalPorDefecto = '',
   onCerrar,
   onGuardado,
 }) {
   const esEdicion = Boolean(caja?.id)
-  const [sucursal, setSucursal] = useState(
-    caja?.sucursal
-      ? String(caja.sucursal)
-      : String(sucursalPorDefecto || sucursales[0]?.id || ''),
-  )
+  const { sucursalActiva } = useSucursal()
   const [numeroCaja, setNumeroCaja] = useState(
     caja?.numero_caja !== undefined && caja?.numero_caja !== null
       ? String(caja.numero_caja)
@@ -36,10 +31,6 @@ export default function FormularioCaja({
   async function guardar(evento) {
     evento.preventDefault()
     const nuevos = {}
-
-    if (!sucursal) {
-      nuevos.sucursal = 'Elegí la sucursal de la caja.'
-    }
 
     const errorNumero = validarNumero(numeroCaja, {
       etiqueta: 'El número de caja',
@@ -59,6 +50,16 @@ export default function FormularioCaja({
       return
     }
 
+    if (!sucursalActiva) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo guardar la caja',
+        text: 'Faltan datos de configuración de tu usuario. Contactá al administrador.',
+        confirmButtonColor: '#4a9da8',
+      })
+      return
+    }
+
     setErrores({})
     setGuardando(true)
     try {
@@ -67,7 +68,7 @@ export default function FormularioCaja({
         {
           method: esEdicion ? 'PATCH' : 'POST',
           body: JSON.stringify({
-            sucursal: Number(sucursal),
+            sucursal: Number(sucursalActiva),
             numero_caja: Number(numeroCaja),
             estado,
           }),
@@ -113,30 +114,8 @@ export default function FormularioCaja({
 
         <form onSubmit={guardar} className="comercial-grid" noValidate>
           <p className="caja-nota-total ancho-completo">
-            Cada caja pertenece a una sucursal y se numera dentro de ella. El
-            número no se puede repetir en la misma sucursal.
+            El número de caja no se puede repetir.
           </p>
-
-          <label className="campo-comercial ancho-completo">
-            <span>Sucursal *</span>
-            <select
-              className={errores.sucursal ? 'input-error' : ''}
-              value={sucursal}
-              onChange={(evento) => setSucursal(evento.target.value)}
-              disabled={sucursales.length === 0}
-            >
-              {sucursales.length === 0 ? (
-                <option value="">No hay sucursales</option>
-              ) : (
-                sucursales.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.nombre}
-                  </option>
-                ))
-              )}
-            </select>
-            <MensajeError>{errores.sucursal}</MensajeError>
-          </label>
 
           <label className="campo-comercial ancho-completo">
             <span>Número de caja *</span>

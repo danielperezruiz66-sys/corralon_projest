@@ -3,6 +3,7 @@ import Swal from 'sweetalert2'
 import { IconLoader2, IconUsers, IconX } from '@tabler/icons-react'
 import { pedirTodas } from '../../api/catalogos'
 import { pedir } from '../../api/client'
+import { useSucursal } from '../../context/sucursal-context'
 import MensajeError from '../common/MensajeError.jsx'
 import {
   validarCodigo,
@@ -111,6 +112,7 @@ function inicialValores(empleado) {
 
 export default function FormularioEmpleado({ empleado, onCerrar, onGuardado }) {
   const esAlta = !empleado || !empleado.id
+  const { sucursalActiva } = useSucursal()
   const [valores, setValores] = useState(() => inicialValores(empleado))
   const [acceso, setAcceso] = useState({
     username: '',
@@ -119,12 +121,8 @@ export default function FormularioEmpleado({ empleado, onCerrar, onGuardado }) {
     password_confirmacion: '',
   })
   const [roles, setRoles] = useState([])
-  const [sucursales, setSucursales] = useState([])
   const [rolesElegidos, setRolesElegidos] = useState(
     () => new Set(empleado?.roles_ids ?? []),
-  )
-  const [sucursalesElegidas, setSucursalesElegidas] = useState(
-    () => new Set(empleado?.sucursales_ids ?? []),
   )
   const [errorCarga, setErrorCarga] = useState('')
   const [cargando, setCargando] = useState(true)
@@ -133,15 +131,14 @@ export default function FormularioEmpleado({ empleado, onCerrar, onGuardado }) {
 
   useEffect(() => {
     let vigente = true
-    Promise.all([pedirTodas('/roles/'), pedirTodas('/sucursales/')])
-      .then(([rolesData, sucursalesData]) => {
+    pedirTodas('/roles/')
+      .then((rolesData) => {
         if (!vigente) {
           return
         }
         setRoles(
           rolesData.filter((rol) => rol.codigo !== null && rol.codigo !== ''),
         )
-        setSucursales(sucursalesData)
         setCargando(false)
       })
       .catch((e) => {
@@ -224,6 +221,16 @@ export default function FormularioEmpleado({ empleado, onCerrar, onGuardado }) {
       return
     }
 
+    if (!sucursalActiva) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo guardar el empleado',
+        text: 'Faltan datos de configuración de tu usuario. Contactá al administrador.',
+        confirmButtonColor: '#4a9da8',
+      })
+      return
+    }
+
     setErrores({})
     setGuardando(true)
     try {
@@ -239,7 +246,7 @@ export default function FormularioEmpleado({ empleado, onCerrar, onGuardado }) {
         telefono: valores.telefono.trim() || null,
         estado: valores.estado,
         roles: [...rolesElegidos],
-        sucursales: [...sucursalesElegidas],
+        sucursales: [Number(sucursalActiva)],
       }
 
       const quiereAccesoInicial =
@@ -534,24 +541,6 @@ export default function FormularioEmpleado({ empleado, onCerrar, onGuardado }) {
                     />
                     {rol.ocupacion}{' '}
                     <span className="empleados-nota">({rol.codigo})</span>
-                  </label>
-                ))}
-              </div>
-
-              <h3 className="empleados-seccion-titulo ancho-completo">
-                Sucursales
-              </h3>
-              <div className="empleados-checks ancho-completo">
-                {sucursales.map((sucursal) => (
-                  <label key={sucursal.id} className="empleados-check">
-                    <input
-                      type="checkbox"
-                      checked={sucursalesElegidas.has(sucursal.id)}
-                      onChange={() =>
-                        alternar(sucursalesElegidas, setSucursalesElegidas, sucursal.id)
-                      }
-                    />
-                    {sucursal.nombre}
                   </label>
                 ))}
               </div>

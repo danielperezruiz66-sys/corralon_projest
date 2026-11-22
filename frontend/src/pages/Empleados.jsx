@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -17,10 +17,11 @@ import FormularioContrasena from '../components/empleados/FormularioContrasena.j
 import FormularioEmpleado from '../components/empleados/FormularioEmpleado.jsx'
 import { useAuth } from '../context/auth-context'
 import useDebounce from '../hooks/useDebounce'
+import useCacheModulo from '../hooks/useCacheModulo'
 import { descargarCsv } from '../utils/csv'
-import { useSucursal } from '../context/sucursal-context'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
+import '../styles/Filtros.css'
 import '../styles/Empleados.css'
 
 const PAGINA_VACIA = {
@@ -56,7 +57,6 @@ const ROLES = [
 
 export default function Empleados() {
   const { user, puedeEscribir } = useAuth()
-  const { sucursalActiva } = useSucursal()
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
   const esAdministrador = Boolean(
     user?.is_superuser || (user?.codigos ?? []).includes('AD'),
@@ -70,18 +70,12 @@ export default function Empleados() {
     () => Number(searchParams.get('page')) || 1,
   )
 
-  const [datos, setDatos] = useState(PAGINA_VACIA)
-  const [cargando, setCargando] = useState(true)
-  const [actualizando, setActualizando] = useState(false)
-  const [error, setError] = useState('')
-  const [refresco, setRefresco] = useState(0)
   const [exportando, setExportando] = useState(false)
 
   const [empleadoEditando, setEmpleadoEditando] = useState(null)
   const [contrasenaPara, setContrasenaPara] = useState(null)
 
   const busqueda = useDebounce(texto.trim(), 350)
-  const buscando = texto.trim() !== busqueda || actualizando
 
   useEffect(() => {
     const parametros = new URLSearchParams()
@@ -100,8 +94,7 @@ export default function Empleados() {
     setSearchParams(parametros, { replace: true })
   }, [busqueda, estado, rol, pagina, setSearchParams])
 
-  useEffect(() => {
-    let vigente = true
+  const consulta = useCallback(() => {
     const parametros = new URLSearchParams({ page: String(pagina) })
     if (busqueda) {
       parametros.set('search', busqueda)
@@ -112,52 +105,47 @@ export default function Empleados() {
     if (rol) {
       parametros.set('rol', rol)
     }
-    if (sucursalActiva) {
-      parametros.set('sucursal', sucursalActiva)
-    }
+    return parametros.toString()
+  }, [pagina, busqueda, estado, rol])
 
-    pedir(`/empleados/?${parametros.toString()}`)
-      .then((datosPagina) => {
-        if (vigente) {
-          setDatos(datosPagina)
-          setCargando(false)
-          setActualizando(false)
-          setError('')
-        }
-      })
-      .catch((e) => {
-        if (vigente) {
-          setError(e.message)
-          setCargando(false)
-          setActualizando(false)
-        }
-      })
+  const consultar = useCallback(
+    ({ signal } = {}) => pedir(`/empleados/?${consulta()}`, { signal }),
+    [consulta],
+  )
 
-    return () => {
-      vigente = false
-    }
-  }, [busqueda, estado, rol, pagina, refresco, sucursalActiva])
+  const {
+    datos,
+    cargando,
+    actualizando,
+    error,
+    refrescar,
+    invalidar,
+  } = useCacheModulo({
+    clave: `empleados|${user?.id ?? ''}|${consulta()}`,
+    consultar,
+    inicial: PAGINA_VACIA,
+  })
+
+  const buscando = texto.trim() !== busqueda || actualizando
 
   function irAPagina(numero) {
     setPagina(numero)
-    setActualizando(true)
   }
 
   function cambiarEstado(nuevo) {
     setEstado((actual) => (actual === nuevo ? '' : nuevo))
     setPagina(1)
-    setActualizando(true)
   }
 
   function cambiarRol(nuevo) {
     setRol((actual) => (actual === nuevo ? '' : nuevo))
     setPagina(1)
-    setActualizando(true)
   }
 
   function empleadoGuardado() {
     setEmpleadoEditando(null)
-    setRefresco((actual) => actual + 1)
+    invalidar(`empleados|${user?.id ?? ''}`)
+    refrescar(true)
     Swal.fire({
       icon: 'success',
       title: 'Empleado guardado',
@@ -179,9 +167,6 @@ export default function Empleados() {
       if (rol) {
         parametros.set('rol', rol)
       }
-      if (sucursalActiva) {
-        parametros.set('sucursal', sucursalActiva)
-      }
 
       const todos = await pedirTodas(
         `/empleados/?${parametros.toString()}`,
@@ -202,13 +187,12 @@ export default function Empleados() {
         empleado.dni,
         empleado.telefono || '',
         (empleado.roles_detalle || []).join(', '),
-        (empleado.sucursales_detalle || []).join(', '),
         empleado.usuario_detalle || 'Sin acceso',
         ETIQUETA_ESTADO[empleado.estado] ?? empleado.estado,
       ])
       descargarCsv(
         `empleados-${new Date().toISOString().slice(0, 10)}.csv`,
-        ['Legajo', 'Empleado', 'DNI', 'Teléfono', 'Roles', 'Sucursales', 'Usuario', 'Estado'],
+        ['Legajo', 'Empleado', 'DNI', 'Teléfono', 'Roles', 'Usuario', 'Estado'],
         filas,
       )
     } catch (e) {
@@ -230,94 +214,95 @@ export default function Empleados() {
         subtitulo="Administración de empleados, roles y accesos"
       />
 
-      <div className="comercial inventario" key={sucursalActiva || 'todas'}>
-        <section className="comercial-barra">
-          <form
-            className="comercial-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-                setActualizando(true)
-              }}
-              placeholder="Buscar por legajo, DNI, nombre o apellido"
-              aria-label="Buscar empleados"
-            />
-            {buscando && <IconLoader2 className="icono-girando" size={18} />}
-            {texto && (
-              <button
-                type="button"
-                className="boton-limpiar-busqueda"
-                onClick={() => {
-                  setTexto('')
+      <div className="comercial inventario empleados-modulo">
+        <section className="filtros-area">
+          <section className="comercial-barra">
+            <form
+              className="comercial-busqueda"
+              onSubmit={(evento) => evento.preventDefault()}
+            >
+              <IconSearch size={20} />
+              <input
+                type="search"
+                value={texto}
+                onChange={(evento) => {
+                  setTexto(evento.target.value)
                   setPagina(1)
                 }}
-                aria-label="Limpiar búsqueda"
-              >
-                <IconX size={16} />
-              </button>
-            )}
-          </form>
+                placeholder="Buscar por legajo, DNI, nombre o apellido"
+                aria-label="Buscar empleados"
+              />
+              {buscando && <IconLoader2 className="icono-girando" size={18} />}
+              {texto && (
+                <button
+                  type="button"
+                  className="boton-limpiar-busqueda"
+                  onClick={() => {
+                    setTexto('')
+                    setPagina(1)
+                  }}
+                  aria-label="Limpiar búsqueda"
+                >
+                  <IconX size={16} />
+                </button>
+              )}
+            </form>
 
-          <div className="comercial-acciones-barra">
-            <button
-              type="button"
-              className="boton-comercial-secundario"
-              onClick={exportar}
-              disabled={exportando}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-            {puedeGestionar && (
+            <div className="comercial-acciones-barra">
               <button
                 type="button"
-                className="boton-comercial-primario"
-                onClick={() => setEmpleadoEditando({})}
+                className="boton-comercial-secundario"
+                onClick={exportar}
+                disabled={exportando}
               >
-                <IconPlus size={18} />
-                Nuevo empleado
+                <IconDownload size={18} />
+                {exportando ? 'Exportando…' : 'Exportar CSV'}
               </button>
-            )}
-          </div>
-        </section>
+              {puedeGestionar && (
+                <button
+                  type="button"
+                  className="boton-comercial-primario"
+                  onClick={() => setEmpleadoEditando({})}
+                >
+                  <IconPlus size={18} />
+                  Nuevo empleado
+                </button>
+              )}
+            </div>
+          </section>
 
-        <section className="inventario-filtros">
-          {ESTADOS.map((opcion) => (
-            <button
-              key={opcion.id || 'todos'}
-              type="button"
-              className={estado === opcion.id ? 'activo' : ''}
-              onClick={() => cambiarEstado(opcion.id)}
-            >
-              {opcion.etiqueta}
-            </button>
-          ))}
-        </section>
+          <section className="filtros-tabs filtros-pills">
+            {ESTADOS.map((opcion) => (
+              <button
+                key={opcion.id || 'todos'}
+                type="button"
+                className={estado === opcion.id ? 'activo' : ''}
+                onClick={() => cambiarEstado(opcion.id)}
+              >
+                {opcion.etiqueta}
+              </button>
+            ))}
+          </section>
 
-        <section className="inventario-filtros">
-          {ROLES.map((opcion) => (
-            <button
-              key={opcion.id || 'todos-roles'}
-              type="button"
-              className={rol === opcion.id ? 'activo' : ''}
-              onClick={() => cambiarRol(opcion.id)}
-            >
-              {opcion.etiqueta}
-            </button>
-          ))}
+          <section className="filtros-tabs filtros-pills">
+            {ROLES.map((opcion) => (
+              <button
+                key={opcion.id || 'todos-roles'}
+                type="button"
+                className={rol === opcion.id ? 'activo' : ''}
+                onClick={() => cambiarRol(opcion.id)}
+              >
+                {opcion.etiqueta}
+              </button>
+            ))}
+          </section>
         </section>
 
         {error && <p className="comercial-error">{error}</p>}
 
         <section className={`comercial-panel ${actualizando ? 'panel-actualizando' : ''}`}>
           <div className="comercial-tabla-scroll">
-            <table className="tabla-comercial">
+            <table className="tabla-comercial tabla-empleados">
               <thead>
                 <tr>
                   <th>Legajo</th>
@@ -325,7 +310,6 @@ export default function Empleados() {
                   <th>DNI</th>
                   <th>Teléfono</th>
                   <th>Roles</th>
-                  <th>Sucursales</th>
                   <th>Acceso</th>
                   <th>Estado</th>
                   <th>Acciones</th>
@@ -334,14 +318,14 @@ export default function Empleados() {
               <tbody>
                 {cargando && (
                   <tr>
-                    <td colSpan="9" className="comercial-vacio">
+                    <td colSpan="8" className="comercial-vacio">
                       Cargando empleados…
                     </td>
                   </tr>
                 )}
                 {!cargando && !error && datos.results.length === 0 && (
                   <tr>
-                    <td colSpan="9" className="comercial-vacio">
+                    <td colSpan="8" className="comercial-vacio">
                       No se encontraron empleados.
                     </td>
                   </tr>
@@ -368,9 +352,6 @@ export default function Empleados() {
                             <span className="empleados-nota">—</span>
                           )}
                         </div>
-                      </td>
-                      <td className="empleados-sucursales">
-                        {(empleado.sucursales_detalle || []).join(' / ') || '—'}
                       </td>
                       <td>{empleado.usuario_detalle || 'Sin acceso'}</td>
                       <td>

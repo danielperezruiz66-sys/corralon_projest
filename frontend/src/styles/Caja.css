@@ -277,3 +277,313 @@ CAJA - APERTURA, CIERRE E HISTORIAL
   color: rgba(15, 42, 48, 0.85);
   font-size: 0.85rem;
 }
+
+/* Ajustes de presentación del módulo Caja */
+.caja-modulo .comercial-panel {
+  border-radius: 1rem;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.caja-modulo .caja-panel-abiertas {
+  padding: 1.25rem;
+}
+
+.caja-modulo .caja-panel-tabla {
+  padding: 0;
+  overflow: hidden;
+}
+
+.caja-modulo .caja-panel-tabla > .caja-panel-cabecera {
+  margin: 0;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.1);
+}
+
+.caja-modulo .caja-panel-titulo {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.caja-modulo .caja-abiertas {
+  gap: 1rem;
+}
+
+.caja-modulo .caja-abierta {
+  border-radius: 1rem;
+  padding: 1rem 1.15rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.caja-modulo .caja-abierta-cabecera strong {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.caja-modulo .caja-abierta-cabecera small {
+  color: rgba(15, 42, 48, 0.62);
+  font-size: 0.78rem;
+}
+
+.caja-modulo .caja-abierta-detalles {
+  color: rgba(15, 42, 48, 0.75);
+  font-size: 0.82rem;
+}
+
+.caja-modulo .caja-abierta-detalles strong {
+  font-weight: 600;
+}
+
+.caja-modulo .caja-abierta-vacia {
+  border-radius: 1rem;
+  padding: 1.5rem;
+  color: rgba(15, 42, 48, 0.62);
+}
+
+.caja-modulo .estado-badge {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.caja-modulo .estado-ab {
+  background-color: #bbf7d0;
+  color: #166534;
+}
+
+.caja-modulo .estado-pa {
+  background-color: #ede9fe;
+  color: #5b21b6;
+}
+
+.caja-modulo .estado-ce {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.caja-modulo .estado-au {
+  background-color: #e0e7ff;
+  color: #3730a3;
+}
+
+.caja-modulo .tabla-caja-secciones,
+.caja-modulo .tabla-cajas-fisicas {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.9rem;
+}
+
+.caja-modulo .tabla-caja-secciones {
+  min-width: 1320px;
+}
+
+.caja-modulo .tabla-cajas-fisicas {
+  min-width: 640px;
+}
+
+.caja-modulo .tabla-caja-secciones th,
+.caja-modulo .tabla-cajas-fisicas th {
+  padding: 0.95rem 0.85rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.2);
+  color: var(--color-oscuro);
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.caja-modulo .tabla-caja-secciones td,
+.caja-modulo .tabla-cajas-fisicas td {
+  padding: 0.9rem 0.85rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.1);
+  color: var(--color-oscuro);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  text-align: left;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.caja-modulo .tabla-caja-secciones tr:last-child td,
+.caja-modulo .tabla-cajas-fisicas tr:last-child td {
+  border-bottom: none;
+}
+
+.caja-modulo .tabla-caja-secciones th:nth-child(1),
+.caja-modulo .tabla-caja-secciones td:nth-child(1) {
+  width: 5%;
+}
+
+.caja-modulo .tabla-caja-secciones th:nth-child(2),
+.caja-modulo .tabla-caja-secciones td:nth-child(2) {
+  width: 8%;
+}
+
+.caja-modulo .tabla-caja-secciones th:nth-child(3),
+.caja-modulo .tabla-caja-secciones td:nth-child(3) {
+  width: 9%;
+}
+
+.caja-modulo .tabla-caja-secciones th:nth-child(4),
+.caja-modulo .tabla-caja-secciones td:nth-child(4),
+.caja-modulo .tabla-caja-secciones th:nth-child(5),
+.caja-modulo .tabla-caja-secciones td:nth-child(5) {
+  width: 10%;
+}
+
+.caja-modulo .tabla-caja-secciones th:nth-child(6),
+.caja-modulo .tabla-caja-secciones td:nth-child(6),
+.caja-modulo .tabla-caja-secciones th:nth-child(7),
+.caja-modulo .tabla-caja-secciones td:nth-child(7),
+.caja-modulo .tabla-caja-secciones th:nth-child(8),
+.caja-modulo .tabla-caja-secciones td:nth-child(8),
+.caja-modulo .tabla-caja-secciones th:nth-child(9),
+.caja-modulo .tabla-caja-secciones td:nth-child(9) {
+  width: 10%;
+  text-align: right;
+}
+
+.caja-modulo .tabla-caja-secciones th:nth-child(10),
+.caja-modulo .tabla-caja-secciones td:nth-child(10) {
+  width: 8%;
+  text-align: center;
+}
+
+.caja-modulo .tabla-caja-secciones th:nth-child(11),
+.caja-modulo .tabla-caja-secciones td:nth-child(11) {
+  width: 10%;
+  text-align: center;
+}
+
+.caja-modulo .tabla-caja-secciones td:nth-child(1) {
+  color: rgba(15, 42, 48, 0.72);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.caja-modulo .tabla-caja-secciones td:nth-child(2),
+.caja-modulo .tabla-caja-secciones td:nth-child(3) {
+  white-space: normal;
+}
+
+.caja-modulo .tabla-caja-secciones td:nth-child(4),
+.caja-modulo .tabla-caja-secciones td:nth-child(5) {
+  color: rgba(15, 42, 48, 0.72);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.caja-modulo .tabla-caja-secciones .caja-fecha-hora {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  line-height: 1.2;
+}
+
+.caja-modulo .tabla-caja-secciones .caja-fecha {
+  color: rgba(15, 42, 48, 0.52);
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
+}
+
+.caja-modulo .tabla-caja-secciones .caja-hora {
+  color: var(--color-oscuro);
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.caja-modulo .tabla-caja-secciones td:nth-child(6),
+.caja-modulo .tabla-caja-secciones td:nth-child(7),
+.caja-modulo .tabla-caja-secciones td:nth-child(8),
+.caja-modulo .tabla-caja-secciones td:nth-child(9) {
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.caja-modulo .tabla-caja-secciones td:nth-child(10),
+.caja-modulo .tabla-caja-secciones td:nth-child(11) {
+  white-space: nowrap;
+}
+
+.caja-modulo .tabla-cajas-fisicas th:nth-child(1),
+.caja-modulo .tabla-cajas-fisicas td:nth-child(1) {
+  width: 50%;
+}
+
+.caja-modulo .tabla-cajas-fisicas th:nth-child(2),
+.caja-modulo .tabla-cajas-fisicas td:nth-child(2) {
+  width: 30%;
+  text-align: center;
+}
+
+.caja-modulo .tabla-cajas-fisicas th:nth-child(3),
+.caja-modulo .tabla-cajas-fisicas td:nth-child(3) {
+  width: 20%;
+  text-align: center;
+}
+
+.caja-modulo .tabla-cajas-fisicas td:nth-child(1) {
+  color: rgba(15, 42, 48, 0.78);
+  font-size: 0.86rem;
+}
+
+.caja-modulo .tabla-cajas-fisicas td:nth-child(2),
+.caja-modulo .tabla-cajas-fisicas td:nth-child(3) {
+  white-space: nowrap;
+}
+
+.caja-modulo .acciones-fila {
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.caja-modulo .boton-icono {
+  border-radius: 0.55rem;
+}
+
+.caja-modulo .comercial-vacio {
+  padding: 3rem 1rem !important;
+  color: rgba(15, 42, 48, 0.7) !important;
+  font-size: 0.95rem;
+}
+
+.caja-modulo .comercial-paginacion {
+  margin-top: 0;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(15, 42, 48, 0.1);
+  color: rgba(15, 42, 48, 0.7);
+  font-size: 0.9rem;
+}
+
+.caja-modulo .comercial-panel.panel-actualizando {
+  display: block;
+  align-items: normal;
+  gap: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+@media (min-width: 768px) {
+  .caja-modulo .caja-panel-abiertas {
+    padding: 1.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .caja-modulo .caja-panel-abiertas,
+  .caja-modulo .caja-panel-tabla > .caja-panel-cabecera,
+  .caja-modulo .comercial-paginacion {
+    padding: 1rem;
+  }
+}

@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../context/auth-context'
 import { pedir } from '../api/client'
 import { menuCategories } from '../data/menuConfig.js'
+import { sinSucursal } from '../utils/formato'
 import SidebarCategory from './sidebar/SidebarCategory'
 import SidebarFooter from './sidebar/SidebarFooter'
 import SidebarHeader from './sidebar/SidebarHeader'
@@ -18,16 +19,16 @@ const clasesInferior = ({ isActive }) =>
   `item-inferior-base ${isActive ? 'item-inferior-activo' : 'item-inferior-inactivo'}`
 
 export default function MenuDesplegable() {
-  const [abierto, setAbierto] = useState(true)
+  const [abierto, setAbierto] = useState(false)
   const [menuMovil, setMenuMovil] = useState(false)
   const [esMovil, setEsMovil] = useState(
     () => window.matchMedia('(max-width: 767px)').matches,
   )
   const [categoriasAbiertas, setCategoriasAbiertas] = useState({
-    comercial: true,
-    inventario: true,
-    administracion: true,
-    sistema: true,
+    comercial: false,
+    inventario: false,
+    administracion: false,
+    sistema: false,
   })
 
   const { user, logout, puedeVer } = useAuth()
@@ -94,11 +95,10 @@ export default function MenuDesplegable() {
     }
 
     if (caja) {
+      const cajaTexto = sinSucursal(caja.caja_detalle, caja.sucursal_detalle)
       Swal.fire({
         title: 'Tenés una caja abierta',
-        html: `La sección <strong>#${caja.id}</strong> (${caja.caja_detalle} · ${
-          caja.sucursal_detalle
-        }) sigue ${
+        html: `La sección <strong>#${caja.id}</strong> (${cajaTexto}) sigue ${
           caja.estado === 'PA' ? 'en pausa' : 'abierta'
         }.<br/>Cerrala o pausala antes de salir del sistema.`,
         icon: 'warning',

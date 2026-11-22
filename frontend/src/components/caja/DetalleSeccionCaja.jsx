@@ -8,7 +8,11 @@ import {
   IconX,
 } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
-import { formatearFechaHora, formatearMoneda } from '../../utils/formato'
+import {
+  formatearFechaHora,
+  formatearMoneda,
+  sinSucursal,
+} from '../../utils/formato'
 
 function escaparHtml(valor) {
   return String(valor ?? '').replace(/[&<>"']/g, (caracter) => {
@@ -112,8 +116,9 @@ export default function DetalleSeccionCaja({
     </div>
   </header>
   <div class="datos">
-    <p><strong>Caja física:</strong> ${escaparHtml(seccion.caja_detalle)}</p>
-    <p><strong>Sucursal:</strong> ${escaparHtml(seccion.sucursal_detalle)}</p>
+    <p><strong>Caja física:</strong> ${escaparHtml(
+      sinSucursal(seccion.caja_detalle, seccion.sucursal_detalle),
+    )}</p>
     <p><strong>Empleado:</strong> ${escaparHtml(seccion.empleado_detalle)} · <strong>Abierta por:</strong> ${escaparHtml(seccion.abierta_por ?? '—')}</p>
     <p><strong>Apertura:</strong> ${escaparHtml(formatearFechaHora(seccion.fecha_hora_apertura))} · <strong>Cierre:</strong> ${escaparHtml(formatearFechaHora(seccion.fecha_hora_cierre))}</p>
     <p><strong>Monto inicial:</strong> ${escaparHtml(formatearMoneda(seccion.monto_inicial))} · <strong>Monto final:</strong> ${escaparHtml(formatearMoneda(seccion.monto_final))}</p>
@@ -205,11 +210,9 @@ export default function DetalleSeccionCaja({
         <div className="caja-detalle-grid">
           <div>
             <span>Caja fisica</span>
-            <strong>{seccion.caja_detalle}</strong>
-          </div>
-          <div>
-            <span>Sucursal</span>
-            <strong>{seccion.sucursal_detalle}</strong>
+            <strong>
+              {sinSucursal(seccion.caja_detalle, seccion.sucursal_detalle)}
+            </strong>
           </div>
           <div>
             <span>Empleado</span>

@@ -138,11 +138,10 @@ export default function useCacheModulo({
   )
 
   useEffect(() => {
+    // No se aborta al desmontar: en StrictMode el efecto se ejecuta dos
+    // veces y abortar la primera solicitud dejaba la segunda bloqueada. El
+    // turno y la clave descartan respuestas viejas sin cortar la vigente.
     solicitar()
-
-    return () => {
-      abortRef.current?.abort()
-    }
   }, [solicitar])
 
   const refrescar = useCallback(

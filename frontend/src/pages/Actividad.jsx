@@ -3,8 +3,12 @@ import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
   IconDownload,
+  IconListDetails,
   IconLoader2,
+  IconPencil,
+  IconPlus,
   IconSearch,
+  IconTrash,
   IconX,
 } from '@tabler/icons-react'
 import { pedirTodas } from '../api/catalogos'
@@ -12,9 +16,12 @@ import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import { useAuth } from '../context/auth-context'
 import useDebounce from '../hooks/useDebounce'
+import useCacheModulo from '../hooks/useCacheModulo'
 import { descargarCsv } from '../utils/csv'
 import { formatearFecha, formatearFechaHora, formatearNumero } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/Filtros.css'
+import '../styles/Actividad.css'
 
 const PAGINA_VACIA = {
   count: 0,
@@ -43,7 +50,7 @@ const ETIQUETA_ACCION = {
 }
 
 export default function Actividad() {
-  const { puedeEscribir } = useAuth()
+  const { user, puedeEscribir } = useAuth()
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
 
   const [searchParams, setSearchParams] = useSearchParams()
@@ -60,16 +67,9 @@ export default function Actividad() {
     () => Number(searchParams.get('page')) || 1,
   )
 
-  const [datos, setDatos] = useState(PAGINA_VACIA)
-  const [resumen, setResumen] = useState(RESUMEN_VACIO)
-  const [empleados, setEmpleados] = useState([])
-  const [cargando, setCargando] = useState(true)
-  const [actualizando, setActualizando] = useState(false)
-  const [error, setError] = useState('')
   const [exportando, setExportando] = useState(false)
 
   const busqueda = useDebounce(texto.trim(), 350)
-  const buscando = texto.trim() !== busqueda || actualizando
 
   const filtrosComunes = useCallback(() => {
     const p = new URLSearchParams()
@@ -91,71 +91,54 @@ export default function Actividad() {
     setSearchParams(parametros(), { replace: true })
   }, [parametros, setSearchParams])
 
-  // Cargar empleados para el filtro por usuario.
-  useEffect(() => {
-    let vigente = true
-    pedirTodas('/empleados/')
-      .then((lista) => {
-        if (vigente) {
-          setEmpleados(lista.filter((e) => e.usuario))
-        }
-      })
-      .catch(() => {
-        if (vigente) setEmpleados([])
-      })
-    return () => {
-      vigente = false
-    }
-  }, [])
+  const consultarListado = useCallback(
+    ({ signal } = {}) =>
+      pedir(`/actividad/?${parametros().toString()}`, { signal }),
+    [parametros],
+  )
+  const consultarResumen = useCallback(
+    ({ signal } = {}) =>
+      pedir(`/actividad/resumen/?${filtrosComunes().toString()}`, { signal }),
+    [filtrosComunes],
+  )
+  const consultarEmpleados = useCallback(
+    () =>
+      pedirTodas('/empleados/').then((lista) =>
+        lista.filter((empleado) => empleado.usuario),
+      ),
+    [],
+  )
 
-  // Listado paginado.
-  useEffect(() => {
-    let vigente = true
-    pedir(`/actividad/?${parametros().toString()}`)
-      .then((datosPagina) => {
-        if (vigente) {
-          setDatos(datosPagina)
-          setCargando(false)
-          setActualizando(false)
-          setError('')
-        }
-      })
-      .catch((e) => {
-        if (vigente) {
-          setError(e.message)
-          setCargando(false)
-          setActualizando(false)
-        }
-      })
-    return () => {
-      vigente = false
-    }
-  }, [parametros])
+  const {
+    datos,
+    cargando,
+    actualizando,
+    error,
+  } = useCacheModulo({
+    clave: `actividad|${user?.id ?? ''}|${parametros().toString()}`,
+    consultar: consultarListado,
+    inicial: PAGINA_VACIA,
+  })
+  const { datos: resumen } = useCacheModulo({
+    clave: `actividad-resumen|${user?.id ?? ''}|${filtrosComunes().toString()}`,
+    consultar: consultarResumen,
+    inicial: RESUMEN_VACIO,
+  })
+  const { datos: empleados } = useCacheModulo({
+    clave: `actividad-empleados|${user?.id ?? ''}`,
+    consultar: consultarEmpleados,
+    inicial: [],
+  })
 
-  // Resumen real del filtro (totales, no pagina).
-  useEffect(() => {
-    let vigente = true
-    pedir(`/actividad/resumen/?${filtrosComunes().toString()}`)
-      .then((datosResumen) => {
-        if (vigente) setResumen(datosResumen)
-      })
-      .catch(() => {
-        if (vigente) setResumen(RESUMEN_VACIO)
-      })
-    return () => {
-      vigente = false
-    }
-  }, [filtrosComunes])
+  const buscando = texto.trim() !== busqueda || actualizando
 
   function irAPagina(numero) {
     setPagina(numero)
-    setActualizando(true)
   }
 
   function cambiarAccion(nueva) {
     setAccion((actual) => (actual === nueva ? '' : nueva))
     setPagina(1)
-    setActualizando(true)
   }
 
   async function exportar() {
@@ -214,146 +197,150 @@ export default function Actividad() {
         subtitulo="Registro de cambios del sistema"
       />
 
-      <div className="comercial">
-        {/* KPIs superiores (totales reales del filtro) */}
-        <section className="comercial-barra">
-          <div className="comercial-kpis">
-            <div className="comercial-kpi">
-              <span className="comercial-kpi-label">Total de registros</span>
-              <span className="comercial-kpi-valor">
-                {formatearNumero(totalRegistros)}
-              </span>
-            </div>
-            <div className="comercial-kpi">
-              <span className="comercial-kpi-label">Creaciones</span>
-              <span className="comercial-kpi-valor">
-                {formatearNumero(porAccion.CREAR || 0)}
-              </span>
-            </div>
-            <div className="comercial-kpi">
-              <span className="comercial-kpi-label">Ediciones</span>
-              <span className="comercial-kpi-valor">
-                {formatearNumero(porAccion.EDITAR || 0)}
-              </span>
-            </div>
-            <div className="comercial-kpi">
-              <span className="comercial-kpi-label">Eliminaciones</span>
-              <span className="comercial-kpi-valor">
-                {formatearNumero(porAccion.ELIMINAR || 0)}
-              </span>
-            </div>
-          </div>
-        </section>
+      <div className="comercial actividad">
+        <section className="filtros-area">
+          <section className="comercial-barra">
+            <form
+              className="comercial-busqueda"
+              onSubmit={(evento) => evento.preventDefault()}
+            >
+              <IconSearch size={20} />
+              <input
+                type="search"
+                value={texto}
+                onChange={(evento) => {
+                  setTexto(evento.target.value)
+                  setPagina(1)
+                              }}
+                placeholder="Buscar por usuario, modelo o objeto"
+                aria-label="Buscar actividad"
+              />
+              {buscando && <IconLoader2 className="icono-girando" size={18} />}
+              {texto && (
+                <button
+                  type="button"
+                  className="boton-limpiar-busqueda"
+                  onClick={() => {
+                    setTexto('')
+                    setPagina(1)
+                  }}
+                  aria-label="Limpiar búsqueda"
+                >
+                  <IconX size={16} />
+                </button>
+              )}
+            </form>
 
-        {/* Barra de búsqueda y acciones */}
-        <section className="comercial-barra">
-          <form
-            className="comercial-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-                setActualizando(true)
-              }}
-              placeholder="Buscar por usuario, modelo o objeto"
-              aria-label="Buscar actividad"
-            />
-            {buscando && <IconLoader2 className="icono-girando" size={18} />}
-            {texto && (
+            <div className="comercial-acciones-barra">
               <button
                 type="button"
-                className="boton-limpiar-busqueda"
-                onClick={() => {
-                  setTexto('')
-                  setPagina(1)
-                }}
-                aria-label="Limpiar búsqueda"
+                className="boton-comercial-secundario"
+                onClick={exportar}
+                disabled={exportando}
               >
-                <IconX size={16} />
+                <IconDownload size={18} />
+                {exportando ? 'Exportando…' : 'Exportar CSV'}
               </button>
-            )}
-          </form>
+            </div>
+          </section>
 
-          <div className="comercial-acciones-barra">
-            <button
-              type="button"
-              className="boton-comercial-secundario"
-              onClick={exportar}
-              disabled={exportando}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-          </div>
+          <section className="filtros-tabs filtros-pills">
+            {ACCIONES.map((opcion) => (
+              <button
+                key={opcion.id || 'todas'}
+                type="button"
+                className={
+                  accion === opcion.id
+                    ? `activo ${opcion.color}`
+                    : opcion.color
+                }
+                onClick={() => cambiarAccion(opcion.id)}
+              >
+                {opcion.etiqueta}
+              </button>
+            ))}
+          </section>
+
+          <section className="filtros-campos filtros-campos-inline">
+            <label className="campo-comercial">
+              <span>Usuario</span>
+              <select
+                value={usuario}
+                onChange={(e) => {
+                  setUsuario(e.target.value)
+                  setPagina(1)
+                              }}
+              >
+                <option value="">Todos</option>
+                {empleados.map((emp) => (
+                  <option key={emp.id} value={emp.usuario}>
+                    {emp.apellido}, {emp.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="campo-comercial">
+              <span>Desde</span>
+              <input
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => {
+                  setFechaDesde(e.target.value)
+                  setPagina(1)
+                              }}
+              />
+            </label>
+            <label className="campo-comercial">
+              <span>Hasta</span>
+              <input
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => {
+                  setFechaHasta(e.target.value)
+                  setPagina(1)
+                              }}
+              />
+            </label>
+          </section>
         </section>
 
-        {/* Filtros por tipo de tarea */}
-        <section className="inventario-filtros">
-          {ACCIONES.map((opcion) => (
-            <button
-              key={opcion.id || 'todas'}
-              type="button"
-              className={
-                accion === opcion.id
-                  ? `activo ${opcion.color}`
-                  : opcion.color
-              }
-              onClick={() => cambiarAccion(opcion.id)}
-            >
-              {opcion.etiqueta}
-            </button>
-          ))}
-        </section>
-
-        {/* Filtros por usuario y fechas */}
-        <section className="inventario-filtros inventario-filtros-form">
-          <label className="campo-comercial">
-            <span>Usuario</span>
-            <select
-              value={usuario}
-              onChange={(e) => {
-                setUsuario(e.target.value)
-                setPagina(1)
-                setActualizando(true)
-              }}
-            >
-              <option value="">Todos</option>
-              {empleados.map((emp) => (
-                <option key={emp.id} value={emp.usuario}>
-                  {emp.apellido}, {emp.nombre}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="campo-comercial">
-            <span>Desde</span>
-            <input
-              type="date"
-              value={fechaDesde}
-              onChange={(e) => {
-                setFechaDesde(e.target.value)
-                setPagina(1)
-                setActualizando(true)
-              }}
-            />
-          </label>
-          <label className="campo-comercial">
-            <span>Hasta</span>
-            <input
-              type="date"
-              value={fechaHasta}
-              onChange={(e) => {
-                setFechaHasta(e.target.value)
-                setPagina(1)
-                setActualizando(true)
-              }}
-            />
-          </label>
+        <section className="dashboard-kpis actividad-kpis">
+          <article className="kpi-tarjeta">
+            <span className="kpi-icono">
+              <IconListDetails size={26} stroke={1.75} />
+            </span>
+            <div className="kpi-contenido">
+              <p className="kpi-etiqueta">Total de registros</p>
+              <p className="kpi-valor">{formatearNumero(totalRegistros)}</p>
+            </div>
+          </article>
+          <article className="kpi-tarjeta kpi-crear">
+            <span className="kpi-icono">
+              <IconPlus size={26} stroke={1.75} />
+            </span>
+            <div className="kpi-contenido">
+              <p className="kpi-etiqueta">Creaciones</p>
+              <p className="kpi-valor">{formatearNumero(porAccion.CREAR || 0)}</p>
+            </div>
+          </article>
+          <article className="kpi-tarjeta kpi-editar">
+            <span className="kpi-icono">
+              <IconPencil size={26} stroke={1.75} />
+            </span>
+            <div className="kpi-contenido">
+              <p className="kpi-etiqueta">Ediciones</p>
+              <p className="kpi-valor">{formatearNumero(porAccion.EDITAR || 0)}</p>
+            </div>
+          </article>
+          <article className="kpi-tarjeta kpi-eliminar">
+            <span className="kpi-icono">
+              <IconTrash size={26} stroke={1.75} />
+            </span>
+            <div className="kpi-contenido">
+              <p className="kpi-etiqueta">Eliminaciones</p>
+              <p className="kpi-valor">{formatearNumero(porAccion.ELIMINAR || 0)}</p>
+            </div>
+          </article>
         </section>
 
         {error && <p className="comercial-error">{error}</p>}

@@ -65,3 +65,19 @@ export function iniciales(nombre = '') {
     .map((parte) => parte[0]?.toUpperCase())
     .join('')
 }
+
+/**
+ * Quita el sufijo " - <sucursal>" que el backend agrega en textos como
+ * "Caja 1 - Salta Capital". Si no coincide, devuelve el texto original.
+ */
+export function sinSucursal(texto, sucursal) {
+  const valor = String(texto || '').trim()
+  const nombre = String(sucursal || '').trim()
+  if (!valor || !nombre) {
+    return valor
+  }
+  const sufijo = ` - ${nombre}`
+  return valor.toLowerCase().endsWith(sufijo.toLowerCase())
+    ? valor.slice(0, -sufijo.length).trim()
+    : valor
+}

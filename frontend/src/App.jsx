@@ -4,6 +4,7 @@ import { useAuth } from './context/auth-context'
 import { modulosDelMenu } from './data/menuConfig.js'
 import Caja from './pages/Caja.jsx'
 import Clientes from './pages/Clientes.jsx'
+import Configuracion from './pages/Configuracion.jsx'
 import Compras from './pages/Compras.jsx'
 import Facturacion from './pages/Facturacion.jsx'
 import Empleados from './pages/Empleados.jsx'
@@ -38,6 +39,9 @@ function contenidoModulo(modulo) {
   }
   if (modulo.path === '/clientes') {
     return <Clientes />
+  }
+  if (modulo.path === '/configuracion') {
+    return <Configuracion />
   }
   if (modulo.path === '/ventas') {
     return <Ventas />

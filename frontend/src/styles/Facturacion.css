@@ -1,0 +1,208 @@
+.facturacion-modulo .facturacion-contenido {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.facturacion-modulo .facturacion-panel {
+  min-width: 0;
+  border-radius: 1rem;
+  background-color: #ffffff;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.facturacion-modulo .facturacion-panel-emision:only-child,
+.facturacion-modulo .facturacion-panel-listado {
+  grid-column: 1 / -1;
+}
+
+.facturacion-modulo .facturacion-panel h2 {
+  margin: 0.9rem 0 0.5rem;
+  color: var(--color-oscuro);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.facturacion-modulo .facturacion-panel p {
+  margin: 0 0 0.9rem;
+  color: rgba(15, 42, 48, 0.72);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.facturacion-modulo .facturacion-icono {
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 0.85rem;
+}
+
+.facturacion-modulo .facturacion-icono-bloqueado {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.facturacion-modulo .facturacion-panel .boton-comercial-primario:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.facturacion-modulo .placeholder-nota {
+  border-radius: 0.75rem;
+  background-color: var(--color-fondo);
+  padding: 0.8rem 1rem;
+  color: rgba(15, 42, 48, 0.62) !important;
+  font-size: 0.86rem;
+}
+
+.facturacion-modulo .facturacion-cargando {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(15, 42, 48, 0.68);
+  font-size: 0.9rem;
+}
+
+.facturacion-modulo .comercial-tabla-scroll {
+  overflow-x: auto;
+  border: 1px solid rgba(15, 42, 48, 0.08);
+  border-radius: 0.85rem;
+}
+
+.facturacion-modulo .tabla-facturacion {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.9rem;
+}
+
+.facturacion-modulo .tabla-facturacion th {
+  padding: 0.8rem 0.75rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.2);
+  color: var(--color-oscuro);
+  font-size: 0.92rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.facturacion-modulo .tabla-facturacion td {
+  padding: 0.8rem 0.75rem;
+  border-bottom: 1px solid rgba(15, 42, 48, 0.1);
+  color: var(--color-oscuro);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  text-align: left;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.facturacion-modulo .tabla-facturacion tr:last-child td {
+  border-bottom: none;
+}
+
+.facturacion-modulo .tabla-facturacion th:nth-child(1),
+.facturacion-modulo .tabla-facturacion td:nth-child(1) {
+  width: 18%;
+}
+
+.facturacion-modulo .tabla-facturacion th:nth-child(2),
+.facturacion-modulo .tabla-facturacion td:nth-child(2) {
+  width: 15%;
+}
+
+.facturacion-modulo .tabla-facturacion th:nth-child(3),
+.facturacion-modulo .tabla-facturacion td:nth-child(3) {
+  width: 30%;
+}
+
+.facturacion-modulo .tabla-facturacion th:nth-child(4),
+.facturacion-modulo .tabla-facturacion td:nth-child(4) {
+  width: 37%;
+}
+
+.facturacion-modulo .tabla-facturacion td:nth-child(1),
+.facturacion-modulo .tabla-facturacion td:nth-child(2) {
+  color: rgba(15, 42, 48, 0.72);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.facturacion-modulo .tabla-facturacion td:nth-child(4) {
+  color: rgba(15, 42, 48, 0.78);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.facturacion-modulo .facturacion-tipo {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background-color: #e0f2fe;
+  padding: 0.22rem 0.65rem;
+  color: #075985;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.facturacion-modulo .facturacion-datos {
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.facturacion-modulo .facturacion-datos div {
+  min-width: 0;
+  border-radius: 0.75rem;
+  background-color: var(--color-fondo);
+  padding: 0.7rem 0.85rem;
+}
+
+.facturacion-modulo .facturacion-datos span {
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.facturacion-modulo .facturacion-datos strong {
+  color: var(--color-oscuro);
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.facturacion-modulo .comercial-paginacion {
+  margin-top: 0.75rem;
+  padding: 1rem 0 0;
+  border-top: 1px solid rgba(15, 42, 48, 0.1);
+  color: rgba(15, 42, 48, 0.7);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 900px) {
+  .facturacion-modulo .facturacion-contenido {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .facturacion-modulo .facturacion-panel {
+    padding: 1.25rem;
+  }
+
+  .facturacion-modulo .facturacion-datos {
+    grid-template-columns: 1fr;
+  }
+
+  .facturacion-modulo .comercial-paginacion {
+    align-items: flex-start;
+  }
+}

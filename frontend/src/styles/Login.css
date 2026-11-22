@@ -57,7 +57,7 @@ ESTILOS DE LOGIN - FER-CONS
   width: 100%;
   max-width: 28rem;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.5rem;
   padding: 0 1.5rem;
   box-sizing: border-box;
 }
@@ -67,43 +67,25 @@ ESTILOS DE LOGIN - FER-CONS
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
-  font-size: 2.5rem;
+  gap: 0.75rem;
+  font-size: 1.875rem;
   color: #ffffff;
   font-weight: 700;
-  text-shadow:
-    1px 1px 0 #000,
-    -1px -1px 0 #000,
-    1px -1px 0 #000,
-    -1px 1px 0 #000,
-    0 1px 0 #000,
-    0 -1px 0 #000,
-    1px 0 0 #000,
-    -1px 0 0 #000;
 }
 
 .subtitulo-logo {
   display: block;
-  font-size: 1rem;
+  font-size: 0.8rem;
   font-weight: 400;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.75);
-  text-shadow:
-    1px 1px 0 #000,
-    -1px -1px 0 #000,
-    1px -1px 0 #000,
-    -1px 1px 0 #000,
-    0 1px 0 #000,
-    0 -1px 0 #000,
-    1px 0 0 #000,
-    -1px 0 0 #000;
 }
 
 .caja-icono-logo {
   display: grid;
-  width: 4.25rem;
-  height: 4.25rem;
+  width: 3.5rem;
+  height: 3.5rem;
   flex-shrink: 0;
   place-items: center;
   border-radius: 1rem;
@@ -127,7 +109,7 @@ ESTILOS DE LOGIN - FER-CONS
   left: 1.25rem;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--color-oscuro);
+  color: #ffffff;
   pointer-events: none;
 }
 
@@ -135,20 +117,10 @@ ESTILOS DE LOGIN - FER-CONS
   width: 100%;
   border-radius: 9999px;
   background-color: var(--color-campo);
-  padding: 1.25rem 1.75rem 1.25rem 3.75rem;
+  padding: 1rem 1.5rem 1rem 3.5rem;
   color: #ffffff;
   border: none;
   box-sizing: border-box;
-  font-size: 1.05rem;
-  text-shadow:
-    1px 1px 0 #000,
-    -1px -1px 0 #000,
-    1px -1px 0 #000,
-    -1px 1px 0 #000,
-    0 1px 0 #000,
-    0 -1px 0 #000,
-    1px 0 0 #000,
-    -1px 0 0 #000;
 }
 
 .input-password-ojo {
@@ -162,47 +134,25 @@ ESTILOS DE LOGIN - FER-CONS
   transform: translateY(-50%);
   background: transparent;
   border: none;
-  color: var(--color-oscuro);
+  color: #ffffff;
   cursor: pointer;
   display: grid;
   place-items: center;
   padding: 0.25rem;
-  opacity: 0.85;
-  transition:
-    color 0.2s ease,
-    opacity 0.2s ease;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
 }
 
 .boton-toggle-password:hover {
-  color: #000000;
   opacity: 1;
 }
 
 .input-personalizado::placeholder {
   color: rgba(255, 255, 255, 0.9);
-  text-shadow:
-    1px 1px 0 #000,
-    -1px -1px 0 #000,
-    1px -1px 0 #000,
-    -1px 1px 0 #000,
-    0 1px 0 #000,
-    0 -1px 0 #000,
-    1px 0 0 #000,
-    -1px 0 0 #000;
 }
 
 .input-personalizado:focus-visible {
   outline: 2px solid #ffffff;
-}
-
-/* Chrome/WebKit fuerza fondo blanco y texto oscuro al autocompletar. */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus,
-input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 30px var(--color-campo) inset !important;
-  -webkit-text-fill-color: #ffffff !important;
-  transition: background-color 5000s ease-in-out 0s;
 }
 
 .mensaje-error-input {
@@ -224,8 +174,8 @@ input:-webkit-autofill:active {
   width: 18rem;
   border-radius: 9999px;
   background-color: var(--color-oscuro);
-  padding: 1.15rem 0;
-  font-size: 1.4rem;
+  padding: 1rem 0;
+  font-size: 1.25rem;
   letter-spacing: 0.1em;
   color: #ffffff;
   border: none;
@@ -249,16 +199,7 @@ input:-webkit-autofill:active {
 /* Pie */
 .texto-demo {
   text-align: center;
-  font-size: 1rem;
+  font-size: 0.875rem;
   color: rgba(255, 255, 255, 0.7);
   margin: 0;
-  text-shadow:
-    1px 1px 0 #000,
-    -1px -1px 0 #000,
-    1px -1px 0 #000,
-    -1px 1px 0 #000,
-    0 1px 0 #000,
-    0 -1px 0 #000,
-    1px 0 0 #000,
-    -1px 0 0 #000;
 }
