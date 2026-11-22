@@ -28,6 +28,7 @@ import { descargarCsv, numeroCsv } from '../utils/csv'
 import { nuevaClave } from '../utils/clave'
 import { formatearFecha, formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/Filtros.css'
 import '../styles/Compras.css'
 import '../styles/components/comercial/Cobro.css'
 
@@ -660,39 +661,105 @@ export default function Compras() {
       />
 
       <div className="comercial compras">
-            <section className="comercial-barra">
-              <form
-                className="comercial-busqueda"
-                onSubmit={(evento) => evento.preventDefault()}
-              >
-                <IconSearch size={20} />
-                <input
-                  type="search"
-                  value={texto}
-                  onChange={(evento) => {
-                    setTexto(evento.target.value)
-                    setPagina(1)
-                  }}
-                  placeholder="Buscar por N.º de compra, proveedor o CUIT"
-                  aria-label="Buscar compras"
-                />
-                {buscando && (
-                  <IconLoader2 className="icono-girando" size={18} />
-                )}
-                {texto && (
+            <section className="filtros-area">
+              <section className="comercial-barra">
+                <form
+                  className="comercial-busqueda"
+                  onSubmit={(evento) => evento.preventDefault()}
+                >
+                  <IconSearch size={20} />
+                  <input
+                    type="search"
+                    value={texto}
+                    onChange={(evento) => {
+                      setTexto(evento.target.value)
+                      setPagina(1)
+                    }}
+                    placeholder="Buscar por N.º de compra, proveedor o CUIT"
+                    aria-label="Buscar compras"
+                  />
+                  {buscando && (
+                    <IconLoader2 className="icono-girando" size={18} />
+                  )}
+                  {texto && (
+                    <button
+                      type="button"
+                      className="boton-limpiar-busqueda"
+                      onClick={limpiarTexto}
+                      aria-label="Limpiar búsqueda"
+                    >
+                      <IconX size={16} />
+                    </button>
+                  )}
+                </form>
+
+                <div className="comercial-acciones-barra">
                   <button
                     type="button"
-                    className="boton-limpiar-busqueda"
-                    onClick={limpiarTexto}
-                    aria-label="Limpiar búsqueda"
+                    className="boton-comercial-secundario"
+                    onClick={exportar}
+                    disabled={exportando || rangoInvalido}
                   >
-                    <IconX size={16} />
+                    <IconDownload size={18} />
+                    {exportando ? 'Exportando…' : 'Exportar CSV'}
                   </button>
-                )}
-              </form>
+                  {puedeCrear && (
+                    <button
+                      type="button"
+                      className="boton-comercial-primario"
+                      onClick={() => setModalAbierto(true)}
+                    >
+                      <IconPlus size={18} />
+                      Nueva compra
+                    </button>
+                  )}
+                </div>
+              </section>
 
-              <div className="comercial-acciones-barra">
-                {hayFiltros && (
+              <section className="filtros-tabs filtros-pills">
+                {ESTADOS.map((opcion) => (
+                  <button
+                    key={opcion.id || 'todas'}
+                    type="button"
+                    className={estado === opcion.id ? 'activo' : ''}
+                    onClick={() => cambiarEstado(opcion.id)}
+                    title={opcion.ayuda}
+                  >
+                    {opcion.etiqueta}
+                  </button>
+                ))}
+                <div className="filtros-tabs-grupo">
+                  <button
+                    type="button"
+                    className={`filtro-destacado ${porRecibir ? 'activo' : ''}`}
+                    onClick={() => cambiarEntrega('por_recibir')}
+                    title="Compras registradas que todavía no repusieron stock."
+                  >
+                    Por recibir
+                  </button>
+                  <button
+                    type="button"
+                    className={`filtro-destacado ${enCamino ? 'activo' : ''}`}
+                    onClick={() => cambiarEntrega('EC')}
+                    title="Compras que todavía están en camino y no movieron stock."
+                  >
+                    En camino
+                  </button>
+                </div>
+              </section>
+
+              <FiltrosFecha
+                valores={fechas}
+                onCambiar={cambiarFechas}
+                error={
+                  rangoInvalido
+                    ? 'La fecha desde no puede ser posterior a la fecha hasta.'
+                    : ''
+                }
+              />
+
+              {hayFiltros && (
+                <div className="filtros-pie">
                   <button
                     type="button"
                     className="boton-comercial-secundario"
@@ -700,76 +767,9 @@ export default function Compras() {
                   >
                     Limpiar filtros
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="boton-comercial-secundario"
-                  onClick={exportar}
-                  disabled={exportando || rangoInvalido}
-                >
-                  <IconDownload size={18} />
-                  {exportando ? 'Exportando…' : 'Exportar CSV'}
-                </button>
-                {puedeCrear && (
-                  <button
-                    type="button"
-                    className="boton-comercial-primario"
-                    onClick={() => setModalAbierto(true)}
-                  >
-                    <IconPlus size={18} />
-                    Nueva compra
-                  </button>
-                )}
-              </div>
+                </div>
+              )}
             </section>
-
-            <section className="filtros-tabs">
-              {ESTADOS.map((opcion) => (
-                <button
-                  key={opcion.id || 'todas'}
-                  type="button"
-                  className={estado === opcion.id ? 'activo' : ''}
-                  onClick={() => cambiarEstado(opcion.id)}
-                  title={opcion.ayuda}
-                >
-                  {opcion.etiqueta}
-                </button>
-              ))}
-              <div className="filtros-tabs-grupo">
-                <button
-                  type="button"
-                  className={`filtro-destacado ${porRecibir ? 'activo' : ''}`}
-                  onClick={() => cambiarEntrega('por_recibir')}
-                  title="Compras registradas que todavía no repusieron stock."
-                >
-                  Por recibir
-                </button>
-                <button
-                  type="button"
-                  className={`filtro-destacado ${enCamino ? 'activo' : ''}`}
-                  onClick={() => cambiarEntrega('EC')}
-                  title="Compras que todavía están en camino y no movieron stock."
-                >
-                  En camino
-                </button>
-              </div>
-            </section>
-
-            <FiltrosFecha
-              valores={fechas}
-              onCambiar={cambiarFechas}
-              error={
-                rangoInvalido
-                  ? 'La fecha desde no puede ser posterior a la fecha hasta.'
-                  : ''
-              }
-            />
-
-            <p className="filtros-ayuda">
-              Pago: Pendiente (sin pago total) · Parcial (pago parcial) · Pagada
-              (pago total) · Anulada. Recepción: Por recibir, En camino o
-              Recibida. El stock se mueve recién al recibir.
-            </p>
 
             {error && <p className="comercial-error">{error}</p>}
 

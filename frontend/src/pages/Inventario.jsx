@@ -42,6 +42,7 @@ import {
 } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
+import '../styles/Filtros.css'
 import '../styles/InventarioModulo.css'
 
 const PAGINA_VACIA = {
@@ -84,9 +85,7 @@ export default function Inventario() {
   const [alerta, setAlerta] = useState(
     () => searchParams.get('alerta') || '',
   )
-  // En la pestaña Stock: si está activo, muestra el stock de todas las
-  // sucursales (solo lectura; operar sigue siendo sobre la propia).
-  const [todasLasSucursales, setTodasLasSucursales] = useState(false)
+
   const [datos, setDatos] = useState(PAGINA_VACIA)
   const [cargando, setCargando] = useState(true)
   const [actualizando, setActualizando] = useState(false)
@@ -177,10 +176,7 @@ export default function Inventario() {
     if (busqueda) {
       parametros.set('search', busqueda)
     }
-    if (
-      sucursalActiva &&
-      !(tab === 'stock' && todasLasSucursales)
-    ) {
+    if (sucursalActiva) {
       parametros.set('sucursal', sucursalActiva)
     }
 
@@ -228,7 +224,6 @@ export default function Inventario() {
     pagina,
     busqueda,
     sucursalActiva,
-    todasLasSucursales,
     categoria,
     marca,
     unidad,
@@ -534,7 +529,7 @@ export default function Inventario() {
     try {
       const parametros = new URLSearchParams()
       if (busqueda) parametros.set('search', busqueda)
-      if (sucursalActiva && !(tab === 'stock' && todasLasSucursales)) {
+      if (sucursalActiva) {
         parametros.set('sucursal', sucursalActiva)
       }
 
@@ -640,174 +635,162 @@ export default function Inventario() {
       />
 
       <div className="comercial inventario inventario-modulo">
-        {tab !== 'catalogos' && (
-          <section className="comercial-barra">
-            <form
-              className="comercial-busqueda"
-              onSubmit={(evento) => evento.preventDefault()}
-            >
-              <IconSearch size={20} />
-              <input
-                type="search"
-                value={texto}
-                onChange={(evento) => {
-                  setTexto(evento.target.value)
-                  setPagina(1)
-                }}
-                placeholder="Buscar producto, código, categoría o marca"
-                aria-label="Buscar en inventario"
-              />
-              {buscando && (
-                <IconLoader2 className="icono-girando" size={18} />
-              )}
-              {texto && (
-                <button
-                  type="button"
-                  className="boton-limpiar-busqueda"
-                  onClick={limpiarTexto}
-                  aria-label="Limpiar búsqueda"
-                >
-                  <IconX size={16} />
-                </button>
-              )}
-            </form>
-
-            <div className="comercial-acciones-barra">
-              {mostrarBotonExportar && (
-                <button
-                  type="button"
-                  className="boton-comercial-secundario"
-                  onClick={exportar}
-                  disabled={exportando}
-                >
-                  <IconDownload size={18} />
-                  {exportando ? 'Exportando…' : 'Exportar CSV'}
-                </button>
-              )}
-              {mostrarCargaStock && (
-                <button
-                  type="button"
-                  className="boton-comercial-primario"
-                  onClick={() => setCargaStockAbierta(true)}
-                >
-                  <IconBox size={18} />
-                  Cargar stock
-                </button>
-              )}
-              {mostrarNuevoProducto && (
-                <button
-                  type="button"
-                  className="boton-comercial-primario"
-                  onClick={() => setProductoEditando({})}
-                >
-                  <IconPlus size={18} />
-                  Nuevo producto
-                </button>
-              )}
-              {mostrarNuevoDeposito && (
-                <button
-                  type="button"
-                  className="boton-comercial-primario"
-                  onClick={() => setDepositoEditando({})}
-                >
-                  <IconPlus size={18} />
-                  Nuevo depósito
-                </button>
-              )}
-            </div>
-          </section>
-        )}
-
-        <section className="inventario-tabs">
-          {TABS.map((item) => {
-            const Icono = item.icono
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={tab === item.id ? 'activo' : ''}
-                onClick={() => cambiarTab(item.id)}
+        <section className="filtros-area">
+          {tab !== 'catalogos' && (
+            <section className="comercial-barra">
+              <form
+                className="comercial-busqueda"
+                onSubmit={(evento) => evento.preventDefault()}
               >
-                <Icono size={18} />
-                {item.etiqueta}
-              </button>
-            )
-          })}
+                <IconSearch size={20} />
+                <input
+                  type="search"
+                  value={texto}
+                  onChange={(evento) => {
+                    setTexto(evento.target.value)
+                    setPagina(1)
+                  }}
+                  placeholder="Buscar producto, código, categoría o marca"
+                  aria-label="Buscar en inventario"
+                />
+                {buscando && (
+                  <IconLoader2 className="icono-girando" size={18} />
+                )}
+                {texto && (
+                  <button
+                    type="button"
+                    className="boton-limpiar-busqueda"
+                    onClick={limpiarTexto}
+                    aria-label="Limpiar búsqueda"
+                  >
+                    <IconX size={16} />
+                  </button>
+                )}
+              </form>
+
+              <div className="comercial-acciones-barra">
+                {mostrarBotonExportar && (
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    onClick={exportar}
+                    disabled={exportando}
+                  >
+                    <IconDownload size={18} />
+                    {exportando ? 'Exportando…' : 'Exportar CSV'}
+                  </button>
+                )}
+                {mostrarCargaStock && (
+                  <button
+                    type="button"
+                    className="boton-comercial-primario"
+                    onClick={() => setCargaStockAbierta(true)}
+                  >
+                    <IconBox size={18} />
+                    Cargar stock
+                  </button>
+                )}
+                {mostrarNuevoProducto && (
+                  <button
+                    type="button"
+                    className="boton-comercial-primario"
+                    onClick={() => setProductoEditando({})}
+                  >
+                    <IconPlus size={18} />
+                    Nuevo producto
+                  </button>
+                )}
+                {mostrarNuevoDeposito && (
+                  <button
+                    type="button"
+                    className="boton-comercial-primario"
+                    onClick={() => setDepositoEditando({})}
+                  >
+                    <IconPlus size={18} />
+                    Nuevo depósito
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
+
+          <section className="filtros-tabs filtros-pills">
+            {TABS.map((item) => {
+              const Icono = item.icono
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={tab === item.id ? 'activo' : ''}
+                  onClick={() => cambiarTab(item.id)}
+                >
+                  <Icono size={18} />
+                  {item.etiqueta}
+                </button>
+              )
+            })}
+          </section>
+
+          {tab === 'productos' && (
+            <section className="filtros-campos filtros-campos-inline">
+              <CampoSelectorBuscable
+                etiqueta="Categoría"
+                valor={categoria}
+                onCambiar={(valor) => cambiarFiltro(setCategoria, valor)}
+                opciones={categorias}
+                textoOpcion={(item) => item.categorias}
+                placeholder="Todas"
+              />
+              <CampoSelectorBuscable
+                etiqueta="Marca"
+                valor={marca}
+                onCambiar={(valor) => cambiarFiltro(setMarca, valor)}
+                opciones={marcas}
+                textoOpcion={(item) => item.marcas}
+                placeholder="Todas"
+              />
+              <CampoSelectorBuscable
+                etiqueta="Unidad"
+                valor={unidad}
+                onCambiar={(valor) => cambiarFiltro(setUnidad, valor)}
+                opciones={unidades}
+                textoOpcion={(item) => item.unidades}
+                placeholder="Todas"
+              />
+              <label className="campo-comercial">
+                <span>Orden</span>
+                <select
+                  value={orden}
+                  onChange={(evento) =>
+                    cambiarFiltro(setOrden, evento.target.value)
+                  }
+                >
+                  <option value="">Por nombre</option>
+                  <option value="-id">Más recientes</option>
+                  <option value="id">Más antiguos</option>
+                </select>
+              </label>
+            </section>
+          )}
+
+          {tab === 'stock' && (
+            <section className="filtros-campos filtros-campos-inline">
+              <label className="campo-comercial">
+                <span>Alerta</span>
+                <select
+                  value={alerta}
+                  onChange={(evento) => cambiarAlerta(evento.target.value)}
+                >
+                  <option value="">Todas</option>
+                  <option value="ok">OK</option>
+                  <option value="minimo">Mínimo</option>
+                  <option value="negativo">Negativo</option>
+                  <option value="critico">Crítico</option>
+                </select>
+              </label>
+            </section>
+          )}
         </section>
-
-        {tab === 'productos' && (
-          <section className="inventario-filtros">
-            <CampoSelectorBuscable
-              etiqueta="Categoría"
-              valor={categoria}
-              onCambiar={(valor) => cambiarFiltro(setCategoria, valor)}
-              opciones={categorias}
-              textoOpcion={(item) => item.categorias}
-              placeholder="Todas"
-            />
-            <CampoSelectorBuscable
-              etiqueta="Marca"
-              valor={marca}
-              onCambiar={(valor) => cambiarFiltro(setMarca, valor)}
-              opciones={marcas}
-              textoOpcion={(item) => item.marcas}
-              placeholder="Todas"
-            />
-            <CampoSelectorBuscable
-              etiqueta="Unidad"
-              valor={unidad}
-              onCambiar={(valor) => cambiarFiltro(setUnidad, valor)}
-              opciones={unidades}
-              textoOpcion={(item) => item.unidades}
-              placeholder="Todas"
-            />
-            <label className="campo-comercial">
-              <span>Orden</span>
-              <select
-                value={orden}
-                onChange={(evento) =>
-                  cambiarFiltro(setOrden, evento.target.value)
-                }
-              >
-                <option value="">Por nombre</option>
-                <option value="-id">Más recientes</option>
-                <option value="id">Más antiguos</option>
-              </select>
-            </label>
-          </section>
-        )}
-
-        {tab === 'stock' && (
-          <section className="inventario-filtros">
-            <label className="campo-comercial">
-              <span>Alerta</span>
-              <select
-                value={alerta}
-                onChange={(evento) => cambiarAlerta(evento.target.value)}
-              >
-                <option value="">Todas</option>
-                <option value="ok">OK</option>
-                <option value="minimo">Mínimo</option>
-                <option value="negativo">Negativo</option>
-                <option value="critico">Crítico</option>
-              </select>
-            </label>
-            <label className="inventario-check">
-              <input
-                type="checkbox"
-                checked={todasLasSucursales}
-                onChange={(evento) => {
-                  setTodasLasSucursales(evento.target.checked)
-                  setPagina(1)
-                }}
-              />
-              <span>
-                Ver el stock de{' '}
-                <strong>todas las sucursales</strong>
-              </span>
-            </label>
-          </section>
-        )}
 
         {error && <p className="comercial-error">{error}</p>}
 

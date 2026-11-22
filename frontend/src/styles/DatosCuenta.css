@@ -1,21 +1,31 @@
 .seccion-perfil-principal {
   box-sizing: border-box;
-  max-width: 80rem;
-  margin: 0 auto;
-  padding: 0 1rem 3rem;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .seccion-perfil-principal {
+    padding: 2rem 3rem 3rem;
+    gap: 2rem;
+  }
 }
 
 .tarjeta-perfil-cabecera {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  gap: 1.5rem;
   box-sizing: border-box;
-  margin-bottom: 1.5rem;
   border: 1px solid var(--color-circulo);
   border-radius: 1.25rem;
   background: linear-gradient(135deg, var(--color-tarjeta), #ffffff);
   box-shadow: 0 12px 30px rgba(15, 42, 48, 0.08);
-  padding: 1.5rem;
+  padding: 1.75rem 2rem;
 }
 
 .avatar-perfil-contenedor {
@@ -120,19 +130,19 @@
 
 .grid-datos-perfil {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1.25rem;
 }
 
 .campo-perfil-item {
   display: flex;
   min-width: 0;
   align-items: flex-start;
-  gap: 0.75rem;
+  gap: 0.85rem;
   border: 1px solid rgba(15, 42, 48, 0.1);
   border-radius: 1rem;
   background-color: #ffffff;
-  padding: 0.9rem;
+  padding: 1.15rem 1.25rem;
   box-shadow: 0 4px 16px rgba(15, 42, 48, 0.04);
 }
 
@@ -219,10 +229,10 @@
 .contenedor-boton-guardar-perfil {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.85rem;
   flex-wrap: wrap;
-  margin-top: 1.5rem;
-  padding-top: 1rem;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
   border-top: 1px solid rgba(15, 42, 48, 0.1);
 }
 
@@ -435,11 +445,16 @@
 }
 
 @media (max-width: 640px) {
+  .seccion-perfil-principal {
+    padding: 1.25rem;
+    gap: 1.25rem;
+  }
+
   .tarjeta-perfil-cabecera {
     align-items: flex-start;
     flex-direction: column;
-    gap: 0.9rem;
-    padding: 1.1rem;
+    gap: 1rem;
+    padding: 1.25rem;
   }
 
   .estado-perfil-contenedor {
@@ -448,6 +463,11 @@
 
   .grid-datos-perfil {
     grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .campo-perfil-item {
+    padding: 1rem;
   }
 
   .nombre-perfil {

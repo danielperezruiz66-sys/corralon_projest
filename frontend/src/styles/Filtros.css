@@ -1,0 +1,212 @@
+/* Sistema compartido de filtros */
+
+.filtros-area {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.filtros-area .filtros-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.filtros-area .filtros-fila .filtros-pills {
+  flex: 1 1 auto;
+}
+
+.filtros-area .filtros-campos-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.filtros-area .filtros-campos-inline .campo-comercial {
+  flex: 1 1 180px;
+}
+
+.filtros-area .filtros-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 1rem;
+  background-color: #ffffff;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.filtros-area .filtros-pills button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(15, 42, 48, 0.14);
+  border-radius: 9999px;
+  background-color: #ffffff;
+  padding: 0.42rem 0.9rem;
+  color: rgba(15, 42, 48, 0.72);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.2;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.filtros-area .filtros-pills button:hover {
+  background-color: var(--color-fondo);
+}
+
+.filtros-area .filtros-pills button.activo {
+  border-color: var(--color-sidebar);
+  background-color: var(--color-sidebar);
+  color: #ffffff;
+}
+
+.filtros-area .filtros-tabs-grupo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-left: 0;
+}
+
+.filtros-area .filtros-pills .filtro-destacado {
+  border-color: var(--color-sidebar);
+  color: var(--color-sidebar);
+}
+
+.filtros-area .filtros-pills .filtro-destacado.activo {
+  border-color: var(--color-sidebar);
+  background-color: var(--color-sidebar);
+  color: #ffffff;
+}
+
+.filtros-area .filtros-campos {
+  border-radius: 1rem;
+  background-color: #ffffff;
+  padding: 0.85rem 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.filtros-area .filtros-campos .filtros-fechas {
+  display: grid;
+  gap: 0.75rem;
+  border: none;
+  border-radius: 0;
+  background-color: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.filtros-area .filtros-campos .filtros-fechas-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.filtros-area .filtros-campos .filtros-fechas-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  align-items: end;
+  gap: 0.75rem;
+  margin-left: 0;
+  border-left: none;
+  padding-left: 0;
+  width: 100%;
+}
+
+.filtros-area .filtros-campos .filtros-fechas-campos label {
+  min-width: 0;
+}
+
+.filtros-area .filtros-campos .filtros-fechas-campos input {
+  width: 100%;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.filtros-area .filtros-campos .filtros-fechas-separador {
+  display: none;
+}
+
+.filtros-area .filtros-campos .boton-limpiar-fechas {
+  justify-self: start;
+}
+
+.filtros-area .filtros-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  padding: 0 0.25rem;
+}
+
+.filtros-area .filtros-campos .campo-comercial {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.filtros-area .filtros-campos .campo-comercial span {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(15, 42, 48, 0.72);
+}
+
+.filtros-area .filtros-campos .campo-comercial input,
+.filtros-area .filtros-campos .campo-comercial select {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid rgba(15, 42, 48, 0.2);
+  border-radius: 0.5rem;
+  background: #ffffff;
+  color: var(--color-oscuro);
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+.filtros-area .filtros-campos .campo-comercial input:focus,
+.filtros-area .filtros-campos .campo-comercial select:focus {
+  outline: none;
+  border-color: var(--color-login);
+  box-shadow: 0 0 0 3px rgba(74, 157, 168, 0.15);
+}
+
+@media (max-width: 900px) {
+  .filtros-area .filtros-campos .filtros-fechas-campos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .filtros-area {
+    gap: 0.65rem;
+  }
+
+  .filtros-area .filtros-pills {
+    padding: 0.65rem;
+  }
+
+  .filtros-area .filtros-pills button {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  .filtros-area .filtros-campos {
+    padding: 0.75rem;
+  }
+
+  .filtros-area .filtros-campos .filtros-fechas-campos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .filtros-area .filtros-pie {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

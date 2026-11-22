@@ -21,6 +21,7 @@ import useDebounce from '../hooks/useDebounce'
 import { descargarCsv } from '../utils/csv'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Clientes.css'
+import '../styles/Filtros.css'
 
 const PAGINA_VACIA = {
   count: 0,
@@ -353,69 +354,71 @@ export default function Clientes() {
       />
 
       <div className="clientes">
-        <section className="clientes-barra">
-          <form
-            className="clientes-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-              }}
-              placeholder="Buscar por DNI, razón social, nombre o email"
-              aria-label="Buscar clientes"
-            />
-            {buscando && (
-              <IconLoader2 className="icono-girando" size={18} />
-            )}
-            {texto && (
+        <section className="filtros-area">
+          <section className="comercial-barra">
+            <form
+              className="comercial-busqueda"
+              onSubmit={(evento) => evento.preventDefault()}
+            >
+              <IconSearch size={20} />
+              <input
+                type="search"
+                value={texto}
+                onChange={(evento) => {
+                  setTexto(evento.target.value)
+                  setPagina(1)
+                }}
+                placeholder="Buscar por DNI, razón social, nombre o email"
+                aria-label="Buscar clientes"
+              />
+              {buscando && (
+                <IconLoader2 className="icono-girando" size={18} />
+              )}
+              {texto && (
+                <button
+                  type="button"
+                  className="boton-limpiar-busqueda"
+                  onClick={limpiarTexto}
+                  aria-label="Limpiar búsqueda"
+                >
+                  <IconX size={16} />
+                </button>
+              )}
+            </form>
+
+            <div className="comercial-acciones-barra">
               <button
                 type="button"
-                className="boton-limpiar-busqueda"
-                onClick={limpiarTexto}
-                aria-label="Limpiar búsqueda"
+                className="boton-comercial-secundario"
+                onClick={exportar}
+                disabled={exportando}
               >
-                <IconX size={16} />
+                <IconDownload size={18} />
+                {exportando ? 'Exportando…' : 'Exportar CSV'}
               </button>
-            )}
-          </form>
+              <button
+                type="button"
+                className="boton-comercial-primario"
+                onClick={abrirNuevo}
+              >
+                <IconPlus size={18} />
+                Nuevo cliente
+              </button>
+            </div>
+          </section>
 
-          <div className="clientes-acciones">
-            <button
-              type="button"
-              className="boton-secundario"
-              onClick={exportar}
-              disabled={exportando}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-            <button
-              type="button"
-              className="boton-primario"
-              onClick={abrirNuevo}
-            >
-              <IconPlus size={18} />
-              Nuevo cliente
-            </button>
-          </div>
-        </section>
-
-        <section className="clientes-filtros">
-          {ESTADOS.map((opcion) => (
-            <button
-              key={opcion.id || 'todos'}
-              type="button"
-              className={estado === opcion.id ? 'activo' : ''}
-              onClick={() => cambiarEstado(opcion.id)}
-            >
-              {opcion.etiqueta}
-            </button>
-          ))}
+          <section className="filtros-tabs filtros-pills">
+            {ESTADOS.map((opcion) => (
+              <button
+                key={opcion.id || 'todos'}
+                type="button"
+                className={estado === opcion.id ? 'activo' : ''}
+                onClick={() => cambiarEstado(opcion.id)}
+              >
+                {opcion.etiqueta}
+              </button>
+            ))}
+          </section>
         </section>
 
         {error && <p className="clientes-error">{error}</p>}

@@ -1,101 +1,10 @@
-/* Filtros de fecha (extraído de Comercial.css) */
-.filtros-fechas {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.75rem 1.25rem;
-  border-radius: 1.1rem;
-  background-color: #ffffff;
-  padding: 0.75rem 1rem;
-  box-shadow: 0 6px 18px rgba(15, 42, 48, 0.05);
-}
-
-.filtros-fechas-presets {
-  display: flex;
-  flex: 0 1 auto;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-}
-
-.filtros-fechas-presets button {
-  border: 1px solid rgba(15, 42, 48, 0.12);
-  border-radius: 9999px;
-  background-color: #ffffff;
-  padding: 0.4rem 0.8rem;
-  color: rgba(15, 42, 48, 0.65);
-  cursor: pointer;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.filtros-fechas-presets button:hover {
-  background-color: var(--color-fondo);
-}
-
-.filtros-fechas-presets button.activo {
-  border-color: var(--color-sidebar);
-  background-color: var(--color-sidebar);
-  color: #ffffff;
-}
-
-.filtros-fechas-campos {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.6rem;
-  margin-left: auto;
-  border-left: 1px solid rgba(15, 42, 48, 0.12);
-  padding-left: 1rem;
-  color: rgba(15, 42, 48, 0.55);
-}
-
-.filtros-fechas-campos label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.filtros-fechas-campos input {
-  border: 1px solid rgba(15, 42, 48, 0.15);
-  border-radius: 0.7rem;
-  background-color: #ffffff;
-  padding: 0.42rem 0.55rem;
-  color: var(--color-oscuro);
-  font-size: 0.8rem;
-}
-
-.filtros-fechas-campos input:focus-visible {
-  outline: 2px solid var(--color-sidebar);
-}
-
-.filtros-fechas-separador {
-  padding-bottom: 0.45rem;
-  font-size: 0.8rem;
-  font-style: italic;
-}
-
-.boton-limpiar-fechas {
-  padding: 0.45rem 0.75rem !important;
-  font-size: 0.78rem !important;
+/* Filtros de fecha dentro del sistema compartido */
+.filtros-fechas-campos .boton-limpiar-fechas {
+  align-self: flex-end;
 }
 
 .filtros-fecha-error {
-  flex-basis: 100%;
   margin: 0;
   color: var(--color-peligro);
   font-size: 0.78rem;
-}
-
-@media (max-width: 900px) {
-  .filtros-fechas-campos {
-    width: 100%;
-    margin-left: 0;
-    border-left: none;
-    padding-left: 0;
-  }
 }

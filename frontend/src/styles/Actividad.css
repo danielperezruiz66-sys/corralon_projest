@@ -1,5 +1,81 @@
 /* Estilos de presentación del módulo Actividad. */
 
+.actividad .dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem;
+}
+
+.actividad .kpi-tarjeta {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  border-radius: 1.25rem;
+  background-color: #ffffff;
+  padding: 1.25rem;
+  box-shadow: 0 10px 24px rgba(15, 42, 48, 0.06);
+  border-left: 4px solid var(--color-sidebar);
+}
+
+.actividad .kpi-icono {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 0.9rem;
+  background-color: var(--color-tarjeta);
+  color: var(--color-sidebar);
+}
+
+.actividad .kpi-contenido {
+  min-width: 0;
+}
+
+.actividad .kpi-etiqueta {
+  margin: 0;
+  color: rgba(15, 42, 48, 0.65);
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.actividad .kpi-valor {
+  margin: 0.15rem 0 0;
+  color: var(--color-oscuro);
+  font-size: clamp(1.35rem, 2vw, 1.65rem);
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.actividad .kpi-crear {
+  border-left-color: #166534;
+}
+
+.actividad .kpi-crear .kpi-icono {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.actividad .kpi-editar {
+  border-left-color: var(--color-login);
+}
+
+.actividad .kpi-editar .kpi-icono {
+  background-color: #e0f5f8;
+  color: var(--color-login);
+}
+
+.actividad .kpi-eliminar {
+  border-left-color: #991b1b;
+}
+
+.actividad .kpi-eliminar .kpi-icono {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
 .actividad .comercial-panel {
   padding: 0;
   overflow: hidden;
@@ -121,37 +197,37 @@
   color: #991b1b;
 }
 
-.actividad .inventario-filtros button.estado-pe {
+.actividad .filtros-pills button.estado-pe {
   border-color: #bbf7d0;
   background-color: #f0fdf4;
   color: #166534;
 }
 
-.actividad .inventario-filtros button.estado-pe.activo {
+.actividad .filtros-pills button.estado-pe.activo {
   border-color: #166534;
   background-color: #166534;
   color: #ffffff;
 }
 
-.actividad .inventario-filtros button.estado-pc {
+.actividad .filtros-pills button.estado-pc {
   border-color: #a9e0ea;
   background-color: #eefbfc;
   color: var(--color-oscuro);
 }
 
-.actividad .inventario-filtros button.estado-pc.activo {
+.actividad .filtros-pills button.estado-pc.activo {
   border-color: var(--color-login);
   background-color: var(--color-login);
   color: #ffffff;
 }
 
-.actividad .inventario-filtros button.estado-an {
+.actividad .filtros-pills button.estado-an {
   border-color: #fecaca;
   background-color: #fef2f2;
   color: #991b1b;
 }
 
-.actividad .inventario-filtros button.estado-an.activo {
+.actividad .filtros-pills button.estado-an.activo {
   border-color: #991b1b;
   background-color: #991b1b;
   color: #ffffff;

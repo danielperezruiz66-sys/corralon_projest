@@ -29,6 +29,7 @@ import { descargarCsv, numeroCsv } from '../utils/csv'
 import { nuevaClave } from '../utils/clave'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/Filtros.css'
 import '../styles/Ventas.css'
 import '../styles/components/comercial/Cobro.css'
 
@@ -245,6 +246,11 @@ export default function Ventas() {
       })
       .catch((e) => {
         if (!vigente || e.name === 'AbortError') {
+          return
+        }
+        if (estado && e.campos?.estado) {
+          setDatos(PAGINA_VACIA)
+          setError('')
           return
         }
         setError(e.message)
@@ -632,39 +638,107 @@ export default function Ventas() {
       />
 
       <div className="comercial ventas">
-        <section className="comercial-barra">
-          <form
-            className="comercial-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-              }}
-              placeholder="Buscar por N.º de venta, cliente, DNI o consumidor final"
-              aria-label="Buscar ventas"
-            />
-            {buscando && (
-              <IconLoader2 className="icono-girando" size={18} />
-            )}
-            {texto && (
+        <section className="filtros-area">
+          <section className="comercial-barra">
+            <form
+              className="comercial-busqueda"
+              onSubmit={(evento) => evento.preventDefault()}
+            >
+              <IconSearch size={20} />
+              <input
+                type="search"
+                value={texto}
+                onChange={(evento) => {
+                  setTexto(evento.target.value)
+                  setPagina(1)
+                }}
+                placeholder="Buscar por N.º de venta, cliente, DNI o consumidor final"
+                aria-label="Buscar ventas"
+              />
+              {buscando && (
+                <IconLoader2 className="icono-girando" size={18} />
+              )}
+              {texto && (
+                <button
+                  type="button"
+                  className="boton-limpiar-busqueda"
+                  onClick={limpiarTexto}
+                  aria-label="Limpiar búsqueda"
+                >
+                  <IconX size={16} />
+                </button>
+              )}
+            </form>
+
+            <div className="comercial-acciones-barra">
               <button
                 type="button"
-                className="boton-limpiar-busqueda"
-                onClick={limpiarTexto}
-                aria-label="Limpiar búsqueda"
+                className="boton-comercial-secundario"
+                onClick={exportar}
+                disabled={exportando || rangoInvalido}
               >
-                <IconX size={16} />
+                <IconDownload size={18} />
+                {exportando ? 'Exportando…' : 'Exportar CSV'}
               </button>
-            )}
-          </form>
+              <button
+                type="button"
+                className="boton-comercial-secundario"
+                onClick={() => abrirNueva('presupuesto')}
+              >
+                <IconFileText size={18} />
+                Nuevo presupuesto
+              </button>
+              <button
+                type="button"
+                className="boton-comercial-primario"
+                onClick={() => abrirNueva('venta')}
+              >
+                <IconPlus size={18} />
+                Nueva venta
+              </button>
+            </div>
+          </section>
 
-          <div className="comercial-acciones-barra">
-            {hayFiltros && (
+          <section className="filtros-tabs filtros-pills">
+            {ESTADOS.map((opcion) => (
+              <button
+                key={opcion.id || 'todas'}
+                type="button"
+                className={estado === opcion.id && !alerta ? 'activo' : ''}
+                onClick={() => cambiarEstado(opcion.id)}
+                title={opcion.ayuda}
+              >
+                {opcion.etiqueta}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={alerta === 'vencida' ? 'activo' : ''}
+              onClick={() => {
+                const activa = alerta === 'vencida'
+                setAlerta(activa ? '' : 'vencida')
+                setEstado('')
+                setPagina(1)
+                setError('')
+                setActualizando(true)
+              }}
+            >
+              Vencidas
+            </button>
+          </section>
+
+          <FiltrosFecha
+            valores={fechas}
+            onCambiar={cambiarFechas}
+            error={
+              rangoInvalido
+                ? 'La fecha desde no puede ser posterior a la fecha hasta.'
+                : ''
+            }
+          />
+
+          {hayFiltros && (
+            <div className="filtros-pie">
               <button
                 type="button"
                 className="boton-comercial-secundario"
@@ -672,78 +746,9 @@ export default function Ventas() {
               >
                 Limpiar filtros
               </button>
-            )}
-            <button
-              type="button"
-              className="boton-comercial-secundario"
-              onClick={exportar}
-              disabled={exportando || rangoInvalido}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-            <button
-              type="button"
-              className="boton-comercial-secundario"
-              onClick={() => abrirNueva('presupuesto')}
-            >
-              <IconFileText size={18} />
-              Nuevo presupuesto
-            </button>
-            <button
-              type="button"
-              className="boton-comercial-primario"
-              onClick={() => abrirNueva('venta')}
-            >
-              <IconPlus size={18} />
-              Nueva venta
-            </button>
-          </div>
+            </div>
+          )}
         </section>
-
-        <section className="filtros-tabs">
-          {ESTADOS.map((opcion) => (
-            <button
-              key={opcion.id || 'todas'}
-              type="button"
-              className={estado === opcion.id && !alerta ? 'activo' : ''}
-              onClick={() => cambiarEstado(opcion.id)}
-              title={opcion.ayuda}
-            >
-              {opcion.etiqueta}
-            </button>
-          ))}
-          <button
-            type="button"
-            className={alerta === 'vencida' ? 'activo' : ''}
-            onClick={() => {
-              const activa = alerta === 'vencida'
-              setAlerta(activa ? '' : 'vencida')
-              setEstado('')
-              setPagina(1)
-              setError('')
-              setActualizando(true)
-            }}
-          >
-            Vencidas
-          </button>
-        </section>
-
-        <FiltrosFecha
-          valores={fechas}
-          onCambiar={cambiarFechas}
-          error={
-            rangoInvalido
-              ? 'La fecha desde no puede ser posterior a la fecha hasta.'
-              : ''
-          }
-        />
-
-        <p className="filtros-ayuda">
-          Pendiente: sin pagos; vence a los 30 minutos. Parcial: con pagos
-          parciales; no vence. Confirmada: pagada y confirmada. Anulada: stock
-          restaurado.
-        </p>
 
         {error && <p className="comercial-error">{error}</p>}
 

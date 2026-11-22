@@ -16,97 +16,7 @@ CLIENTES - FER-CONS
   }
 }
 
-.clientes-barra {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
 
-.clientes-acciones {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.clientes-filtros {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.clientes-filtros button {
-  border: 1px solid rgba(15, 42, 48, 0.12);
-  border-radius: 9999px;
-  background-color: #ffffff;
-  padding: 0.45rem 0.9rem;
-  color: rgba(15, 42, 48, 0.65);
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.clientes-filtros button:hover {
-  background-color: var(--color-fondo);
-}
-
-.clientes-filtros button.activo {
-  border-color: var(--color-oscuro);
-  background-color: var(--color-oscuro);
-  color: #ffffff;
-}
-
-.clientes-busqueda {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 28rem;
-  align-items: center;
-  gap: 0.5rem;
-  border-radius: 9999px;
-  background-color: #ffffff;
-  padding: 0.35rem 0.5rem 0.35rem 1rem;
-  box-shadow: 0 6px 18px rgba(15, 42, 48, 0.06);
-  color: rgba(15, 42, 48, 0.55);
-}
-
-.clientes-busqueda input {
-  min-width: 0;
-  flex: 1;
-  border: none;
-  background: transparent;
-  padding: 0.45rem 0;
-  color: var(--color-oscuro);
-  outline: none;
-}
-
-.clientes-busqueda input::placeholder {
-  color: rgba(15, 42, 48, 0.45);
-}
-
-.clientes-busqueda .boton-limpiar-busqueda {
-  display: grid;
-  width: 1.8rem;
-  height: 1.8rem;
-  flex-shrink: 0;
-  place-items: center;
-  border: none;
-  border-radius: 9999px;
-  background-color: var(--color-fondo);
-  color: rgba(15, 42, 48, 0.6);
-  cursor: pointer;
-}
-
-.clientes-busqueda .boton-limpiar-busqueda:hover {
-  background-color: var(--color-tarjeta);
-  color: var(--color-oscuro);
-}
-
-/* Oculta el botón de borrado nativo en inputs de tipo search */
-.clientes-busqueda input[type='search']::-webkit-search-cancel-button {
-  -webkit-appearance: none;
-  appearance: none;
-}
 
 .boton-primario,
 .boton-secundario {
@@ -570,29 +480,6 @@ button.cliente-estado-cliente:hover {
 }
 
 @media (max-width: 640px) {
-  .clientes-barra {
-    align-items: stretch;
-  }
-
-  .clientes-acciones {
-    width: 100%;
-  }
-
-  .clientes-acciones button {
-    flex: 1;
-  }
-
-  .clientes-busqueda {
-    flex: 1 1 100%;
-    flex-wrap: wrap;
-    border-radius: 1rem;
-    padding: 0.6rem;
-  }
-
-  .clientes-busqueda input {
-    flex: 1 1 100%;
-    padding-left: 0.25rem;
-  }
 
   .clientes-paginacion {
     flex-direction: column;

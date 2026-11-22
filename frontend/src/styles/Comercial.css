@@ -916,13 +916,5 @@ COMERCIAL - VENTAS Y COMPRAS
   font-weight: 700;
 }
 
-/* Fila de filtros con formularios (usuario + fechas) */
-.inventario-filtros-form {
-  align-items: flex-end;
-  gap: 0.75rem 1rem;
-}
 
-.inventario-filtros-form .campo-comercial {
-  min-width: 12rem;
-}
 

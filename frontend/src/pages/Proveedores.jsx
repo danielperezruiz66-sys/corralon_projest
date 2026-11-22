@@ -23,6 +23,7 @@ import { descargarCsv, numeroCsv } from '../utils/csv'
 import { formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
+import '../styles/Filtros.css'
 import '../styles/Proveedores.css'
 
 const PAGINA_VACIA = {
@@ -330,106 +331,108 @@ export default function Proveedores() {
       />
 
       <div className="comercial inventario proveedores">
-        <section className="comercial-barra">
-          <form
-            className="comercial-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-              }}
-              placeholder={
-                tab === 'proveedores'
-                  ? 'Buscar por CUIT, nombre o razón social'
-                  : 'Buscar por proveedor, producto o código'
-              }
-              aria-label="Buscar proveedores"
-            />
-            {buscando && <IconLoader2 className="icono-girando" size={18} />}
-            {texto && (
-              <button
-                type="button"
-                className="boton-limpiar-busqueda"
-                onClick={() => {
-                  setTexto('')
+        <section className="filtros-area">
+          <section className="comercial-barra">
+            <form
+              className="comercial-busqueda"
+              onSubmit={(evento) => evento.preventDefault()}
+            >
+              <IconSearch size={20} />
+              <input
+                type="search"
+                value={texto}
+                onChange={(evento) => {
+                  setTexto(evento.target.value)
                   setPagina(1)
                 }}
-                aria-label="Limpiar búsqueda"
-              >
-                <IconX size={16} />
-              </button>
-            )}
-          </form>
+                placeholder={
+                  tab === 'proveedores'
+                    ? 'Buscar por CUIT, nombre o razón social'
+                    : 'Buscar por proveedor, producto o código'
+                }
+                aria-label="Buscar proveedores"
+              />
+              {buscando && <IconLoader2 className="icono-girando" size={18} />}
+              {texto && (
+                <button
+                  type="button"
+                  className="boton-limpiar-busqueda"
+                  onClick={() => {
+                    setTexto('')
+                    setPagina(1)
+                  }}
+                  aria-label="Limpiar búsqueda"
+                >
+                  <IconX size={16} />
+                </button>
+              )}
+            </form>
 
-          <div className="comercial-acciones-barra">
-            <button
-              type="button"
-              className="boton-comercial-secundario"
-              onClick={exportar}
-              disabled={exportando}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-            {puedeEditar && tab === 'proveedores' && (
+            <div className="comercial-acciones-barra">
               <button
                 type="button"
-                className="boton-comercial-primario"
-                onClick={() => setProveedorEditando({})}
+                className="boton-comercial-secundario"
+                onClick={exportar}
+                disabled={exportando}
               >
-                <IconPlus size={18} />
-                Nuevo proveedor
+                <IconDownload size={18} />
+                {exportando ? 'Exportando…' : 'Exportar CSV'}
               </button>
-            )}
-            {puedeEditar && tab === 'costos' && (
-              <button
-                type="button"
-                className="boton-comercial-primario"
-                onClick={() => setCostoEditando({})}
-              >
-                <IconPlus size={18} />
-                Asociar producto
-              </button>
-            )}
-          </div>
-        </section>
-
-        <section className="inventario-tabs">
-          {TABS.map((item) => {
-            const Icono = item.icono
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={tab === item.id ? 'activo' : ''}
-                onClick={() => cambiarTab(item.id)}
-              >
-                <Icono size={18} />
-                {item.etiqueta}
-              </button>
-            )
-          })}
-        </section>
-
-        {tab === 'proveedores' && (
-          <section className="inventario-filtros">
-            {ESTADOS.map((opcion) => (
-              <button
-                key={opcion.id || 'todos'}
-                type="button"
-                className={estado === opcion.id ? 'activo' : ''}
-                onClick={() => cambiarEstado(opcion.id)}
-              >
-                {opcion.etiqueta}
-              </button>
-            ))}
+              {puedeEditar && tab === 'proveedores' && (
+                <button
+                  type="button"
+                  className="boton-comercial-primario"
+                  onClick={() => setProveedorEditando({})}
+                >
+                  <IconPlus size={18} />
+                  Nuevo proveedor
+                </button>
+              )}
+              {puedeEditar && tab === 'costos' && (
+                <button
+                  type="button"
+                  className="boton-comercial-primario"
+                  onClick={() => setCostoEditando({})}
+                >
+                  <IconPlus size={18} />
+                  Asociar producto
+                </button>
+              )}
+            </div>
           </section>
-        )}
+
+          <section className="filtros-tabs filtros-pills">
+            {TABS.map((item) => {
+              const Icono = item.icono
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={tab === item.id ? 'activo' : ''}
+                  onClick={() => cambiarTab(item.id)}
+                >
+                  <Icono size={18} />
+                  {item.etiqueta}
+                </button>
+              )
+            })}
+          </section>
+
+          {tab === 'proveedores' && (
+            <section className="filtros-tabs filtros-pills">
+              {ESTADOS.map((opcion) => (
+                <button
+                  key={opcion.id || 'todos'}
+                  type="button"
+                  className={estado === opcion.id ? 'activo' : ''}
+                  onClick={() => cambiarEstado(opcion.id)}
+                >
+                  {opcion.etiqueta}
+                </button>
+              ))}
+            </section>
+          )}
+        </section>
 
         {error && <p className="comercial-error">{error}</p>}
 

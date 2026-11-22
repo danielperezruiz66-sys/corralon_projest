@@ -34,6 +34,7 @@ import {
 } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
+import '../styles/Filtros.css'
 import '../styles/Caja.css'
 
 const PAGINA_VACIA = {
@@ -499,184 +500,184 @@ export default function Caja() {
       />
 
       <div className="comercial inventario caja-modulo">
-        {tab === 'listado' && (
-          <>           
-            <section
-              id="cajas-abiertas"
-              className="comercial-panel caja-panel-abiertas"
-              aria-label="Cajas abiertas"
+        <section className="filtros-area">
+          <section className="comercial-barra">
+            <form
+              className="comercial-busqueda"
+              onSubmit={(evento) => evento.preventDefault()}
             >
-              <div className="caja-panel-cabecera">
-                <h2 className="caja-panel-titulo">
-                  <IconCash size={22} />
-                  Cajas abiertas
-                </h2>
-                {puedeOperar && (
-                  <button
-                    type="button"
-                    className="boton-comercial-primario"
-                    disabled={!sucursalActiva}
-                    onClick={() => setAperturaAbierta(true)}
-                    title="Abrir una seccion de caja"
-                  >
-                    <IconPlus size={18} />
-                    Abrir seccion
-                  </button>
-                )}
-              </div>
-
-              {!sucursalActiva && (
-                <p className="caja-nota-total">
-                  Faltan datos de configuración de tu usuario. Contactá al
-                  administrador.
-                </p>
-              )}
-
-              <div className="caja-abiertas">
-                {abiertas.length === 0 && (
-                  <p className="caja-abierta-vacia">
-                    No hay cajas con secciones abiertas.
-                  </p>
-                )}
-                {abiertas.map((seccion) => (
-                  <article className="caja-abierta" key={seccion.id}>
-                    <div className="caja-abierta-cabecera">
-                      <div>
-                        <strong>
-                          {sinSucursal(
-                            seccion.caja_detalle,
-                            seccion.sucursal_detalle,
-                          )}
-                        </strong>
-                        <small>Sección #{seccion.id}</small>
-                      </div>
-                      <span className={`estado-badge ${CLASE_ESTADO[seccion.estado]}`}>
-                        {seccion.estado_detalle}
-                      </span>
-                    </div>
-                    <div className="caja-abierta-detalles">
-                      <span>
-                        Empleado{' '}
-                        <strong>{seccion.empleado_detalle}</strong>
-                      </span>
-                      <span>
-                        Apertura{' '}
-                        <strong>
-                          {formatearFechaHora(seccion.fecha_hora_apertura)}
-                        </strong>
-                      </span>
-                      <span>
-                        Inicial{' '}
-                        <strong>{formatearMoneda(seccion.monto_inicial)}</strong>
-                      </span>
-                    </div>
-                    <div className="caja-abierta-acciones">
-                      <button
-                        type="button"
-                        className="boton-comercial-secundario"
-                        onClick={() => setDetalleSeccion(seccion)}
-                      >
-                        <IconEye size={17} />
-                        Ver
-                      </button>
-                      {puedeOperar && (
-                        <button
-                          type="button"
-                          className="boton-comercial-primario"
-                          onClick={() => setCierreSeccion(seccion)}
-                        >
-                          <IconCash size={17} />
-                          Cerrar seccion
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          </>
-        )}
-
-        <section className="comercial-barra">
-          <form
-            className="comercial-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-              }}
-              placeholder="Buscar por caja o empleado"
-              aria-label="Buscar secciones de caja"
-            />
-            {buscando && (
-              <IconLoader2 className="icono-girando" size={18} />
-            )}
-            {texto && (
-              <button
-                type="button"
-                className="boton-limpiar-busqueda"
-                onClick={() => {
-                  setTexto('')
+              <IconSearch size={20} />
+              <input
+                type="search"
+                value={texto}
+                onChange={(evento) => {
+                  setTexto(evento.target.value)
                   setPagina(1)
                 }}
-                aria-label="Limpiar búsqueda"
-              >
-                <IconX size={16} />
-              </button>
-            )}
-          </form>
+                placeholder="Buscar por caja o empleado"
+                aria-label="Buscar secciones de caja"
+              />
+              {buscando && (
+                <IconLoader2 className="icono-girando" size={18} />
+              )}
+              {texto && (
+                <button
+                  type="button"
+                  className="boton-limpiar-busqueda"
+                  onClick={() => {
+                    setTexto('')
+                    setPagina(1)
+                  }}
+                  aria-label="Limpiar búsqueda"
+                >
+                  <IconX size={16} />
+                </button>
+              )}
+            </form>
 
-          <div className="comercial-acciones-barra">
-            <button
-              type="button"
-              className="boton-comercial-secundario"
-              onClick={exportar}
-              disabled={exportando}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-          </div>
-        </section>
-
-        <section className="inventario-tabs">
-          {tabsVisibles.map((item) => {
-            const Icono = item.icono
-            return (
+            <div className="comercial-acciones-barra">
               <button
-                key={item.id}
                 type="button"
-                className={tab === item.id ? 'activo' : ''}
-                onClick={() => cambiarTab(item.id)}
+                className="boton-comercial-secundario"
+                onClick={exportar}
+                disabled={exportando}
               >
-                <Icono size={18} />
-                {item.etiqueta}
+                <IconDownload size={18} />
+                {exportando ? 'Exportando…' : 'Exportar CSV'}
               </button>
-            )
-          })}
-        </section>
-
-        {tab === 'listado' && (
-          <section className="inventario-filtros">
-            {FILTROS_ESTADO.map((opcion) => (
-              <button
-                key={opcion.id || 'todas'}
-                type="button"
-                className={estado === opcion.id ? 'activo' : ''}
-                onClick={() => cambiarEstado(opcion.id)}
-              >
-                {opcion.etiqueta}
-              </button>
-            ))}
+            </div>
           </section>
-        )}
+
+          <section className="filtros-tabs filtros-pills">
+            {tabsVisibles.map((item) => {
+              const Icono = item.icono
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={tab === item.id ? 'activo' : ''}
+                  onClick={() => cambiarTab(item.id)}
+                >
+                  <Icono size={18} />
+                  {item.etiqueta}
+                </button>
+              )
+            })}
+          </section>
+
+          {tab === 'listado' && (
+            <section className="filtros-tabs filtros-pills">
+              {FILTROS_ESTADO.map((opcion) => (
+                <button
+                  key={opcion.id || 'todas'}
+                  type="button"
+                  className={estado === opcion.id ? 'activo' : ''}
+                  onClick={() => cambiarEstado(opcion.id)}
+                >
+                  {opcion.etiqueta}
+                </button>
+              ))}
+            </section>
+          )}
+        </section>
 
         {error && <p className="comercial-error">{error}</p>}
+
+        {tab === 'listado' && (
+          <section
+            id="cajas-abiertas"
+            className="comercial-panel caja-panel-abiertas"
+            aria-label="Cajas abiertas"
+          >
+            <div className="caja-panel-cabecera">
+              <h2 className="caja-panel-titulo">
+                <IconCash size={22} />
+                Cajas abiertas
+              </h2>
+              {puedeOperar && (
+                <button
+                  type="button"
+                  className="boton-comercial-primario"
+                  disabled={!sucursalActiva}
+                  onClick={() => setAperturaAbierta(true)}
+                  title="Abrir una seccion de caja"
+                >
+                  <IconPlus size={18} />
+                  Abrir seccion
+                </button>
+              )}
+            </div>
+
+            {!sucursalActiva && (
+              <p className="caja-nota-total">
+                Faltan datos de configuración de tu usuario. Contactá al
+                administrador.
+              </p>
+            )}
+
+            <div className="caja-abiertas">
+              {abiertas.length === 0 && (
+                <p className="caja-abierta-vacia">
+                  No hay cajas con secciones abiertas.
+                </p>
+              )}
+              {abiertas.map((seccion) => (
+                <article className="caja-abierta" key={seccion.id}>
+                  <div className="caja-abierta-cabecera">
+                    <div>
+                      <strong>
+                        {sinSucursal(
+                          seccion.caja_detalle,
+                          seccion.sucursal_detalle,
+                        )}
+                      </strong>
+                      <small>Sección #{seccion.id}</small>
+                    </div>
+                    <span className={`estado-badge ${CLASE_ESTADO[seccion.estado]}`}>
+                      {seccion.estado_detalle}
+                    </span>
+                  </div>
+                  <div className="caja-abierta-detalles">
+                    <span>
+                      Empleado{' '}
+                      <strong>{seccion.empleado_detalle}</strong>
+                    </span>
+                    <span>
+                      Apertura{' '}
+                      <strong>
+                        {formatearFechaHora(seccion.fecha_hora_apertura)}
+                      </strong>
+                    </span>
+                    <span>
+                      Inicial{' '}
+                      <strong>{formatearMoneda(seccion.monto_inicial)}</strong>
+                    </span>
+                  </div>
+                  <div className="caja-abierta-acciones">
+                    <button
+                      type="button"
+                      className="boton-comercial-secundario"
+                      onClick={() => setDetalleSeccion(seccion)}
+                    >
+                      <IconEye size={17} />
+                      Ver
+                    </button>
+                    {puedeOperar && (
+                      <button
+                        type="button"
+                        className="boton-comercial-primario"
+                        onClick={() => setCierreSeccion(seccion)}
+                      >
+                        <IconCash size={17} />
+                        Cerrar seccion
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
 
         {tab === 'listado' && (
           <section

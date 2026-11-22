@@ -20,6 +20,7 @@ import useDebounce from '../hooks/useDebounce'
 import { descargarCsv } from '../utils/csv'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
+import '../styles/Filtros.css'
 import '../styles/Empleados.css'
 
 const PAGINA_VACIA = {
@@ -222,86 +223,88 @@ export default function Empleados() {
       />
 
       <div className="comercial inventario empleados-modulo">
-        <section className="comercial-barra">
-          <form
-            className="comercial-busqueda"
-            onSubmit={(evento) => evento.preventDefault()}
-          >
-            <IconSearch size={20} />
-            <input
-              type="search"
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value)
-                setPagina(1)
-                setActualizando(true)
-              }}
-              placeholder="Buscar por legajo, DNI, nombre o apellido"
-              aria-label="Buscar empleados"
-            />
-            {buscando && <IconLoader2 className="icono-girando" size={18} />}
-            {texto && (
-              <button
-                type="button"
-                className="boton-limpiar-busqueda"
-                onClick={() => {
-                  setTexto('')
+        <section className="filtros-area">
+          <section className="comercial-barra">
+            <form
+              className="comercial-busqueda"
+              onSubmit={(evento) => evento.preventDefault()}
+            >
+              <IconSearch size={20} />
+              <input
+                type="search"
+                value={texto}
+                onChange={(evento) => {
+                  setTexto(evento.target.value)
                   setPagina(1)
+                  setActualizando(true)
                 }}
-                aria-label="Limpiar búsqueda"
-              >
-                <IconX size={16} />
-              </button>
-            )}
-          </form>
+                placeholder="Buscar por legajo, DNI, nombre o apellido"
+                aria-label="Buscar empleados"
+              />
+              {buscando && <IconLoader2 className="icono-girando" size={18} />}
+              {texto && (
+                <button
+                  type="button"
+                  className="boton-limpiar-busqueda"
+                  onClick={() => {
+                    setTexto('')
+                    setPagina(1)
+                  }}
+                  aria-label="Limpiar búsqueda"
+                >
+                  <IconX size={16} />
+                </button>
+              )}
+            </form>
 
-          <div className="comercial-acciones-barra">
-            <button
-              type="button"
-              className="boton-comercial-secundario"
-              onClick={exportar}
-              disabled={exportando}
-            >
-              <IconDownload size={18} />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </button>
-            {puedeGestionar && (
+            <div className="comercial-acciones-barra">
               <button
                 type="button"
-                className="boton-comercial-primario"
-                onClick={() => setEmpleadoEditando({})}
+                className="boton-comercial-secundario"
+                onClick={exportar}
+                disabled={exportando}
               >
-                <IconPlus size={18} />
-                Nuevo empleado
+                <IconDownload size={18} />
+                {exportando ? 'Exportando…' : 'Exportar CSV'}
               </button>
-            )}
-          </div>
-        </section>
+              {puedeGestionar && (
+                <button
+                  type="button"
+                  className="boton-comercial-primario"
+                  onClick={() => setEmpleadoEditando({})}
+                >
+                  <IconPlus size={18} />
+                  Nuevo empleado
+                </button>
+              )}
+            </div>
+          </section>
 
-        <section className="inventario-filtros">
-          {ESTADOS.map((opcion) => (
-            <button
-              key={opcion.id || 'todos'}
-              type="button"
-              className={estado === opcion.id ? 'activo' : ''}
-              onClick={() => cambiarEstado(opcion.id)}
-            >
-              {opcion.etiqueta}
-            </button>
-          ))}
-        </section>
+          <section className="filtros-tabs filtros-pills">
+            {ESTADOS.map((opcion) => (
+              <button
+                key={opcion.id || 'todos'}
+                type="button"
+                className={estado === opcion.id ? 'activo' : ''}
+                onClick={() => cambiarEstado(opcion.id)}
+              >
+                {opcion.etiqueta}
+              </button>
+            ))}
+          </section>
 
-        <section className="inventario-filtros">
-          {ROLES.map((opcion) => (
-            <button
-              key={opcion.id || 'todos-roles'}
-              type="button"
-              className={rol === opcion.id ? 'activo' : ''}
-              onClick={() => cambiarRol(opcion.id)}
-            >
-              {opcion.etiqueta}
-            </button>
-          ))}
+          <section className="filtros-tabs filtros-pills">
+            {ROLES.map((opcion) => (
+              <button
+                key={opcion.id || 'todos-roles'}
+                type="button"
+                className={rol === opcion.id ? 'activo' : ''}
+                onClick={() => cambiarRol(opcion.id)}
+              >
+                {opcion.etiqueta}
+              </button>
+            ))}
+          </section>
         </section>
 
         {error && <p className="comercial-error">{error}</p>}

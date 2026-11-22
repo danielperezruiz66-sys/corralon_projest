@@ -1,84 +1,5 @@
 /* Inventario y proveedores */
 
-.inventario-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.inventario-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  font-size: 0.85rem;
-  color: rgba(15, 42, 48, 0.7);
-  margin-bottom: 0.75rem;
-}
-
-.inventario-check input {
-  width: 1rem;
-  height: 1rem;
-  accent-color: var(--color-sidebar);
-  cursor: pointer;
-}
-
-.inventario-tabs button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border: 1px solid rgba(15, 42, 48, 0.12);
-  border-radius: 9999px;
-  background-color: #ffffff;
-  padding: 0.5rem 0.95rem;
-  color: rgba(15, 42, 48, 0.65);
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.inventario-tabs button:hover {
-  background-color: var(--color-fondo);
-}
-
-.inventario-tabs button.activo {
-  border-color: var(--color-oscuro);
-  background-color: var(--color-oscuro);
-  color: #ffffff;
-}
-
-.inventario-filtros {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem;
-  border-radius: 1.1rem;
-  background-color: #ffffff;
-  padding: 0.75rem 1rem;
-  box-shadow: 0 6px 18px rgba(15, 42, 48, 0.05);
-}
-
-.inventario-filtros .campo-comercial {
-  min-width: 10rem;
-}
-
-.inventario-filtros button {
-  border: 1px solid rgba(15, 42, 48, 0.12);
-  border-radius: 9999px;
-  background-color: #ffffff;
-  padding: 0.45rem 0.9rem;
-  color: rgba(15, 42, 48, 0.65);
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.inventario-filtros button.activo {
-  border-color: var(--color-oscuro);
-  background-color: var(--color-oscuro);
-  color: #ffffff;
-}
-
 .inventario-sucursales {
   display: flex;
   flex-wrap: wrap;
@@ -300,19 +221,6 @@
 }
 
 @media (max-width: 640px) {
-  .inventario-filtros {
-    align-items: stretch;
-  }
-
-  .inventario-filtros .campo-comercial {
-    width: 100%;
-  }
-
-  .inventario-tabs button {
-    flex: 1 1 auto;
-    justify-content: center;
-  }
-
   .inventario-modal-ancho {
     max-width: 100%;
   }

@@ -62,8 +62,8 @@ export default function FiltrosFecha({ valores, onCambiar, error }) {
   ]
 
   return (
-    <section className="filtros-fechas">
-      <div className="filtros-fechas-presets">
+    <>
+      <section className="filtros-tabs filtros-pills filtros-fechas-presets">
         {presets.map((preset) => (
           <button
             key={preset.id}
@@ -74,11 +74,10 @@ export default function FiltrosFecha({ valores, onCambiar, error }) {
             {preset.etiqueta}
           </button>
         ))}
-      </div>
+      </section>
 
-      <div className="filtros-fechas-campos">
-       
-        <label>
+      <section className="filtros-campos filtros-campos-inline filtros-fechas-campos">
+        <label className="campo-comercial">
           <span>Desde</span>
           <input
             type="date"
@@ -88,7 +87,7 @@ export default function FiltrosFecha({ valores, onCambiar, error }) {
             }
           />
         </label>
-        <label>
+        <label className="campo-comercial">
           <span>Hasta</span>
           <input
             type="date"
@@ -98,8 +97,7 @@ export default function FiltrosFecha({ valores, onCambiar, error }) {
             }
           />
         </label>
-        <span className="filtros-fechas-separador">o</span>
-        <label>
+        <label className="campo-comercial">
           <span>Un día</span>
           <input
             type="date"
@@ -123,9 +121,9 @@ export default function FiltrosFecha({ valores, onCambiar, error }) {
             Limpiar fechas
           </button>
         )}
-      </div>
+      </section>
 
       {error && <p className="filtros-fecha-error">{error}</p>}
-    </section>
+    </>
   )
 }
