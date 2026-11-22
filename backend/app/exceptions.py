@@ -15,6 +15,7 @@ from django.db.models.deletion import ProtectedError
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 
+from .services.proveedores import AsociacionDuplicada
 from .services.stock import StockInsuficiente
 
 
@@ -26,6 +27,20 @@ def corralon_exception_handler(exc, context):
     if isinstance(exc, StockInsuficiente):
         return Response(
             {'detail': str(exc), 'codigo': 'stock_insuficiente'},
+            status=400,
+        )
+
+    if isinstance(exc, AsociacionDuplicada):
+        asociacion = exc.asociacion
+        return Response(
+            {
+                'detail': str(exc),
+                'codigo': 'duplicado',
+                'asociacion_id': asociacion.pk,
+                'producto_id': asociacion.producto_id,
+                'proveedor_id': asociacion.proveedor_id,
+                'precio_lista_actual': str(asociacion.precio_lista),
+            },
             status=400,
         )
 

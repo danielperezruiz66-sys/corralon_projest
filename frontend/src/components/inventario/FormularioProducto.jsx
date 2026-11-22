@@ -56,6 +56,77 @@ export default function FormularioProducto({
   })
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
+  const [tocados, setTocados] = useState({})
+
+  function calcularErrores() {
+    const nuevos = {}
+    const errorCodigo = validarCodigo(codigo)
+    if (errorCodigo) {
+      nuevos.codigo = `${errorCodigo} Ejemplo: CEM-50.`
+    }
+    const errorNombre = validarTexto(nombre, 'El nombre', {
+      min: 2,
+      max: 80,
+    })
+    if (errorNombre) {
+      nuevos.nombre = errorNombre
+    }
+    if (!categoria) {
+      nuevos.categoria = 'Seleccioná una categoría.'
+    }
+    if (!marca) {
+      nuevos.marca = 'Seleccioná una marca.'
+    }
+    if (!unidad) {
+      nuevos.unidad = 'Seleccioná una unidad.'
+    }
+    const errorPrecio = validarNumero(precio, {
+      etiqueta: 'El precio de venta',
+      mayorQueCero: true,
+      decimales: 2,
+    })
+    if (errorPrecio) {
+      nuevos.precio = errorPrecio
+    }
+    if (
+      !proveedor ||
+      !proveedorSeleccionado ||
+      String(proveedorSeleccionado.id) !== String(proveedor)
+    ) {
+      nuevos.proveedor =
+        'Seleccioná un proveedor activo. Usá el botón + para crear uno nuevo.'
+    }
+    const errorCosto = validarNumero(precioCosto, {
+      etiqueta: 'El precio de costo',
+      mayorQueCero: true,
+      decimales: 2,
+    })
+    if (errorCosto) {
+      nuevos.precioCosto = errorCosto
+    } else if (
+      !errorPrecio &&
+      Number(precioCosto) >= Number(precio)
+    ) {
+      nuevos.precioCosto = `El costo debe ser menor al precio de venta (${formatearMoneda(
+        precio,
+      )}). Subí el precio de venta o bajá el costo.`
+    }
+    if (seleccionadas.length === 0) {
+      nuevos.sucursales = 'Seleccioná al menos una sucursal.'
+    }
+    return nuevos
+  }
+
+  const erroresCalculados = calcularErrores()
+  const formularioValido = Object.keys(erroresCalculados).length === 0
+
+  function marcarTocado(campo) {
+    setTocados((previos) => ({ ...previos, [campo]: true }))
+  }
+
+  function mensaje(campo) {
+    return errores[campo] || (tocados[campo] ? erroresCalculados[campo] : '')
+  }
 
   const buscarProveedores = useCallback(async (texto) => {
     const respuesta = await pedir(
@@ -106,6 +177,7 @@ export default function FormularioProducto({
   }, [esEdicion, producto?.id])
 
   function alternarSucursal(id) {
+    marcarTocado('sucursales')
     setSeleccionadas((actuales) =>
       actuales.includes(id)
         ? actuales.filter((item) => item !== id)
@@ -115,63 +187,19 @@ export default function FormularioProducto({
 
   async function guardar(evento) {
     evento.preventDefault()
-    const nuevos = {}
-    const errorCodigo = validarCodigo(codigo)
-    if (errorCodigo) {
-      nuevos.codigo = errorCodigo
-    }
-    const errorNombre = validarTexto(nombre, 'El nombre', {
-      min: 2,
-      max: 80,
+    setTocados({
+      codigo: true,
+      nombre: true,
+      categoria: true,
+      marca: true,
+      unidad: true,
+      precio: true,
+      proveedor: true,
+      precioCosto: true,
+      sucursales: true,
     })
-    if (errorNombre) {
-      nuevos.nombre = errorNombre
-    }
-    if (!categoria) {
-      nuevos.categoria = 'Seleccioná una categoría.'
-    }
-    if (!marca) {
-      nuevos.marca = 'Seleccioná una marca.'
-    }
-    if (!unidad) {
-      nuevos.unidad = 'Seleccioná una unidad.'
-    }
-    const errorPrecio = validarNumero(precio, {
-      etiqueta: 'El precio de venta',
-      mayorQueCero: true,
-      decimales: 2,
-    })
-    if (errorPrecio) {
-      nuevos.precio = errorPrecio
-    }
-    if (
-      !proveedor ||
-      !proveedorSeleccionado ||
-      String(proveedorSeleccionado.id) !== String(proveedor)
-    ) {
-      nuevos.proveedor = 'Seleccioná un proveedor activo.'
-    }
-    const errorCosto = validarNumero(precioCosto, {
-      etiqueta: 'El precio de costo',
-      mayorQueCero: true,
-      decimales: 2,
-    })
-    if (errorCosto) {
-      nuevos.precioCosto = errorCosto
-    } else if (
-      !errorPrecio &&
-      Number(precioCosto) >= Number(precio)
-    ) {
-      nuevos.precioCosto = `El costo debe ser menor al precio de venta (${formatearMoneda(
-        precio,
-      )}).`
-    }
-    if (seleccionadas.length === 0) {
-      nuevos.sucursales = 'Seleccioná al menos una sucursal.'
-    }
-
-    if (Object.keys(nuevos).length > 0) {
-      setErrores(nuevos)
+    if (!formularioValido) {
+      setErrores({})
       requestAnimationFrame(() => {
         document.querySelector('.input-error')?.focus()
       })
@@ -259,80 +287,102 @@ export default function FormularioProducto({
             <span>Código *</span>
             <input
               type="text"
-              className={errores.codigo ? 'input-error' : ''}
+              className={mensaje('codigo') ? 'input-error' : ''}
               value={codigo}
-              onChange={(evento) => setCodigo(evento.target.value)}
+              onChange={(evento) => {
+                marcarTocado('codigo')
+                setCodigo(evento.target.value)
+              }}
             />
-            <MensajeError>{errores.codigo}</MensajeError>
+            <MensajeError>{mensaje('codigo')}</MensajeError>
           </label>
 
           <label className="campo-comercial">
             <span>Nombre *</span>
             <input
               type="text"
-              className={errores.nombre ? 'input-error' : ''}
+              className={mensaje('nombre') ? 'input-error' : ''}
               value={nombre}
-              onChange={(evento) => setNombre(evento.target.value)}
+              onChange={(evento) => {
+                marcarTocado('nombre')
+                setNombre(evento.target.value)
+              }}
             />
-            <MensajeError>{errores.nombre}</MensajeError>
+            <MensajeError>{mensaje('nombre')}</MensajeError>
           </label>
 
           <CampoSelectorBuscable
             etiqueta="Categoría *"
             valor={categoria}
-            onCambiar={setCategoria}
+            onCambiar={(valor) => {
+              marcarTocado('categoria')
+              setCategoria(valor)
+            }}
             opciones={categorias}
             textoOpcion={(item) => item.categorias}
             placeholder="Buscar categoría"
             onCrear={() => setCatalogoRapido('categorias')}
             tituloCrear="Nueva categoría"
-            error={Boolean(errores.categoria)}
-            mensajeError={errores.categoria}
+            error={Boolean(mensaje('categoria'))}
+            mensajeError={mensaje('categoria')}
           />
 
           <CampoSelectorBuscable
             etiqueta="Marca *"
             valor={marca}
-            onCambiar={setMarca}
+            onCambiar={(valor) => {
+              marcarTocado('marca')
+              setMarca(valor)
+            }}
             opciones={marcas}
             textoOpcion={(item) => item.marcas}
             placeholder="Buscar marca"
             onCrear={() => setCatalogoRapido('marcas')}
             tituloCrear="Nueva marca"
-            error={Boolean(errores.marca)}
-            mensajeError={errores.marca}
+            error={Boolean(mensaje('marca'))}
+            mensajeError={mensaje('marca')}
           />
 
           <CampoSelectorBuscable
             etiqueta="Unidad *"
             valor={unidad}
-            onCambiar={setUnidad}
+            onCambiar={(valor) => {
+              marcarTocado('unidad')
+              setUnidad(valor)
+            }}
             opciones={unidades}
             textoOpcion={(item) => item.unidades}
             placeholder="Buscar unidad"
             onCrear={() => setCatalogoRapido('unidades')}
             tituloCrear="Nueva unidad"
-            error={Boolean(errores.unidad)}
-            mensajeError={errores.unidad}
+            error={Boolean(mensaje('unidad'))}
+            mensajeError={mensaje('unidad')}
           />
 
           <label className="campo-comercial">
             <span>Precio de venta *</span>
             <input
               type="number"
-              className={errores.precio ? 'input-error' : ''}
+              className={mensaje('precio') ? 'input-error' : ''}
               min="0.01"
               step="0.01"
               value={precio}
-              onChange={(evento) => setPrecio(evento.target.value)}
+              onChange={(evento) => {
+                marcarTocado('precio')
+                setPrecio(evento.target.value)
+              }}
             />
-            <MensajeError>{errores.precio}</MensajeError>
+            <MensajeError>{mensaje('precio')}</MensajeError>
+            <small className="campo-ayuda">
+              Debe ser mayor que cero y superar el costo del proveedor.
+            </small>
           </label>
 
           <CampoSelectorBuscable
             etiqueta="Proveedor *"
             valor={proveedor}
             onCambiar={(valor, opcion) => {
+              marcarTocado('proveedor')
               setProveedor(valor)
               setProveedorSeleccionado(opcion || null)
             }}
@@ -344,26 +394,32 @@ export default function FormularioProducto({
               item.cuit ? `CUIT ${item.cuit}` : ''
             }
             placeholder="Buscar por nombre o CUIT"
-            onCrear={() => setProveedorRapido(true)}
+            onCrear={() => {
+              marcarTocado('proveedor')
+              setProveedorRapido(true)
+            }}
             tituloCrear="Nuevo proveedor"
-            error={Boolean(errores.proveedor)}
-            mensajeError={errores.proveedor}
+            error={Boolean(mensaje('proveedor'))}
+            mensajeError={mensaje('proveedor')}
           />
 
           <label className="campo-comercial">
             <span>Precio de costo *</span>
             <input
               type="number"
-              className={errores.precioCosto ? 'input-error' : ''}
+              className={mensaje('precioCosto') ? 'input-error' : ''}
               min="0.01"
               step="0.01"
               value={precioCosto}
-              onChange={(evento) => setPrecioCosto(evento.target.value)}
+              onChange={(evento) => {
+                marcarTocado('precioCosto')
+                setPrecioCosto(evento.target.value)
+              }}
             />
-            <MensajeError>{errores.precioCosto}</MensajeError>
+            <MensajeError>{mensaje('precioCosto')}</MensajeError>
             {Number(precio) > 0 && (
               <small className="campo-ayuda">
-                Debe ser menor al precio de venta (
+                Debe ser mayor que cero y menor al precio de venta (
                 {formatearMoneda(precio)}).
               </small>
             )}
@@ -408,7 +464,10 @@ export default function FormularioProducto({
                 </label>
               ))}
             </div>
-            <MensajeError>{errores.sucursales}</MensajeError>
+            <MensajeError>{mensaje('sucursales')}</MensajeError>
+            <small className="campo-ayuda">
+              El producto se ofrece solo en las sucursales marcadas.
+            </small>
           </div>
 
           <div className="comercial-modal-acciones ancho-completo">
@@ -422,7 +481,7 @@ export default function FormularioProducto({
             <button
               type="submit"
               className="boton-comercial-primario"
-              disabled={guardando}
+              disabled={guardando || !formularioValido}
             >
               {guardando ? (
                 <>
@@ -464,6 +523,7 @@ export default function FormularioProducto({
           onGuardado={(nuevo) => {
             setProveedor(String(nuevo.id))
             setProveedorSeleccionado(nuevo)
+            marcarTocado('proveedor')
             setProveedorRapido(false)
           }}
         />

@@ -55,6 +55,7 @@ from .models import (
     Usuario,
     Venta,
 )
+from .services.proveedores import AsociacionDuplicada
 from .utils import (
     validar_cantidad_por_unidad,
     validar_ingresos_brutos,
@@ -1051,7 +1052,7 @@ class ProductoSerializer(serializers.ModelSerializer):
             'codigo_producto_proveedor',
             None,
         )
-        sucursales = validated_data.pop('sucursales', [])
+        sucursales = list(dict.fromkeys(validated_data.pop('sucursales', [])))
         with transaction.atomic():
             producto = super().create(validated_data)
             ProductoXSucursal.objects.bulk_create(
@@ -1065,13 +1066,17 @@ class ProductoSerializer(serializers.ModelSerializer):
                 ]
             )
             if proveedor is not None and precio_lista is not None:
-                ProductoXProveedor.objects.create(
+                asociacion = ProductoXProveedor(
                     producto=producto,
                     proveedor=proveedor,
                     precio_lista=precio_lista,
                     codigo_producto_proveedor=codigo_proveedor or None,
                     estado=True,
                 )
+                asociacion._change_reason = (
+                    f'Alta de producto {producto.codigo} con costo inicial'
+                )
+                asociacion.save()
         producto._prefetched_objects_cache = {}
         return producto
 
@@ -1084,8 +1089,10 @@ class ProductoSerializer(serializers.ModelSerializer):
         )
         sucursales = validated_data.pop('sucursales', None)
         with transaction.atomic():
+            instance._change_reason = 'Edicion de producto desde Inventario'
             producto = super().update(instance, validated_data)
             if sucursales is not None:
+                sucursales = list(dict.fromkeys(sucursales))
                 seleccionadas = {sucursal.id for sucursal in sucursales}
                 producto.sucursales_asociadas.exclude(
                     sucursal_id__in=seleccionadas,
@@ -1101,7 +1108,7 @@ class ProductoSerializer(serializers.ModelSerializer):
                     proveedor=proveedor,
                 ).first()
                 if asociacion is None:
-                    ProductoXProveedor.objects.create(
+                    asociacion = ProductoXProveedor(
                         producto=producto,
                         proveedor=proveedor,
                         precio_lista=precio_lista,
@@ -1114,13 +1121,10 @@ class ProductoSerializer(serializers.ModelSerializer):
                         codigo_proveedor or None
                     )
                     asociacion.estado = True
-                    asociacion.save(
-                        update_fields=[
-                            'precio_lista',
-                            'codigo_producto_proveedor',
-                            'estado',
-                        ]
-                    )
+                asociacion._change_reason = (
+                    'Actualizacion de costo desde Inventario'
+                )
+                asociacion.save()
         producto._prefetched_objects_cache = {}
         return producto
 
@@ -1139,6 +1143,7 @@ class ProductoXSucursalSerializer(serializers.ModelSerializer):
             'sucursal_detalle',
             'estado',
         ]
+        validators = []
 
     def validate(self, attrs):
         estado = attrs.get(
@@ -1153,6 +1158,22 @@ class ProductoXSucursalSerializer(serializers.ModelSerializer):
             'sucursal',
             getattr(self.instance, 'sucursal', None),
         )
+        if producto is not None and sucursal is not None:
+            repetidas = ProductoXSucursal.objects.filter(
+                producto=producto,
+                sucursal=sucursal,
+            )
+            if self.instance is not None:
+                repetidas = repetidas.exclude(pk=self.instance.pk)
+            if repetidas.exists():
+                raise serializers.ValidationError(
+                    {
+                        'sucursal': (
+                            'La sucursal ya está asociada a este producto. '
+                            'Editá el registro existente.'
+                        )
+                    }
+                )
         if not estado:
             if producto is not None:
                 otras = ProductoXSucursal.objects.filter(
@@ -1634,7 +1655,7 @@ class ProveedorSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        sucursales = validated_data.pop('sucursales', [])
+        sucursales = list(dict.fromkeys(validated_data.pop('sucursales', [])))
         proveedor = super().create(validated_data)
         ProveedorXSucursal.objects.bulk_create(
             [
@@ -1650,8 +1671,10 @@ class ProveedorSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         sucursales = validated_data.pop('sucursales', None)
+        instance._change_reason = 'Edicion de proveedor'
         proveedor = super().update(instance, validated_data)
         if sucursales is not None:
+            sucursales = list(dict.fromkeys(sucursales))
             seleccionadas = {sucursal.id for sucursal in sucursales}
             proveedor.sucursales_asociadas.exclude(
                 sucursal_id__in=seleccionadas,
@@ -1680,17 +1703,38 @@ class ProveedorXSucursalSerializer(serializers.ModelSerializer):
             'sucursal_detalle',
             'estado',
         ]
+        validators = []
 
     def validate(self, attrs):
         estado = attrs.get(
             'estado',
             getattr(self.instance, 'estado', True),
         )
-        if not estado:
-            proveedor = attrs.get(
-                'proveedor',
-                getattr(self.instance, 'proveedor', None),
+        proveedor = attrs.get(
+            'proveedor',
+            getattr(self.instance, 'proveedor', None),
+        )
+        sucursal = attrs.get(
+            'sucursal',
+            getattr(self.instance, 'sucursal', None),
+        )
+        if proveedor is not None and sucursal is not None:
+            repetidas = ProveedorXSucursal.objects.filter(
+                proveedor=proveedor,
+                sucursal=sucursal,
             )
+            if self.instance is not None:
+                repetidas = repetidas.exclude(pk=self.instance.pk)
+            if repetidas.exists():
+                raise serializers.ValidationError(
+                    {
+                        'sucursal': (
+                            'La sucursal ya está asociada a este proveedor. '
+                            'Editá el registro existente.'
+                        )
+                    }
+                )
+        if not estado:
             if proveedor is not None:
                 otras = ProveedorXSucursal.objects.filter(
                     proveedor=proveedor,
@@ -1764,11 +1808,16 @@ class ProductoXProveedorSerializer(serializers.ModelSerializer):
             'precio_lista',
             'estado',
         ]
+        validators = []
 
     def validate(self, attrs):
         producto = attrs.get(
             'producto',
             getattr(self.instance, 'producto', None),
+        )
+        proveedor = attrs.get(
+            'proveedor',
+            getattr(self.instance, 'proveedor', None),
         )
         precio_lista = attrs.get(
             'precio_lista',
@@ -1778,6 +1827,16 @@ class ProductoXProveedorSerializer(serializers.ModelSerializer):
             'estado',
             getattr(self.instance, 'estado', True),
         )
+        if producto is not None and proveedor is not None:
+            duplicadas = ProductoXProveedor.objects.filter(
+                producto=producto,
+                proveedor=proveedor,
+            )
+            if self.instance is not None:
+                duplicadas = duplicadas.exclude(pk=self.instance.pk)
+            existente = duplicadas.first()
+            if existente is not None:
+                raise AsociacionDuplicada(existente)
         if (
             estado
             and producto is not None

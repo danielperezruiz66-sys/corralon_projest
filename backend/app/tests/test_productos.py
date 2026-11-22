@@ -1,4 +1,8 @@
-from app.models import ProductoXProveedor, ProductoXSucursal
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
+
+from app.models import Producto, ProductoXProveedor, ProductoXSucursal
 
 from .base import BaseCorralonTestCase
 
@@ -170,3 +174,20 @@ class ProductoApiTests(BaseCorralonTestCase):
             ).count(),
             1,
         )
+
+    def test_modelo_valida_precio_unidad_positivo(self):
+        producto = Producto.objects.get(pk=self.producto.pk)
+        producto.precio_unidad = Decimal('0.00')
+
+        with self.assertRaises(ValidationError):
+            producto.full_clean()
+
+    def test_modelo_valida_precio_lista_positivo(self):
+        asociacion = ProductoXProveedor(
+            producto=self.producto,
+            proveedor=self.proveedor,
+            precio_lista=Decimal('0.00'),
+        )
+
+        with self.assertRaises(ValidationError):
+            asociacion.full_clean()

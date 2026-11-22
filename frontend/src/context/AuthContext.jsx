@@ -5,6 +5,7 @@ import {
   obtenerPerfil,
 } from '../api/auth'
 import { tieneSesion } from '../api/client'
+import { precargarListadoVentas } from '../api/ventas'
 import { AuthContext } from './auth-context'
 
 function normalizarPerfil(perfil) {
@@ -47,6 +48,7 @@ export function AuthProvider({ children }) {
       .then((datos) => {
         if (vigente) {
           setPerfil(datos)
+          precargarListadoVentas(datos)
         }
       })
       .catch(() => {
@@ -66,6 +68,7 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (usuario, password) => {
     const datos = await iniciarSesion(usuario, password)
     setPerfil(datos)
+    precargarListadoVentas(datos)
     return datos
   }, [])
 

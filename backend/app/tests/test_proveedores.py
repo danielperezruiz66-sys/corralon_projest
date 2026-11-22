@@ -1,4 +1,13 @@
-from app.models import ProductoXProveedor, Proveedor
+from decimal import Decimal
+
+from django.db import IntegrityError, transaction
+
+from app.models import (
+    ProductoXProveedor,
+    ProductoXSucursal,
+    Proveedor,
+    ProveedorXSucursal,
+)
 
 from .base import BaseCorralonTestCase
 
@@ -97,13 +106,22 @@ class ProveedorApiTests(BaseCorralonTestCase):
             2,
         )
 
-    def test_actualiza_costos_existentes_sin_duplicar(self):
+    def test_rechaza_producto_ya_asociado_al_proveedor(self):
         self.autenticar(self.user_deposito)
-        self.client.post(
+        creado = self.client.post(
             f'/api/proveedores/{self.proveedor.id}/productos/',
-            self._payload_productos(),
+            {
+                'items': [
+                    {
+                        'producto': self.producto.id,
+                        'precio_lista': '80.00',
+                    }
+                ]
+            },
             format='json',
         )
+        self.assertEqual(creado.status_code, 200)
+        asociacion_id = creado.data[0]['id']
 
         respuesta = self.client.post(
             f'/api/proveedores/{self.proveedor.id}/productos/',
@@ -118,7 +136,11 @@ class ProveedorApiTests(BaseCorralonTestCase):
             format='json',
         )
 
-        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.data['codigo'], 'duplicado')
+        self.assertEqual(respuesta.data['asociacion_id'], asociacion_id)
+        self.assertEqual(respuesta.data['precio_lista_actual'], '80.00')
+        self.assertIn('costo vigente', respuesta.data['detail'])
         self.assertEqual(
             ProductoXProveedor.objects.filter(
                 proveedor=self.proveedor,
@@ -128,13 +150,137 @@ class ProveedorApiTests(BaseCorralonTestCase):
         )
         self.assertEqual(
             str(
-                ProductoXProveedor.objects.get(
-                    proveedor=self.proveedor,
-                    producto=self.producto,
-                ).precio_lista
+                ProductoXProveedor.objects.get(pk=asociacion_id).precio_lista
             ),
-            '85.00',
+            '80.00',
         )
+
+    def test_actualiza_costo_existente_por_patch(self):
+        self.autenticar(self.user_deposito)
+        creado = self.client.post(
+            f'/api/proveedores/{self.proveedor.id}/productos/',
+            {
+                'items': [
+                    {
+                        'producto': self.producto.id,
+                        'precio_lista': '80.00',
+                    }
+                ]
+            },
+            format='json',
+        )
+        asociacion_id = creado.data[0]['id']
+
+        respuesta = self.client.patch(
+            f'/api/productos-proveedores/{asociacion_id}/',
+            {'precio_lista': '85.00'},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['precio_lista'], '85.00')
+        self.assertEqual(
+            ProductoXProveedor.objects.filter(
+                proveedor=self.proveedor,
+                producto=self.producto,
+            ).count(),
+            1,
+        )
+
+    def test_producto_proveedor_api_bloquea_par_duplicado(self):
+        self.autenticar(self.user_deposito)
+        ProductoXProveedor.objects.create(
+            producto=self.producto,
+            proveedor=self.proveedor,
+            precio_lista=Decimal('70.00'),
+        )
+
+        respuesta = self.client.post(
+            '/api/productos-proveedores/',
+            {
+                'producto': self.producto.id,
+                'proveedor': self.proveedor.id,
+                'precio_lista': '75.00',
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.data['codigo'], 'duplicado')
+        self.assertEqual(respuesta.data['precio_lista_actual'], '70.00')
+        self.assertEqual(
+            ProductoXProveedor.objects.filter(
+                producto=self.producto,
+                proveedor=self.proveedor,
+            ).count(),
+            1,
+        )
+
+    def test_producto_sucursal_api_bloquea_par_duplicado(self):
+        self.autenticar(self.user_gerente)
+        ProductoXSucursal.objects.create(
+            producto=self.producto,
+            sucursal=self.sucursal,
+        )
+
+        respuesta = self.client.post(
+            '/api/productos-sucursales/',
+            {
+                'producto': self.producto.id,
+                'sucursal': self.sucursal.id,
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('sucursal', respuesta.data)
+        self.assertEqual(
+            ProductoXSucursal.objects.filter(
+                producto=self.producto,
+                sucursal=self.sucursal,
+            ).count(),
+            1,
+        )
+
+    def test_proveedor_sucursal_api_bloquea_par_duplicado(self):
+        self.autenticar(self.user_gerente)
+        ProveedorXSucursal.objects.create(
+            proveedor=self.proveedor,
+            sucursal=self.sucursal,
+        )
+
+        respuesta = self.client.post(
+            '/api/proveedores-sucursales/',
+            {
+                'proveedor': self.proveedor.id,
+                'sucursal': self.sucursal.id,
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('sucursal', respuesta.data)
+        self.assertEqual(
+            ProveedorXSucursal.objects.filter(
+                proveedor=self.proveedor,
+                sucursal=self.sucursal,
+            ).count(),
+            1,
+        )
+
+    def test_base_de_datos_rechaza_asociacion_producto_proveedor(self):
+        ProductoXProveedor.objects.create(
+            producto=self.producto,
+            proveedor=self.proveedor,
+            precio_lista=Decimal('70.00'),
+        )
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ProductoXProveedor.objects.create(
+                producto=self.producto,
+                proveedor=self.proveedor,
+                precio_lista=Decimal('75.00'),
+            )
 
     def test_no_asocia_costo_mayor_o_igual_al_precio(self):
         self.autenticar(self.user_deposito)

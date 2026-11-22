@@ -571,7 +571,11 @@ class Producto(models.Model):
         related_name='productos',
     )
     nombre = models.CharField(max_length=80)
-    precio_unidad = models.DecimalField(max_digits=10, decimal_places=2)
+    precio_unidad = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+    )
     descripcion = models.CharField(max_length=150, null=True, blank=True)
     sucursales = models.ManyToManyField(
         Sucursal,
@@ -608,6 +612,12 @@ class ProductoXSucursal(models.Model):
         db_table = 'PRODUCTOSXSUCURSALES'
         verbose_name = 'Producto por Sucursal'
         verbose_name_plural = 'Productos por Sucursales'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['producto', 'sucursal'],
+                name='un_producto_por_sucursal',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.producto} - {self.sucursal}'
@@ -777,6 +787,12 @@ class ProveedorXSucursal(models.Model):
         db_table = 'PROVEEDORES_X_SUCURSALES'
         verbose_name = 'Proveedor por Sucursal'
         verbose_name_plural = 'Proveedores por Sucursales'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['proveedor', 'sucursal'],
+                name='un_proveedor_por_sucursal',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.proveedor} - {self.sucursal}'
@@ -794,7 +810,11 @@ class ProductoXProveedor(models.Model):
         related_name='productos_asociados',
     )
     codigo_producto_proveedor = models.CharField(max_length=30, null=True, blank=True)
-    precio_lista = models.DecimalField(max_digits=10, decimal_places=2)
+    precio_lista = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+    )
     estado = models.BooleanField(default=True)
 
     history = HistoricalRecords()
@@ -803,6 +823,12 @@ class ProductoXProveedor(models.Model):
         db_table = 'PRODUCTOS_X_PROVEEDORES'
         verbose_name = 'Producto por Proveedor'
         verbose_name_plural = 'Productos por Proveedores'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['producto', 'proveedor'],
+                name='un_producto_por_proveedor',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.producto} - {self.proveedor}'

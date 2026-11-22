@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   IconAlertTriangle,
@@ -21,6 +21,7 @@ import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
+import useCacheModulo from '../hooks/useCacheModulo'
 import {
   etiquetaDia,
   formatearFecha,
@@ -158,10 +159,6 @@ function normalizarDashboard(recibido) {
   }
 }
 
-// Cache en memoria del ultimo dashboard: al volver desde otro modulo se
-// muestra al instante y la actualizacion sigue en segundo plano.
-let cacheDashboard = null
-
 function TarjetaKpi({ icono: Icono, etiqueta, valor, detalle, tono = '' }) {
   return (
     <article className={`kpi-tarjeta ${tono}`}>
@@ -205,20 +202,6 @@ export default function Inicio() {
   const { user } = useAuth()
   const { sucursalActiva } = useSucursal()
   const location = useLocation()
-  const claveCache = `${user?.id ?? ''}|${sucursalActiva || ''}`
-  const cacheInicial =
-    cacheDashboard && cacheDashboard.clave === claveCache
-      ? cacheDashboard
-      : null
-  const [datos, setDatos] = useState(cacheInicial?.datos ?? DATOS_VACIOS)
-  const [cargando, setCargando] = useState(!cacheInicial)
-  const [actualizando, setActualizando] = useState(Boolean(cacheInicial))
-  const [tieneDatos, setTieneDatos] = useState(Boolean(cacheInicial))
-  const [ultimaActualizacion, setUltimaActualizacion] = useState(
-    cacheInicial?.actualizado ?? null,
-  )
-  const [error, setError] = useState('')
-  const solicitudRef = useRef(false)
 
   const consultar = useCallback(() => {
     const parametros = new URLSearchParams()
@@ -226,69 +209,25 @@ export default function Inicio() {
       parametros.set('sucursal', sucursalActiva)
     }
     const consulta = parametros.toString()
-    return pedir(`/dashboard/${consulta ? `?${consulta}` : ''}`)
+    return pedir(`/dashboard/${consulta ? `?${consulta}` : ''}`).then(
+      normalizarDashboard,
+    )
   }, [sucursalActiva])
 
-  const aplicarRespuesta = useCallback(
-    (respuesta) => {
-      const normalizado = normalizarDashboard(respuesta)
-      const ahora = new Date()
-      setDatos(normalizado)
-      setError('')
-      setTieneDatos(true)
-      setUltimaActualizacion(ahora)
-      cacheDashboard = {
-        clave: claveCache,
-        datos: normalizado,
-        actualizado: ahora,
-      }
-    },
-    [claveCache],
-  )
-
-  const cargar = useCallback(async () => {
-    if (solicitudRef.current) {
-      return
-    }
-
-    solicitudRef.current = true
-    try {
-      const respuesta = await consultar()
-      aplicarRespuesta(respuesta)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      solicitudRef.current = false
-      setCargando(false)
-      setActualizando(false)
-    }
-  }, [consultar, aplicarRespuesta])
-
-  useEffect(() => {
-    let vigente = true
-
-    consultar()
-      .then((respuesta) => {
-        if (vigente) {
-          aplicarRespuesta(respuesta)
-        }
-      })
-      .catch((e) => {
-        if (vigente) {
-          setError(e.message)
-        }
-      })
-      .finally(() => {
-        if (vigente) {
-          setCargando(false)
-          setActualizando(false)
-        }
-      })
-
-    return () => {
-      vigente = false
-    }
-  }, [consultar, aplicarRespuesta])
+  const {
+    datos,
+    cargando,
+    actualizando,
+    tieneDatos,
+    error,
+    ultimaActualizacion,
+    refrescar,
+  } = useCacheModulo({
+    clave: `dashboard|${user?.id ?? ''}|${sucursalActiva || ''}`,
+    consultar,
+    inicial: DATOS_VACIOS,
+    intervalo: 15000,
+  })
 
   useEffect(() => {
     if (cargando || !location.hash) {
@@ -299,42 +238,6 @@ export default function Inicio() {
       destino.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [cargando, location.hash])
-
-  useEffect(() => {
-    const intervalo = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        setActualizando(true)
-        cargar()
-      }
-    }, 15000)
-
-    const alEnfocar = () => {
-      setActualizando(true)
-      cargar()
-    }
-
-    const alCambiarVisibilidad = () => {
-      if (document.visibilityState === 'visible') {
-        setActualizando(true)
-        cargar()
-      }
-    }
-
-    window.addEventListener('focus', alEnfocar)
-    document.addEventListener('visibilitychange', alCambiarVisibilidad)
-
-    return () => {
-      clearInterval(intervalo)
-      window.removeEventListener('focus', alEnfocar)
-      document.removeEventListener('visibilitychange', alCambiarVisibilidad)
-    }
-  }, [cargar])
-
-  const reintentar = () => {
-    setActualizando(true)
-    setError('')
-    cargar()
-  }
 
   const nombreBase = user?.nombre?.split(' ')[0] ?? ''
   const nombre = nombreBase
@@ -364,7 +267,11 @@ export default function Inicio() {
           <IconAlertTriangle size={36} />
           <p>No pudimos cargar el dashboard.</p>
           <small>{error}</small>
-          <button type="button" className="boton-reintentar" onClick={reintentar}>
+          <button
+            type="button"
+            className="boton-reintentar"
+            onClick={() => refrescar()}
+          >
             <IconRefresh size={18} />
             Reintentar
           </button>
@@ -489,7 +396,7 @@ export default function Inicio() {
         {error && tieneDatos && (
           <div className="dashboard-error-inline">
             <span>{error}</span>
-            <button type="button" onClick={reintentar}>
+            <button type="button" onClick={() => refrescar()}>
               Reintentar
             </button>
           </div>

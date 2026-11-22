@@ -1737,8 +1737,10 @@ class VentaViewSet(
     viewsets.GenericViewSet,
 ):
     queryset = (
-        Venta.objects.select_related('movimiento_caja__caja', 'cliente')
-        .prefetch_related('detalles__producto', 'pagos__metodo_pago')
+        Venta.objects.select_related(
+            'movimiento_caja__caja__sucursal',
+            'cliente',
+        ).prefetch_related('detalles__producto', 'pagos__metodo_pago')
     )
     serializer_class = serializers.VentaSerializer
     permission_classes = [PermisoPorRol]

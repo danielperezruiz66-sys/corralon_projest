@@ -2,11 +2,46 @@ import { useCallback, useState } from 'react'
 import Swal from 'sweetalert2'
 import { IconLoader2, IconPackage, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
+import { esAsociacionDuplicada, ofrecerActualizarDuplicado } from '../../utils/asociaciones'
 import { formatearMoneda } from '../../utils/formato'
 import { validarNumero } from '../../utils/validaciones'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 import MensajeError from '../common/MensajeError.jsx'
 import FormularioProveedor from './FormularioProveedor.jsx'
+
+function validarProveedor(valor, seleccionado) {
+  if (!valor || !seleccionado || String(seleccionado.id) !== String(valor)) {
+    return 'Seleccioná un proveedor activo. Usá el botón + para crear uno nuevo.'
+  }
+  return ''
+}
+
+function validarProducto(valor, seleccionado) {
+  if (!valor || !seleccionado || String(seleccionado.id) !== String(valor)) {
+    return 'Seleccioná un producto. Usá el botón + si todavía no existe.'
+  }
+  return ''
+}
+
+function validarPrecioCosto(valor, producto) {
+  const error = validarNumero(valor, {
+    etiqueta: 'El precio de costo',
+    mayorQueCero: true,
+    decimales: 2,
+  })
+  if (error) {
+    return error
+  }
+  if (
+    producto &&
+    Number(valor) >= Number(producto.precio_unidad)
+  ) {
+    return `El costo debe ser menor al precio de venta (${formatearMoneda(
+      producto.precio_unidad,
+    )}). Bajá el costo o subí el precio del producto en Inventario.`
+  }
+  return ''
+}
 
 export default function FormularioProductoProveedor({
   asociacion = null,
@@ -52,6 +87,16 @@ export default function FormularioProductoProveedor({
   const [estado, setEstado] = useState(asociacion?.estado ?? true)
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
+  const [tocados, setTocados] = useState({})
+
+  const errorProveedor = validarProveedor(proveedor, proveedorSeleccionado)
+  const errorProducto = validarProducto(producto, productoSeleccionado)
+  const errorPrecio = validarPrecioCosto(precio, productoSeleccionado)
+  const formularioValido = !errorProveedor && !errorProducto && !errorPrecio
+
+  function marcarTocado(campo) {
+    setTocados((previos) => ({ ...previos, [campo]: true }))
+  }
 
   const buscarProveedores = useCallback(async (texto) => {
     const respuesta = await pedir(
@@ -72,35 +117,15 @@ export default function FormularioProductoProveedor({
   function proveedorCreado(nuevo) {
     setProveedor(String(nuevo.id))
     setProveedorSeleccionado(nuevo)
+    marcarTocado('proveedor')
     setProveedorRapido(false)
   }
 
   async function guardar(evento) {
     evento.preventDefault()
-    const nuevos = {}
-    if (!proveedor || !proveedorSeleccionado) {
-      nuevos.proveedor = 'Seleccioná un proveedor activo.'
-    }
-    if (!producto || !productoSeleccionado) {
-      nuevos.producto = 'Seleccioná un producto.'
-    }
-    const errorPrecio = validarNumero(precio, {
-      etiqueta: 'El precio de costo',
-      mayorQueCero: true,
-      decimales: 2,
-    })
-    if (errorPrecio) {
-      nuevos.precio = errorPrecio
-    } else if (
-      productoSeleccionado &&
-      Number(precio) >= Number(productoSeleccionado.precio_unidad)
-    ) {
-      nuevos.precio = `El costo debe ser menor al precio de venta (${formatearMoneda(
-        productoSeleccionado.precio_unidad,
-      )}).`
-    }
-    if (Object.keys(nuevos).length > 0) {
-      setErrores(nuevos)
+    setTocados({ proveedor: true, producto: true, precio: true })
+    if (!formularioValido) {
+      setErrores({})
       requestAnimationFrame(() => {
         document.querySelector('.input-error')?.focus()
       })
@@ -128,6 +153,40 @@ export default function FormularioProductoProveedor({
       )
       onGuardado?.(guardado, esEdicion)
     } catch (e) {
+      if (esAsociacionDuplicada(e)) {
+        const existente = await ofrecerActualizarDuplicado(e, {
+          producto: productoSeleccionado?.nombre,
+          proveedor:
+            proveedorSeleccionado?.razon_social ||
+            proveedorSeleccionado?.nombre,
+        })
+        if (existente) {
+          try {
+            const actualizado = await pedir(
+              `/productos-proveedores/${existente.asociacionId}/`,
+              {
+                method: 'PATCH',
+                body: JSON.stringify({
+                  proveedor: Number(proveedor),
+                  producto: Number(producto),
+                  codigo_producto_proveedor: codigo.trim() || null,
+                  precio_lista: precioNumero.toFixed(2),
+                  estado,
+                }),
+              },
+            )
+            onGuardado?.(actualizado, true)
+          } catch (errorActualizacion) {
+            Swal.fire({
+              icon: 'error',
+              title: 'No se pudo actualizar el costo existente',
+              text: errorActualizacion.message,
+              confirmButtonColor: '#4a9da8',
+            })
+          }
+        }
+        return
+      }
       if (e.campos) {
         setErrores(e.campos)
         requestAnimationFrame(() => {
@@ -170,6 +229,7 @@ export default function FormularioProductoProveedor({
             etiqueta="Proveedor *"
             valor={proveedor}
             onCambiar={(valor, opcion) => {
+              marcarTocado('proveedor')
               setProveedor(valor)
               setProveedorSeleccionado(opcion || null)
             }}
@@ -183,14 +243,17 @@ export default function FormularioProductoProveedor({
             placeholder="Buscar por nombre o CUIT"
             onCrear={() => setProveedorRapido(true)}
             tituloCrear="Nuevo proveedor"
-            error={Boolean(errores.proveedor)}
-            mensajeError={errores.proveedor}
+            error={Boolean(errores.proveedor || (tocados.proveedor && errorProveedor))}
+            mensajeError={
+              errores.proveedor || (tocados.proveedor ? errorProveedor : '')
+            }
           />
 
           <CampoSelectorBuscable
             etiqueta="Producto *"
             valor={producto}
             onCambiar={(valor, opcion) => {
+              marcarTocado('producto')
               setProducto(valor)
               setProductoSeleccionado(opcion || null)
             }}
@@ -202,8 +265,10 @@ export default function FormularioProductoProveedor({
               `${item.codigo} · ${item.categoria_detalle}`
             }
             placeholder="Buscar por código o nombre"
-            error={Boolean(errores.producto)}
-            mensajeError={errores.producto}
+            error={Boolean(errores.producto || (tocados.producto && errorProducto))}
+            mensajeError={
+              errores.producto || (tocados.producto ? errorProducto : '')
+            }
           />
 
           <label className="campo-comercial">
@@ -219,16 +284,26 @@ export default function FormularioProductoProveedor({
             <span>Precio de costo *</span>
             <input
               type="number"
-              className={errores.precio ? 'input-error' : ''}
+              className={
+                errores.precio || (tocados.precio && errorPrecio)
+                  ? 'input-error'
+                  : ''
+              }
               min="0.01"
               step="0.01"
               value={precio}
-              onChange={(evento) => setPrecio(evento.target.value)}
+              onChange={(evento) => {
+                marcarTocado('precio')
+                setPrecio(evento.target.value)
+              }}
             />
-            <MensajeError>{errores.precio}</MensajeError>
+            <MensajeError>
+              {errores.precio || (tocados.precio ? errorPrecio : '')}
+            </MensajeError>
             {productoSeleccionado && (
               <small className="campo-ayuda">
-                Venta: {formatearMoneda(productoSeleccionado.precio_unidad)}
+                Venta: {formatearMoneda(productoSeleccionado.precio_unidad)}.
+                El costo debe ser menor y mayor que cero.
               </small>
             )}
           </label>
@@ -253,7 +328,7 @@ export default function FormularioProductoProveedor({
             <button
               type="submit"
               className="boton-comercial-primario"
-              disabled={guardando}
+              disabled={guardando || !formularioValido}
             >
               {guardando ? (
                 <>

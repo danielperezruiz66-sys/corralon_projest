@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -20,13 +20,20 @@ import {
 } from '@tabler/icons-react'
 import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
+import {
+  ORDEN_VENTAS,
+  claveListadoVentas,
+  prefijoCacheVentas,
+} from '../api/ventas'
 import Encabezado from '../components/Encabezado.jsx'
 import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
 import FormularioVenta from '../components/comercial/FormularioVenta.jsx'
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
+import useCacheModulo from '../hooks/useCacheModulo'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
+import { isoAyer, isoHoy } from '../utils/fechas'
 import { nuevaClave } from '../utils/clave'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
@@ -63,7 +70,7 @@ const ESTADOS = [
   },
 ]
 
-const ORDEN_INICIAL = '-fecha_venta'
+const ORDEN_INICIAL = ORDEN_VENTAS
 let siguientePagoId = 1
 
 function nuevoPago(metodo = '', monto = '') {
@@ -96,14 +103,13 @@ function saldoVenta(venta) {
 }
 
 export default function Ventas() {
-  const { puedeEscribir } = useAuth()
+  const { user, puedeEscribir } = useAuth()
   const { sucursalActiva } = useSucursal()
   const puedeCobrar = puedeEscribir(['GE', 'CA'])
   const [searchParams, setSearchParams] = useSearchParams()
   const [clienteInicial] = useState(
     () => searchParams.get('cliente') || '',
   )
-  const [datos, setDatos] = useState(PAGINA_VACIA)
   const [texto, setTexto] = useState(() => searchParams.get('search') || '')
   const [estado, setEstado] = useState(
     () => searchParams.get('estado') || '',
@@ -122,11 +128,7 @@ export default function Ventas() {
   const [pagina, setPagina] = useState(
     () => Number(searchParams.get('page')) || 1,
   )
-  const [refresco, setRefresco] = useState(0)
-  const [cargando, setCargando] = useState(true)
-  const [actualizando, setActualizando] = useState(false)
   const [exportando, setExportando] = useState(false)
-  const [error, setError] = useState('')
   const [detalle, setDetalle] = useState(null)
   const [cobro, setCobro] = useState(null)
   const [claveCobro, setClaveCobro] = useState('')
@@ -146,6 +148,63 @@ export default function Ventas() {
   const rangoInvalido = Boolean(
     fechas.desde && fechas.hasta && fechas.desde > fechas.hasta,
   )
+
+  const consulta = useMemo(() => {
+    const parametros = new URLSearchParams({ page: String(pagina) })
+    if (busqueda) {
+      parametros.set('search', busqueda)
+    }
+    if (estado) {
+      parametros.set('estado', estado)
+    }
+    if (alerta) {
+      parametros.set('alerta', alerta)
+    }
+    if (sucursalActiva) {
+      parametros.set('sucursal', sucursalActiva)
+    }
+    if (fechas.fecha) {
+      parametros.set('fecha', fechas.fecha)
+    }
+    if (fechas.desde) {
+      parametros.set('fecha_desde', fechas.desde)
+    }
+    if (fechas.hasta) {
+      parametros.set('fecha_hasta', fechas.hasta)
+    }
+    if (orden) {
+      parametros.set('ordering', orden)
+    }
+    return parametros.toString()
+  }, [pagina, busqueda, estado, alerta, sucursalActiva, fechas, orden])
+
+  const clave = claveListadoVentas(user?.id, consulta)
+  const consultar = useCallback(
+    ({ signal } = {}) => pedir(`/ventas/?${consulta}`, { signal }),
+    [consulta],
+  )
+
+  const claveUsuario = prefijoCacheVentas(user?.id)
+  const {
+    datos,
+    cargando,
+    actualizando,
+    error,
+    refrescar,
+    invalidar,
+    limpiarError,
+  } = useCacheModulo({
+    clave,
+    consultar,
+    inicial: PAGINA_VACIA,
+    activo: !rangoInvalido,
+  })
+
+  const actualizarListado = useCallback(() => {
+    invalidar(claveUsuario)
+    refrescar(true)
+  }, [claveUsuario, invalidar, refrescar])
+
   const hayFiltros = Boolean(
     texto ||
       estado ||
@@ -205,77 +264,6 @@ export default function Ventas() {
     setSearchParams(parametros, { replace: true })
   }, [busqueda, estado, alerta, fechas, orden, pagina, setSearchParams])
 
-  useEffect(() => {
-    if (rangoInvalido) {
-      return undefined
-    }
-
-    let vigente = true
-    const controlador = new AbortController()
-    const parametros = new URLSearchParams({ page: String(pagina) })
-    if (busqueda) {
-      parametros.set('search', busqueda)
-    }
-    if (estado) {
-      parametros.set('estado', estado)
-    }
-    if (alerta) {
-      parametros.set('alerta', alerta)
-    }
-    if (sucursalActiva) {
-      parametros.set('sucursal', sucursalActiva)
-    }
-    if (fechas.fecha) {
-      parametros.set('fecha', fechas.fecha)
-    }
-    if (fechas.desde) {
-      parametros.set('fecha_desde', fechas.desde)
-    }
-    if (fechas.hasta) {
-      parametros.set('fecha_hasta', fechas.hasta)
-    }
-    if (orden) {
-      parametros.set('ordering', orden)
-    }
-
-    pedir(`/ventas/?${parametros.toString()}`, {
-      signal: controlador.signal,
-    })
-      .then((respuesta) => {
-        if (vigente) {
-          setDatos(respuesta)
-          setError('')
-        }
-      })
-      .catch((e) => {
-        if (!vigente || e.name === 'AbortError') {
-          return
-        }
-        setError(e.message)
-      })
-      .finally(() => {
-        if (vigente) {
-          setCargando(false)
-          setActualizando(false)
-        }
-      })
-
-    return () => {
-      vigente = false
-      controlador.abort()
-    }
-  }, [
-    pagina,
-    busqueda,
-    estado,
-    alerta,
-    fechas,
-    orden,
-    refresco,
-    rangoInvalido,
-    sucursalActiva,
-  ])
-
   function abrirNueva(modoNuevo = 'venta') {
     setModo(modoNuevo)
     setModalAbierto(true)
@@ -284,8 +272,7 @@ export default function Ventas() {
   function limpiarTexto() {
     setTexto('')
     setPagina(1)
-    setError('')
-    setActualizando(true)
+    limpiarError()
   }
 
   function limpiarTodo() {
@@ -295,8 +282,7 @@ export default function Ventas() {
     setFechas({ fecha: '', desde: '', hasta: '' })
     setOrden(ORDEN_INICIAL)
     setPagina(1)
-    setError('')
-    setActualizando(true)
+    limpiarError()
   }
 
   function cambiarEstado(nuevoEstado) {
@@ -306,23 +292,18 @@ export default function Ventas() {
     setEstado(nuevoEstado)
     setAlerta('')
     setPagina(1)
-    setError('')
-    setActualizando(true)
+    limpiarError()
   }
 
   function cambiarFechas(nuevas) {
     setFechas(nuevas)
     setPagina(1)
-    setError('')
-    setActualizando(
-      !(nuevas.desde && nuevas.hasta && nuevas.desde > nuevas.hasta),
-    )
+    limpiarError()
   }
 
   function irAPagina(nueva) {
     setPagina(nueva)
-    setError('')
-    setActualizando(true)
+    limpiarError()
   }
 
   function alternarOrden(campo) {
@@ -330,7 +311,7 @@ export default function Ventas() {
       actual === `-${campo}` ? campo : `-${campo}`,
     )
     setPagina(1)
-    setActualizando(true)
+    limpiarError()
   }
 
   function iconoOrden(campo) {
@@ -531,7 +512,7 @@ export default function Ventas() {
         showConfirmButton: false,
       })
       setCobro(null)
-      setRefresco((valor) => valor + 1)
+      actualizarListado()
     } catch (e) {
       Swal.fire({
         icon: 'error',
@@ -539,7 +520,7 @@ export default function Ventas() {
         text: e.message,
         confirmButtonColor: '#4a9da8',
       })
-      setRefresco((valor) => valor + 1)
+      actualizarListado()
     } finally {
       setCobrando(false)
     }
@@ -568,7 +549,7 @@ export default function Ventas() {
         timer: 1500,
         showConfirmButton: false,
       })
-      setRefresco((valor) => valor + 1)
+      actualizarListado()
     } catch (e) {
       Swal.fire({
         icon: 'error',
@@ -621,7 +602,7 @@ export default function Ventas() {
         timer: 1500,
         showConfirmButton: false,
       })
-      setRefresco((valor) => valor + 1)
+      actualizarListado()
     } catch (e) {
       Swal.fire({
         icon: 'error',
@@ -729,8 +710,7 @@ export default function Ventas() {
               setAlerta(activa ? '' : 'vencida')
               setEstado('')
               setPagina(1)
-              setError('')
-              setActualizando(true)
+              limpiarError()
             }}
           >
             Vencidas
@@ -740,6 +720,9 @@ export default function Ventas() {
         <FiltrosFecha
           valores={fechas}
           onCambiar={cambiarFechas}
+          desdeMaximo={isoAyer()}
+          hastaMaximo={isoHoy()}
+          diaMaximo={isoHoy()}
           error={
             rangoInvalido
               ? 'La fecha desde no puede ser posterior a la fecha hasta.'
@@ -940,7 +923,7 @@ export default function Ventas() {
           clienteInicial={clienteInicial}
           sucursalActiva={sucursalActiva}
           onCerrar={() => setModalAbierto(false)}
-          onGuardado={() => setRefresco((valor) => valor + 1)}
+          onGuardado={() => actualizarListado()}
         />
       )}
 

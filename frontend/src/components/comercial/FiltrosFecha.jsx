@@ -1,31 +1,38 @@
 import { useState } from 'react'
 import { IconX } from '@tabler/icons-react'
+import { fechaIso, sumarDias } from '../../utils/fechas'
 import '../../styles/components/comercial/FiltrosFecha.css'
-
-function isoLocal(fecha) {
-  const anio = fecha.getFullYear()
-  const mes = String(fecha.getMonth() + 1).padStart(2, '0')
-  const dia = String(fecha.getDate()).padStart(2, '0')
-  return `${anio}-${mes}-${dia}`
-}
-
-function sumarDias(fecha, dias) {
-  const copia = new Date(fecha)
-  copia.setDate(copia.getDate() + dias)
-  return copia
-}
 
 function inicioDelMes(fecha) {
   return new Date(fecha.getFullYear(), fecha.getMonth(), 1)
 }
 
-export default function FiltrosFecha({ valores, onCambiar, error }) {
+function menorIso(primera, segunda) {
+  if (!primera) {
+    return segunda || ''
+  }
+  if (!segunda) {
+    return primera
+  }
+  return primera < segunda ? primera : segunda
+}
+
+export default function FiltrosFecha({
+  valores,
+  onCambiar,
+  error,
+  desdeMaximo = '',
+  hastaMaximo = '',
+  diaMaximo = '',
+}) {
   const { desde, hasta, fecha } = valores
   const [hoy] = useState(() => new Date())
-  const hoyIso = isoLocal(hoy)
-  const ayerIso = isoLocal(sumarDias(hoy, -1))
-  const haceSeisIso = isoLocal(sumarDias(hoy, -6))
-  const inicioMesIso = isoLocal(inicioDelMes(hoy))
+  const hoyIso = fechaIso(hoy)
+  const ayerIso = fechaIso(sumarDias(hoy, -1))
+  const haceSeisIso = fechaIso(sumarDias(hoy, -6))
+  const inicioMesIso = fechaIso(inicioDelMes(hoy))
+  const maximoDesde = menorIso(desdeMaximo, hasta)
+  const minimoHasta = desde || ''
 
   function cambiar(cambios) {
     onCambiar({ ...valores, ...cambios })
@@ -83,6 +90,7 @@ export default function FiltrosFecha({ valores, onCambiar, error }) {
           <input
             type="date"
             value={desde}
+            max={maximoDesde || undefined}
             onChange={(evento) =>
               cambiar({ desde: evento.target.value, fecha: '' })
             }
@@ -93,6 +101,8 @@ export default function FiltrosFecha({ valores, onCambiar, error }) {
           <input
             type="date"
             value={hasta}
+            min={minimoHasta || undefined}
+            max={hastaMaximo || undefined}
             onChange={(evento) =>
               cambiar({ hasta: evento.target.value, fecha: '' })
             }
@@ -104,6 +114,7 @@ export default function FiltrosFecha({ valores, onCambiar, error }) {
           <input
             type="date"
             value={fecha}
+            max={diaMaximo || undefined}
             onChange={(evento) =>
               cambiar({
                 fecha: evento.target.value,

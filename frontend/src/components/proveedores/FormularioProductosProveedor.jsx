@@ -9,6 +9,10 @@ import {
 } from '@tabler/icons-react'
 import { pedirTodas } from '../../api/catalogos'
 import { pedir } from '../../api/client'
+import {
+  esAsociacionDuplicada,
+  ofrecerActualizarDuplicado,
+} from '../../utils/asociaciones'
 import { formatearMoneda } from '../../utils/formato'
 import { validarNumero } from '../../utils/validaciones'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
@@ -26,7 +30,47 @@ function nuevaFila() {
     precio: '',
     codigo: '',
     existente: false,
+    asociacionId: null,
+    precioOriginal: '',
+    codigoOriginal: '',
   }
+}
+
+function calcularErroresFilas(filas) {
+  const errores = {}
+  const usados = new Set()
+  filas.forEach((fila) => {
+    if (!fila.producto && !fila.precio) {
+      return
+    }
+    const deFila = {}
+    if (!fila.producto) {
+      deFila.producto = 'Seleccioná un producto de la lista.'
+    } else if (usados.has(fila.producto)) {
+      deFila.producto = 'No repitas el mismo producto.'
+    } else {
+      usados.add(fila.producto)
+    }
+    const errorPrecio = validarNumero(fila.precio, {
+      etiqueta: 'El precio de costo',
+      mayorQueCero: true,
+      decimales: 2,
+    })
+    if (errorPrecio) {
+      deFila.precio = errorPrecio
+    } else if (
+      fila.productoObjeto &&
+      Number(fila.precio) >= Number(fila.productoObjeto.precio_unidad)
+    ) {
+      deFila.precio = `El costo debe ser menor al precio de venta (${formatearMoneda(
+        fila.productoObjeto.precio_unidad,
+      )}).`
+    }
+    if (Object.keys(deFila).length > 0) {
+      errores[fila.id] = deFila
+    }
+  })
+  return errores
 }
 
 export default function FormularioProductosProveedor({
@@ -39,7 +83,12 @@ export default function FormularioProductosProveedor({
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [errorLista, setErrorLista] = useState('')
-  const [erroresFilas, setErroresFilas] = useState({})
+  const [erroresServidor, setErroresServidor] = useState({})
+
+  const erroresCalculados = calcularErroresFilas(filas)
+  const hayFilas = filas.some((fila) => fila.producto || fila.precio)
+  const formularioValido =
+    hayFilas && Object.keys(erroresCalculados).length === 0
 
   const buscarProductos = useCallback(async (texto) => {
     const respuesta = await pedir(
@@ -78,6 +127,9 @@ export default function FormularioProductosProveedor({
               precio: String(item.precio_lista),
               codigo: item.codigo_producto_proveedor || '',
               existente: true,
+              asociacionId: item.id,
+              precioOriginal: String(item.precio_lista),
+              codigoOriginal: item.codigo_producto_proveedor || '',
             }
           }),
         )
@@ -98,6 +150,14 @@ export default function FormularioProductosProveedor({
   }, [proveedor.id])
 
   function actualizarFila(id, campo, valor, objeto = null) {
+    setErroresServidor((previos) => {
+      if (!previos[id]) {
+        return previos
+      }
+      const copia = { ...previos }
+      delete copia[id]
+      return copia
+    })
     setFilas((previas) =>
       previas.map((fila) => {
         if (fila.id !== id) {
@@ -121,6 +181,70 @@ export default function FormularioProductosProveedor({
     setFilas((previas) => previas.filter((fila) => fila.id !== id))
   }
 
+  function payloadItem(fila) {
+    return {
+      producto: Number(fila.producto),
+      precio_lista: Number(fila.precio).toFixed(2),
+      codigo_producto_proveedor: fila.codigo.trim() || null,
+    }
+  }
+
+  /**
+   * Envia las filas nuevas de a tandas. Si la API detecta que un producto ya
+   * estaba asociado (carrera o dato viejo), ofrece actualizar esa asociacion
+   * y reintenta con el resto de las filas.
+   */
+  async function guardarNuevas(nuevas) {
+    let pendientes = [...nuevas]
+    const guardadas = []
+    while (pendientes.length > 0) {
+      try {
+        const respuesta = await pedir(
+          `/proveedores/${proveedor.id}/productos/`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              items: pendientes.map(payloadItem),
+            }),
+          },
+        )
+        guardadas.push(...respuesta)
+        return guardadas
+      } catch (e) {
+        if (!esAsociacionDuplicada(e)) {
+          e.filasEnviadas = pendientes
+          throw e
+        }
+        const fila = pendientes.find(
+          (item) =>
+            Number(item.producto) === Number(e.datos?.producto_id),
+        )
+        const existente = await ofrecerActualizarDuplicado(e, {
+          producto: fila?.productoObjeto?.nombre,
+          proveedor:
+            proveedor.razon_social || proveedor.nombre || 'proveedor',
+        })
+        if (!existente || !fila) {
+          return null
+        }
+        const actualizada = await pedir(
+          `/productos-proveedores/${existente.asociacionId}/`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({
+              precio_lista: Number(fila.precio).toFixed(2),
+              codigo_producto_proveedor: fila.codigo.trim() || null,
+              estado: true,
+            }),
+          },
+        )
+        guardadas.push(actualizada)
+        pendientes = pendientes.filter((item) => item.id !== fila.id)
+      }
+    }
+    return guardadas
+  }
+
   async function guardar(evento) {
     evento.preventDefault()
     const utilizables = filas.filter(
@@ -128,71 +252,50 @@ export default function FormularioProductosProveedor({
     )
     if (utilizables.length === 0) {
       setErrorLista('Agregá al menos un producto con su costo.')
+      return
+    }
+    if (!formularioValido) {
+      setErrorLista('')
       requestAnimationFrame(() => {
         document.querySelector('.input-error')?.focus()
       })
       return
     }
+
     setErrorLista('')
-    const nuevosErrores = {}
-    const usados = new Set()
-    utilizables.forEach((fila) => {
-      const erroresFila = {}
-      if (!fila.producto) {
-        erroresFila.producto = 'Seleccioná un producto.'
-      } else if (usados.has(fila.producto)) {
-        erroresFila.producto = 'No repitas el mismo producto.'
-      } else {
-        usados.add(fila.producto)
-      }
-      const errorPrecio = validarNumero(fila.precio, {
-        etiqueta: 'El precio de costo',
-        mayorQueCero: true,
-        decimales: 2,
-      })
-      if (errorPrecio) {
-        erroresFila.precio = errorPrecio
-      } else if (
-        fila.productoObjeto &&
-        Number(fila.precio) >=
-          Number(fila.productoObjeto.precio_unidad)
-      ) {
-        erroresFila.precio = `El costo debe ser menor al precio de venta (${formatearMoneda(
-          fila.productoObjeto.precio_unidad,
-        )}).`
-      }
-      if (Object.keys(erroresFila).length > 0) {
-        nuevosErrores[fila.id] = erroresFila
-      }
-    })
-
-    if (Object.keys(nuevosErrores).length > 0) {
-      setErroresFilas(nuevosErrores)
-      requestAnimationFrame(() => {
-        document.querySelector('.input-error')?.focus()
-      })
-      return
-    }
-
-    setErroresFilas({})
+    setErroresServidor({})
     setGuardando(true)
     try {
-      const respuesta = await pedir(
-        `/proveedores/${proveedor.id}/productos/`,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            items: utilizables.map((fila) => ({
-              producto: Number(fila.producto),
+      const nuevas = utilizables.filter((fila) => !fila.existente)
+      const cambiadas = utilizables.filter(
+        (fila) =>
+          fila.existente &&
+          (Number(fila.precio).toFixed(2) !==
+            Number(fila.precioOriginal).toFixed(2) ||
+            (fila.codigo.trim() || '') !== fila.codigoOriginal),
+      )
+
+      const guardadas = nuevas.length > 0 ? await guardarNuevas(nuevas) : []
+      if (guardadas === null) {
+        return
+      }
+      for (const fila of cambiadas) {
+        const actualizada = await pedir(
+          `/productos-proveedores/${fila.asociacionId}/`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({
               precio_lista: Number(fila.precio).toFixed(2),
               codigo_producto_proveedor: fila.codigo.trim() || null,
-            })),
-          }),
-        },
-      )
-      onGuardado?.(respuesta)
+            }),
+          },
+        )
+        guardadas.push(actualizada)
+      }
+      onGuardado?.(guardadas)
     } catch (e) {
       const datos = e.datos || {}
+      const enviadas = e.filasEnviadas || utilizables
       const erroresItems = {}
       const mapaCampos = {
         precio_lista: 'precio',
@@ -200,7 +303,7 @@ export default function FormularioProductosProveedor({
       }
       if (Array.isArray(datos.items)) {
         datos.items.forEach((detalle, indice) => {
-          const fila = utilizables[indice]
+          const fila = enviadas[indice]
           if (!fila || !detalle || typeof detalle !== 'object') {
             return
           }
@@ -225,7 +328,7 @@ export default function FormularioProductosProveedor({
         })
       }
       if (Object.keys(erroresItems).length > 0) {
-        setErroresFilas(erroresItems)
+        setErroresServidor(erroresItems)
       }
       if (Object.keys(otros).length > 0) {
         setErrorLista(Object.values(otros)[0])
@@ -239,12 +342,14 @@ export default function FormularioProductosProveedor({
         })
         return
       }
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudieron guardar los productos',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
+      if (!esAsociacionDuplicada(e)) {
+        Swal.fire({
+          icon: 'error',
+          title: 'No se pudieron guardar los productos',
+          text: e.message,
+          confirmButtonColor: '#4a9da8',
+        })
+      }
     } finally {
       setGuardando(false)
     }
@@ -287,7 +392,10 @@ export default function FormularioProductosProveedor({
             <div className="productos-proveedor-lista">
               {filas.map((fila) => {
                 const producto = fila.productoObjeto
-                const erroresFila = erroresFilas[fila.id] || {}
+                const erroresFila = {
+                  ...(erroresCalculados[fila.id] || {}),
+                  ...(erroresServidor[fila.id] || {}),
+                }
                 return (
                   <div className="productos-proveedor-fila" key={fila.id}>
                     <CampoSelectorBuscable
@@ -394,7 +502,7 @@ export default function FormularioProductosProveedor({
               <button
                 type="submit"
                 className="boton-comercial-primario"
-                disabled={guardando}
+                disabled={guardando || !formularioValido}
               >
                 {guardando ? (
                   <>

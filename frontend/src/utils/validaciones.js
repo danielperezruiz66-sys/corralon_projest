@@ -185,7 +185,7 @@ export function validarIngresosBrutos(valor) {
 export function validarNombreConsumidor(valor) {
   const texto = limpiar(valor)
   if (!texto) {
-    return ''
+    return 'Ingresá el nombre del consumidor final o seleccioná un cliente.'
   }
   return validarNombre(texto, 'El nombre del consumidor final')
 }

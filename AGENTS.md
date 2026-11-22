@@ -3,7 +3,7 @@
 > Contexto permanente y reglas del proyecto. Al empezar una sesión, leer
 > `DIA_SIGUIENTE.md`. Reglas de documentación en §10.
 
-**Última actualización:** 2026-11-19
+**Última actualización:** 2026-11-22
 
 ## 1. Stack
 
@@ -13,6 +13,10 @@
   React Router 7, Tabler Icons, SweetAlert2 y react-hook-form. Node 20+.
 - API en `http://localhost:8000`; Vite en `http://localhost:5173`.
 - `.env` en la raíz (no se commitea); plantilla en `.env.example`.
+- Entorno de desarrollo: Windows + WSL Ubuntu (Warp). El `venv/` actual
+  usa ejecutables Windows (`../venv/Scripts/python.exe`) o su equivalente en
+  WSL; OpenCode tiene activos los MCPs `context7`, `sequential-thinking` y
+  `chrome-devtools` (conectado al Chrome de Windows) y la skill `django-react-base`.
 
 Estado: backend consolidado (35 modelos, 34 viewsets, suite en `app.tests`),
 una sola sucursal operativa por empresa. Frontend con Dashboard, Ventas,
@@ -31,7 +35,8 @@ backend/
     │                       # proveedores, empleados
     ├── management/commands/# seed_data, cancelar_ventas_vencidas
     ├── migrations/         # 0001 esquema + 0002/0003 estado Parcial
-    ├── tests/              # suite en app.tests (242 tests)
+    │                       # + 0004/0005 unicidad del catálogo
+    ├── tests/              # suite en app.tests (249 tests)
     ├── permissions.py  backends.py  exceptions.py
     └── serializers.py  views.py  urls.py
 frontend/src/
@@ -143,6 +148,23 @@ solo ven sus propios movimientos; `GE` ve los de sus sucursales.
 - Pagos y cierre de caja aceptan `clave` de idempotencia; reintentar con la
   misma clave no duplica la operación.
 
+### Integridad de datos y unicidad (3 capas)
+
+- Toda tabla intermedia o relación de negocio (`ProductoXProveedor`,
+  `ProductoXSucursal`, `ProveedorXSucursal`, `EmpleadoXRol`,
+  `SucursalXEmpleado`) DEBE tener `models.UniqueConstraint` en PostgreSQL y
+  validación explícita en serializer/servicio antes de escribir.
+- Si se intenta asociar un par `(producto, proveedor)` ya existente desde
+  Inventario o desde Proveedores (`services/proveedores.py`), la API debe
+  rechazar la duplicación (`400`, código `duplicado`) informando el
+  `precio_lista` vigente y ofreciendo actualizarlo en lugar de crear una
+  segunda fila. La respuesta incluye `asociacion_id`, `producto_id`,
+  `proveedor_id` y `precio_lista_actual`; la actualización se hace con
+  `PATCH /api/productos-proveedores/{id}/`.
+- Importes unitarios (`precio_unidad`, `precio_lista`, `precio_venta`,
+  `precio_compra`) y cantidades de movimiento exigen validación `> 0` en
+  modelo, serializer y frontend.
+
 ## 4. Servicios y escrituras
 
 La lógica vive en `backend/app/services/`; las vistas validan y delegan.
@@ -170,7 +192,8 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
 - JWT: `POST /api/token/` (usuario o legajo) y `/api/token/refresh/`.
 - Paginación 20; filtros DjangoFilter + Search + Ordering.
 - Errores: `400 {"detail": "...", "codigo": "..."}` con `stock_insuficiente`,
-  `error_de_negocio`, `validacion`, `no_encontrado` o `protegido`.
+  `error_de_negocio`, `validacion`, `no_encontrado`, `protegido` o
+  `duplicado`.
 - 34 viewsets en `app/urls.py` + `GET /api/perfil/`, `GET /api/dashboard/`,
   `GET /api/actividad/` y `/api/actividad/resumen/`.
 - El dashboard respeta las sucursales permitidas (superuser/AD ven todas; una
@@ -200,12 +223,19 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
 - Módulos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores, Caja,
   Empleados, Perfil, Actividad. Facturación muestra mantenimiento.
 - **Cache en memoria + actualización en segundo plano**: patrón obligatorio en
-  cada módulo que se revise. Se cachea la última respuesta por usuario y
-  sucursal, se muestra al volver y se refresca sin bloquear. Inicio ya lo hace
-  (refresco cada 15 s y al enfocar la ventana).
+  cada módulo que se revise, implementado en `hooks/useCacheModulo.js`. Se
+  cachea la última respuesta por usuario, sucursal y filtros; se muestra al
+  volver o cambiar de pestaña y se refresca al enfocar la ventana (e Inicio
+  además cada 15 s). Tras escribir se invalida el prefijo del módulo y se
+  recarga. Inicio y Ventas ya lo usan; al iniciar sesión se precarga la primera
+  página de Ventas (`api/ventas.js`) para que el módulo abra al instante.
 - Ventas: pestañas Pendientes/Parciales/Confirmadas/Anuladas y filtro Vencidas.
   Pago parcial → Parcial; pago total → Confirmada. El cobro no pide confirmación
   extra. No existe “Por vencer” en la UI.
+- Ventas, filtros y cliente: “Desde” llega hasta ayer; “Hasta” y “Un día” hasta
+  hoy. El nombre del consumidor final es obligatorio cuando no hay cliente y se
+  oculta al elegirlo; el selector muestra “Nombre Apellido” con el DNI/CUIT
+  debajo, y solo cae a la razón social si el cliente no tiene nombre.
 - Dashboard: 4 tarjetas (hoy, últimos 7 días, mes calendario, parciales).
   Alertas: vencidas → Ventas con filtro; stock negativo/bajo → tarjeta Stock
   crítico; compras por recibir → tarjeta Compras por recibir. Sin alerta de
@@ -218,6 +248,11 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
 - Convenciones UI: búsqueda con debounce, filtros en la URL, CSV, cobro
   multi-método, validaciones en `utils/validaciones.js`, `CampoSelectorBuscable`
   con búsqueda remota y alta rápida.
+- **Validación en tiempo real (`onChange`) obligatoria en TODOS los formularios**:
+ningún formulario puede esperar al `onBlur` ni al `submit` para alertar.
+Cada campo debe validar mientras el usuario escribe usando
+`utils/validaciones.js`, mostrar error específico + sugerencia accionable
+debajo del input y deshabilitar el guardado hasta que el estado sea válido.
 
 ## 7. Facturación
 
@@ -233,7 +268,7 @@ cd backend
 ../venv/Scripts/python.exe manage.py check
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 242 tests
+../venv/Scripts/python.exe manage.py test app              # 249 tests
 ../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 
@@ -248,6 +283,11 @@ sucursal (Salta Capital), `admin`/`admin1234`, empleados demo
 `admin.salta`, `gerente.salta`, `cajero.salta`, `vendedor.salta` y
 `deposito.salta` con `test1234`, 6 meses de compras/ventas en `PE`/`PC`/`CO`.
 El barrido de vencidas es manual; no programar tarea.
+
+- Verificación visual y E2E con MCP `chrome-devtools`: con Django (`:8000`)
+  y Vite (`:5173`) levantados, probar el flujo modificado en Chrome real,
+  verificando ausencia de errores en consola, respuestas HTTP esperadas
+  (`200`/`201`/`400` controlado) y validación reactiva en inputs.
 
 ## 9. Convenciones
 

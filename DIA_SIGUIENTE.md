@@ -5,18 +5,26 @@
 > Se trabaja módulo por módulo, sin fases cerradas: al terminar uno se corrige,
 > se verifica y se actualizan estos pendientes.
 
-## Próximo módulo: Ventas
+## Próximo módulo: Caja
 
-- [ ] Revisar pantalla, estados `PE`/`PC`/`CO`/`AN`, pestañas, acciones de
-      cobro/confirmación/anulación, filtro Vencidas y atajos.
-- [ ] Confirmar que “Por vencer” ya no existe en la UI y que la alerta de
-      vencidas enruta a `/ventas?alerta=vencida`.
-- [ ] Aplicar cache en memoria + actualización en segundo plano (patrón de
-      Inicio) al módulo.
+- [ ] Revisar pantalla, secciones `AB`/`PA`/`CE`/`AU`, apertura, cierre,
+      pausa, reanudación, auditoría y arqueo por método.
+- [ ] Verificar montos sugeridos, notas inborrables y permisos (`CA` en sus
+      sucursales, `AD/GE` en cualquiera).
+- [ ] Aplicar `useCacheModulo` al módulo.
+
+## Ventas
+
+- [ ] QA visual: estados `PE`/`PC`/`CO`/`AN`, pestañas, cobro/confirmación/
+      anulación por rol, filtro Vencidas y atajos.
+- [ ] Confirmar que la alerta de vencidas del Dashboard enruta a
+      `/ventas?alerta=vencida` y que “Por vencer” no existe en la UI.
+- [ ] QA: fechas (Desde tope ayer; Hasta y Un día tope hoy) y consumidor final
+      obligatorio sin cliente / oculto con cliente, con nombre y documento en
+      el selector.
 
 ## Revisión módulo por módulo
 
-- [ ] Caja.
 - [ ] Compras.
 - [ ] Clientes.
 - [ ] Inventario.
@@ -24,8 +32,8 @@
 - [ ] Empleados.
 - [ ] Perfil y Actividad.
 - [ ] Menú/encabezado y navegación general.
-- [ ] En cada módulo revisado: cache en memoria, refresco en segundo plano,
-      filtros/atajos correctos y coherencia con la API.
+- [ ] En cada módulo revisado: cache con `useCacheModulo`, refresco en segundo
+      plano, filtros/atajos correctos y coherencia con la API.
 - [ ] QA visual final con `admin`, `gerente.salta`, `cajero.salta`,
       `vendedor.salta` y `deposito.salta`.
 
@@ -38,6 +46,9 @@
       volver desde otro módulo.
 
 ## Backend
+
+- [ ] Revisar en Compras el mismo N+1 de `movimiento_caja__caja__sucursal`
+      que se corrigió en el listado de Ventas.
 
 - [ ] Reversión de pagos para poder anular ventas `PC`/`CO` y compras pagadas.
 - [ ] Dashboard V2: top productos, formas de pago, ventas por sucursal,

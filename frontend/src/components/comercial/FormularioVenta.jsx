@@ -38,6 +38,24 @@ function fechaActual() {
   return new Date().toLocaleDateString('es-AR')
 }
 
+function nombreClienteCompleto(cliente) {
+  if (!cliente) {
+    return ''
+  }
+  const nombre = [cliente.nombre, cliente.apellido]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+  return nombre || cliente.razon_social || `Cliente #${cliente.id}`
+}
+
+function documentoCliente(cliente) {
+  if (!cliente?.dni) {
+    return ''
+  }
+  return `${cliente.tipo_documento_detalle || 'Documento'} ${cliente.dni}`
+}
+
 export default function FormularioVenta({ modo = 'venta', clienteInicial = '', sucursalActiva = '', onCerrar, onGuardado }) {
   const [secciones, setSecciones] = useState([])
   const [seccion, setSeccion] = useState('')
@@ -185,10 +203,17 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
     }
   }, [sucursalActual])
 
+  function limpiarErrorConsumidor() {
+    setErrores((previos) =>
+      previos.cliente_venta ? { ...previos, cliente_venta: '' } : previos,
+    )
+  }
+
   function clienteCreado(nuevo) {
     setCliente(String(nuevo.id))
     setClienteSeleccionado(nuevo)
     setClienteVenta('')
+    limpiarErrorConsumidor()
     setModalCliente(false)
     Swal.fire({
       icon: 'success',
@@ -378,11 +403,9 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
         ? clienteSeleccionado
         : null
     const nombreCliente = clienteElegido
-      ? clienteElegido.razon_social ||
-        [clienteElegido.apellido, clienteElegido.nombre]
-          .filter(Boolean)
-          .join(', ')
+      ? nombreClienteCompleto(clienteElegido)
       : clienteVenta.trim() || 'Consumidor final'
+    const documento = documentoCliente(clienteElegido)
 
     const filas = items
       .map(
@@ -442,6 +465,11 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
   </header>
   <div class="datos">
     <p><strong>Cliente:</strong> ${escaparHtml(nombreCliente)}</p>
+    ${
+      documento
+        ? `<p><strong>Documento:</strong> ${escaparHtml(documento)}</p>`
+        : ''
+    }
     <p><strong>Condición:</strong> Presupuesto informativo</p>
   </div>
   <table>
@@ -534,21 +562,14 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
                   setClienteSeleccionado(opcion || null)
                   if (valor) {
                     setClienteVenta('')
+                    limpiarErrorConsumidor()
                   }
                 }}
                 opciones={[]}
                 opcionSeleccionada={clienteSeleccionado}
                 onBuscar={buscarClientes}
-                textoOpcion={(item) =>
-                  item.razon_social ||
-                  [item.apellido, item.nombre]
-                    .filter(Boolean)
-                    .join(', ') ||
-                  `Cliente #${item.id}`
-                }
-                textoSecundario={(item) =>
-                  item.dni ? `DNI/CUIT ${item.dni}` : ''
-                }
+                textoOpcion={(item) => nombreClienteCompleto(item)}
+                textoSecundario={(item) => documentoCliente(item)}
                 placeholder="Buscar por nombre, DNI o razón social"
                 onCrear={() => setModalCliente(true)}
                 tituloCrear="Registrar cliente"
@@ -558,10 +579,11 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', s
 
               {!cliente && (
                 <label className="campo-comercial">
-                  <span>Nombre del consumidor final (opcional)</span>
+                  <span>Nombre del consumidor final *</span>
                   <input
                     type="text"
                     maxLength={120}
+                    required
                     className={errores.cliente_venta ? 'input-error' : ''}
                     value={clienteVenta}
                     onChange={(evento) => {

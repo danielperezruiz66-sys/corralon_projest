@@ -7,16 +7,34 @@ from django.db import transaction
 from ..models import ProductoXProveedor
 
 
+class AsociacionDuplicada(Exception):
+    """El producto ya tiene un costo cargado para el proveedor."""
+
+    def __init__(self, asociacion):
+        self.asociacion = asociacion
+        precio = f'{asociacion.precio_lista:.2f}'
+        super().__init__(
+            'El proveedor ya está asociado a este producto '
+            f'(costo vigente: ${precio}). '
+            'Podés editar la asociación existente.'
+        )
+
+
 @transaction.atomic
 def asociar_productos(proveedor, items):
-    """Crea o actualiza en bloque los costos de un proveedor."""
+    """Crea en bloque los costos nuevos de un proveedor.
+
+    Si algun producto ya tiene una fila para ese proveedor se rechaza el lote
+    completo: la edicion del costo existente se hace por `PATCH
+    /api/productos-proveedores/{id}/` en lugar de duplicar la relacion.
+    """
     if not proveedor.estado_prov:
         raise ValueError('El proveedor esta inactivo.')
     if not items:
         raise ValueError('Agrega al menos un producto.')
 
     vistos = set()
-    asociaciones = []
+    productos = []
     for item in items:
         producto = item['producto']
         if producto.pk in vistos:
@@ -24,6 +42,7 @@ def asociar_productos(proveedor, items):
                 f'El producto "{producto}" esta repetido en la lista.'
             )
         vistos.add(producto.pk)
+        productos.append(producto)
 
         precio = Decimal(str(item['precio_lista']))
         if precio <= 0:
@@ -34,20 +53,32 @@ def asociar_productos(proveedor, items):
                 f'({producto.precio_unidad}).'
             )
 
-        asociacion = ProductoXProveedor.objects.filter(
-            producto=producto,
+    existentes = {
+        asociacion.producto_id: asociacion
+        for asociacion in ProductoXProveedor.objects.filter(
             proveedor=proveedor,
-        ).first()
-        if asociacion is None:
-            asociacion = ProductoXProveedor(
-                producto=producto,
-                proveedor=proveedor,
-            )
-        asociacion.precio_lista = precio
-        asociacion.codigo_producto_proveedor = (
-            item.get('codigo_producto_proveedor') or None
+            producto_id__in=[producto.pk for producto in productos],
         )
-        asociacion.estado = True
+    }
+    for producto in productos:
+        asociacion = existentes.get(producto.pk)
+        if asociacion is not None:
+            raise AsociacionDuplicada(asociacion)
+
+    asociaciones = []
+    for item in items:
+        asociacion = ProductoXProveedor(
+            producto=item['producto'],
+            proveedor=proveedor,
+            precio_lista=Decimal(str(item['precio_lista'])),
+            codigo_producto_proveedor=(
+                item.get('codigo_producto_proveedor') or None
+            ),
+            estado=True,
+        )
+        asociacion._change_reason = (
+            f'Costo asociado al proveedor {proveedor}'
+        )
         asociacion.save()
         asociaciones.append(asociacion)
 
