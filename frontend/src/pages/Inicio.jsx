@@ -20,7 +20,6 @@ import {
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import { useAuth } from '../context/auth-context'
-import { useSucursal } from '../context/sucursal-context'
 import useCacheModulo from '../hooks/useCacheModulo'
 import {
   etiquetaDia,
@@ -200,19 +199,12 @@ function EstadoVenta({ estado, etiqueta }) {
 
 export default function Inicio() {
   const { user } = useAuth()
-  const { sucursalActiva } = useSucursal()
   const location = useLocation()
 
-  const consultar = useCallback(() => {
-    const parametros = new URLSearchParams()
-    if (sucursalActiva) {
-      parametros.set('sucursal', sucursalActiva)
-    }
-    const consulta = parametros.toString()
-    return pedir(`/dashboard/${consulta ? `?${consulta}` : ''}`).then(
-      normalizarDashboard,
-    )
-  }, [sucursalActiva])
+  const consultar = useCallback(
+    () => pedir('/dashboard/').then(normalizarDashboard),
+    [],
+  )
 
   const {
     datos,
@@ -223,7 +215,7 @@ export default function Inicio() {
     ultimaActualizacion,
     refrescar,
   } = useCacheModulo({
-    clave: `dashboard|${user?.id ?? ''}|${sucursalActiva || ''}`,
+    clave: `dashboard|${user?.id ?? ''}`,
     consultar,
     inicial: DATOS_VACIOS,
     intervalo: 15000,
@@ -574,8 +566,7 @@ export default function Inicio() {
                         <div className="caja-item-info">
                           <strong>{item.caja}</strong>
                           <small>
-                            Sección #{item.id} · {item.sucursal} ·{' '}
-                            {item.empleado}
+                            Sección #{item.id} · {item.empleado}
                           </small>
                           {item.estado === 'PA' && (
                             <span className="caja-item-pausa">En pausa</span>
@@ -738,7 +729,6 @@ export default function Inicio() {
                           <div className="stock-item">
                             <div>
                               <strong>{item.producto}</strong>
-                              <small>{item.sucursal}</small>
                             </div>
                             <div className="stock-cantidades">
                               <span className="stock-cantidad">

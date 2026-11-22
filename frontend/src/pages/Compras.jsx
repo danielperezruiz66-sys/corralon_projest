@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -23,12 +23,14 @@ import Encabezado from '../components/Encabezado.jsx'
 import FiltrosFecha from '../components/comercial/FiltrosFecha.jsx'
 import FormularioCompra from '../components/comercial/FormularioCompra.jsx'
 import { useAuth } from '../context/auth-context'
-import { useSucursal } from '../context/sucursal-context'
+import useCacheModulo from '../hooks/useCacheModulo'
 import useDebounce from '../hooks/useDebounce'
 import { descargarCsv, numeroCsv } from '../utils/csv'
 import { nuevaClave } from '../utils/clave'
 import { formatearFecha, formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
+import '../styles/Filtros.css'
+import '../styles/Compras.css'
 import '../styles/components/comercial/Cobro.css'
 
 const PAGINA_VACIA = {
@@ -125,13 +127,11 @@ function fechaMinimaLlegada() {
 }
 
 export default function Compras() {
-  const { puedeEscribir } = useAuth()
-  const { sucursalActiva } = useSucursal()
+  const { user, puedeEscribir } = useAuth()
   const puedeCrear = puedeEscribir(['AD', 'GE', 'ED', 'CA', 'VE'])
   const puedeOperar = puedeEscribir(['AD', 'GE', 'ED', 'CA', 'VE'])
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
   const [searchParams, setSearchParams] = useSearchParams()
-  const [datos, setDatos] = useState(PAGINA_VACIA)
   const [texto, setTexto] = useState(() => searchParams.get('search') || '')
   const [estado, setEstado] = useState(
     () => searchParams.get('estado') || '',
@@ -153,11 +153,7 @@ export default function Compras() {
   const [pagina, setPagina] = useState(
     () => Number(searchParams.get('page')) || 1,
   )
-  const [refresco, setRefresco] = useState(0)
-  const [cargando, setCargando] = useState(true)
-  const [actualizando, setActualizando] = useState(false)
   const [exportando, setExportando] = useState(false)
-  const [error, setError] = useState('')
   const [detalle, setDetalle] = useState(null)
   const [pago, setPago] = useState(null)
   const [metodos, setMetodos] = useState([])
@@ -184,7 +180,6 @@ export default function Compras() {
       fechas.hasta ||
       orden !== ORDEN_INICIAL,
   )
-  const buscando = texto.trim() !== busqueda || actualizando
   const saldoPago = pago ? saldoCompra(pago) : 0
   const totalPago = pagosPago.reduce(
     (total, item) => total + montoPago(item.monto),
@@ -226,22 +221,13 @@ export default function Compras() {
     setSearchParams(parametros, { replace: true })
   }, [busqueda, estado, entrega, fechas, orden, pagina, setSearchParams])
 
-  useEffect(() => {
-    if (rangoInvalido) {
-      return undefined
-    }
-
-    let vigente = true
-    const controlador = new AbortController()
+  const consulta = useMemo(() => {
     const parametros = new URLSearchParams({ page: String(pagina) })
     if (busqueda) {
       parametros.set('search', busqueda)
     }
     if (estado) {
       parametros.set('estado', estado)
-    }
-    if (sucursalActiva) {
-      parametros.set('sucursal', sucursalActiva)
     }
     if (entrega === 'por_recibir') {
       parametros.set('por_recibir', '1')
@@ -260,40 +246,40 @@ export default function Compras() {
     if (orden) {
       parametros.set('ordering', orden)
     }
+    return parametros.toString()
+  }, [pagina, busqueda, estado, entrega, fechas, orden])
 
-    pedir(`/compras/?${parametros.toString()}`, {
-      signal: controlador.signal,
-    })
-      .then((respuesta) => {
-        if (vigente) {
-          setDatos(respuesta)
-          setError('')
-        }
-      })
-      .catch((e) => {
-        if (!vigente || e.name === 'AbortError') {
-          return
-        }
-        setError(e.message)
-      })
-      .finally(() => {
-        if (vigente) {
-          setCargando(false)
-          setActualizando(false)
-        }
-      })
+  const consultar = useCallback(
+    ({ signal } = {}) => pedir(`/compras/?${consulta}`, { signal }),
+    [consulta],
+  )
 
-    return () => {
-      vigente = false
-      controlador.abort()
-    }
-  }, [pagina, busqueda, estado, entrega, fechas, orden, refresco, rangoInvalido, sucursalActiva])
+  const {
+    datos,
+    cargando,
+    actualizando,
+    error,
+    refrescar,
+    invalidar,
+    limpiarError,
+  } = useCacheModulo({
+    clave: `compras|${user?.id ?? ''}|${consulta}`,
+    consultar,
+    inicial: PAGINA_VACIA,
+    activo: !rangoInvalido,
+  })
+
+  const actualizarListado = useCallback(() => {
+    invalidar(`compras|${user?.id ?? ''}`)
+    refrescar(true)
+  }, [user?.id, invalidar, refrescar])
+
+  const buscando = texto.trim() !== busqueda || actualizando
 
   function limpiarTexto() {
     setTexto('')
     setPagina(1)
-    setError('')
-    setActualizando(true)
+    limpiarError()
   }
 
   function limpiarTodo() {
@@ -303,8 +289,7 @@ export default function Compras() {
     setFechas({ fecha: '', desde: '', hasta: '' })
     setOrden(ORDEN_INICIAL)
     setPagina(1)
-    setError('')
-    setActualizando(true)
+    limpiarError()
   }
 
   function cambiarEstado(nuevoEstado) {
@@ -313,36 +298,29 @@ export default function Compras() {
     }
     setEstado(nuevoEstado)
     setPagina(1)
-    setError('')
-    setActualizando(true)
+    limpiarError()
   }
 
   function cambiarEntrega(nuevoEntrega) {
     setEntrega((actual) => (actual === nuevoEntrega ? '' : nuevoEntrega))
     setPagina(1)
-    setError('')
-    setActualizando(true)
+    limpiarError()
   }
 
   function cambiarFechas(nuevas) {
     setFechas(nuevas)
     setPagina(1)
-    setError('')
-    setActualizando(
-      !(nuevas.desde && nuevas.hasta && nuevas.desde > nuevas.hasta),
-    )
+    limpiarError()
   }
 
   function irAPagina(nueva) {
     setPagina(nueva)
-    setError('')
-    setActualizando(true)
+    limpiarError()
   }
 
   function alternarOrden(campo) {
     setOrden((actual) => (actual === `-${campo}` ? campo : `-${campo}`))
     setPagina(1)
-    setActualizando(true)
   }
 
   function iconoOrden(campo) {
@@ -367,9 +345,6 @@ export default function Compras() {
       }
       if (estado) {
         parametros.set('estado', estado)
-      }
-      if (sucursalActiva) {
-        parametros.set('sucursal', sucursalActiva)
       }
       if (entrega === 'por_recibir') {
         parametros.set('por_recibir', '1')
@@ -483,7 +458,7 @@ export default function Compras() {
         timer: 1700,
         showConfirmButton: false,
       })
-      setRefresco((valor) => valor + 1)
+      actualizarListado()
     } catch (e) {
       Swal.fire({
         icon: 'error',
@@ -518,7 +493,7 @@ export default function Compras() {
         timer: 1600,
         showConfirmButton: false,
       })
-      setRefresco((valor) => valor + 1)
+      actualizarListado()
     } catch (e) {
       Swal.fire({
         icon: 'error',
@@ -586,7 +561,7 @@ export default function Compras() {
       setDetalle((actual) =>
         actual && actual.id === actualizada.id ? actualizada : actual,
       )
-      setRefresco((valor) => valor + 1)
+      actualizarListado()
       Swal.fire({
         icon: 'success',
         title: 'Pago registrado',
@@ -642,7 +617,7 @@ export default function Compras() {
       setDetalle((actual) =>
         actual && actual.id === actualizada.id ? actualizada : actual,
       )
-      setRefresco((valor) => valor + 1)
+      actualizarListado()
       Swal.fire({
         icon: 'success',
         title: 'Compra anulada',
@@ -666,40 +641,106 @@ export default function Compras() {
         subtitulo="Registro, recepción y control de compras"
       />
 
-      <div className="comercial">
-            <section className="comercial-barra">
-              <form
-                className="comercial-busqueda"
-                onSubmit={(evento) => evento.preventDefault()}
-              >
-                <IconSearch size={20} />
-                <input
-                  type="search"
-                  value={texto}
-                  onChange={(evento) => {
-                    setTexto(evento.target.value)
-                    setPagina(1)
-                  }}
-                  placeholder="Buscar por N.º de compra, proveedor o CUIT"
-                  aria-label="Buscar compras"
-                />
-                {buscando && (
-                  <IconLoader2 className="icono-girando" size={18} />
-                )}
-                {texto && (
+      <div className="comercial compras">
+            <section className="filtros-area">
+              <section className="comercial-barra">
+                <form
+                  className="comercial-busqueda"
+                  onSubmit={(evento) => evento.preventDefault()}
+                >
+                  <IconSearch size={20} />
+                  <input
+                    type="search"
+                    value={texto}
+                    onChange={(evento) => {
+                      setTexto(evento.target.value)
+                      setPagina(1)
+                    }}
+                    placeholder="Buscar por N.º de compra, proveedor o CUIT"
+                    aria-label="Buscar compras"
+                  />
+                  {buscando && (
+                    <IconLoader2 className="icono-girando" size={18} />
+                  )}
+                  {texto && (
+                    <button
+                      type="button"
+                      className="boton-limpiar-busqueda"
+                      onClick={limpiarTexto}
+                      aria-label="Limpiar búsqueda"
+                    >
+                      <IconX size={16} />
+                    </button>
+                  )}
+                </form>
+
+                <div className="comercial-acciones-barra">
                   <button
                     type="button"
-                    className="boton-limpiar-busqueda"
-                    onClick={limpiarTexto}
-                    aria-label="Limpiar búsqueda"
+                    className="boton-comercial-secundario"
+                    onClick={exportar}
+                    disabled={exportando || rangoInvalido}
                   >
-                    <IconX size={16} />
+                    <IconDownload size={18} />
+                    {exportando ? 'Exportando…' : 'Exportar CSV'}
                   </button>
-                )}
-              </form>
+                  {puedeCrear && (
+                    <button
+                      type="button"
+                      className="boton-comercial-primario"
+                      onClick={() => setModalAbierto(true)}
+                    >
+                      <IconPlus size={18} />
+                      Nueva compra
+                    </button>
+                  )}
+                </div>
+              </section>
 
-              <div className="comercial-acciones-barra">
-                {hayFiltros && (
+              <section className="filtros-tabs filtros-pills">
+                {ESTADOS.map((opcion) => (
+                  <button
+                    key={opcion.id || 'todas'}
+                    type="button"
+                    className={estado === opcion.id ? 'activo' : ''}
+                    onClick={() => cambiarEstado(opcion.id)}
+                    title={opcion.ayuda}
+                  >
+                    {opcion.etiqueta}
+                  </button>
+                ))}
+                <div className="filtros-tabs-grupo">
+                  <button
+                    type="button"
+                    className={`filtro-destacado ${porRecibir ? 'activo' : ''}`}
+                    onClick={() => cambiarEntrega('por_recibir')}
+                    title="Compras registradas que todavía no repusieron stock."
+                  >
+                    Por recibir
+                  </button>
+                  <button
+                    type="button"
+                    className={`filtro-destacado ${enCamino ? 'activo' : ''}`}
+                    onClick={() => cambiarEntrega('EC')}
+                    title="Compras que todavía están en camino y no movieron stock."
+                  >
+                    En camino
+                  </button>
+                </div>
+              </section>
+
+              <FiltrosFecha
+                valores={fechas}
+                onCambiar={cambiarFechas}
+                error={
+                  rangoInvalido
+                    ? 'La fecha desde no puede ser posterior a la fecha hasta.'
+                    : ''
+                }
+              />
+
+              {hayFiltros && (
+                <div className="filtros-pie">
                   <button
                     type="button"
                     className="boton-comercial-secundario"
@@ -707,76 +748,9 @@ export default function Compras() {
                   >
                     Limpiar filtros
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="boton-comercial-secundario"
-                  onClick={exportar}
-                  disabled={exportando || rangoInvalido}
-                >
-                  <IconDownload size={18} />
-                  {exportando ? 'Exportando…' : 'Exportar CSV'}
-                </button>
-                {puedeCrear && (
-                  <button
-                    type="button"
-                    className="boton-comercial-primario"
-                    onClick={() => setModalAbierto(true)}
-                  >
-                    <IconPlus size={18} />
-                    Nueva compra
-                  </button>
-                )}
-              </div>
+                </div>
+              )}
             </section>
-
-            <section className="filtros-tabs">
-              {ESTADOS.map((opcion) => (
-                <button
-                  key={opcion.id || 'todas'}
-                  type="button"
-                  className={estado === opcion.id ? 'activo' : ''}
-                  onClick={() => cambiarEstado(opcion.id)}
-                  title={opcion.ayuda}
-                >
-                  {opcion.etiqueta}
-                </button>
-              ))}
-              <div className="filtros-tabs-grupo">
-                <button
-                  type="button"
-                  className={`filtro-destacado ${porRecibir ? 'activo' : ''}`}
-                  onClick={() => cambiarEntrega('por_recibir')}
-                  title="Compras registradas que todavía no repusieron stock."
-                >
-                  Por recibir
-                </button>
-                <button
-                  type="button"
-                  className={`filtro-destacado ${enCamino ? 'activo' : ''}`}
-                  onClick={() => cambiarEntrega('EC')}
-                  title="Compras que todavía están en camino y no movieron stock."
-                >
-                  En camino
-                </button>
-              </div>
-            </section>
-
-            <FiltrosFecha
-              valores={fechas}
-              onCambiar={cambiarFechas}
-              error={
-                rangoInvalido
-                  ? 'La fecha desde no puede ser posterior a la fecha hasta.'
-                  : ''
-              }
-            />
-
-            <p className="filtros-ayuda">
-              Pago: Pendiente (sin pago total) · Parcial (pago parcial) · Pagada
-              (pago total) · Anulada. Recepción: Por recibir, En camino o
-              Recibida. El stock se mueve recién al recibir.
-            </p>
 
             {error && <p className="comercial-error">{error}</p>}
 
@@ -975,11 +949,9 @@ export default function Compras() {
 
       {modalAbierto && (
         <FormularioCompra
-          key={sucursalActiva || 'todas'}
-          sucursalActiva={sucursalActiva}
           puedeGestionar={puedeGestionar}
           onCerrar={() => setModalAbierto(false)}
-          onGuardado={() => setRefresco((valor) => valor + 1)}
+          onGuardado={() => actualizarListado()}
         />
       )}
 
@@ -1017,7 +989,7 @@ export default function Compras() {
               <div>
                 <span>Depósito destino</span>
                 <strong>
-                  {detalle.deposito_detalle || 'Predeterminado de la sucursal'}
+                  {detalle.deposito_detalle || 'Depósito principal'}
                 </strong>
               </div>
               <div>

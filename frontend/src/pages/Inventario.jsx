@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
@@ -34,6 +34,7 @@ import FormularioStock from '../components/inventario/FormularioStock.jsx'
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
+import useCacheModulo from '../hooks/useCacheModulo'
 import { cantidadCsv, descargarCsv, numeroCsv } from '../utils/csv'
 import {
   formatearFechaHora,
@@ -42,6 +43,8 @@ import {
 } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
+import '../styles/Filtros.css'
+import '../styles/InventarioModulo.css'
 
 const PAGINA_VACIA = {
   count: 0,
@@ -62,7 +65,7 @@ function claseAlerta(alerta) {
 }
 
 export default function Inventario() {
-  const { puedeEscribir } = useAuth()
+  const { user, puedeEscribir } = useAuth()
   const { sucursalActiva } = useSucursal()
   const puedeProducto = puedeEscribir(['GE'])
   const puedeStock = puedeEscribir(['GE', 'ED'])
@@ -83,15 +86,8 @@ export default function Inventario() {
   const [alerta, setAlerta] = useState(
     () => searchParams.get('alerta') || '',
   )
-  // En la pestaña Stock: si está activo, muestra el stock de todas las
-  // sucursales (solo lectura; operar sigue siendo sobre la propia).
-  const [todasLasSucursales, setTodasLasSucursales] = useState(false)
-  const [datos, setDatos] = useState(PAGINA_VACIA)
-  const [cargando, setCargando] = useState(true)
-  const [actualizando, setActualizando] = useState(false)
+
   const [exportando, setExportando] = useState(false)
-  const [error, setError] = useState('')
-  const [refresco, setRefresco] = useState(0)
 
   const [sucursales, setSucursales] = useState([])
   const [categorias, setCategorias] = useState([])
@@ -114,7 +110,6 @@ export default function Inventario() {
   const [loteMoviendo, setLoteMoviendo] = useState(null)
 
   const busqueda = useDebounce(texto.trim(), 350)
-  const buscando = texto.trim() !== busqueda || actualizando
 
   useEffect(() => {
     let vigente = true
@@ -135,11 +130,7 @@ export default function Inventario() {
         setUnidades(unidadesData)
         setDepositos(depositosData)
       })
-      .catch((e) => {
-        if (vigente) {
-          setError(e.message)
-        }
-      })
+      .catch(() => {})
 
     return () => {
       vigente = false
@@ -165,22 +156,10 @@ export default function Inventario() {
     setSearchParams(parametros, { replace: true })
   }, [tab, busqueda, pagina, alerta, setSearchParams])
 
-  useEffect(() => {
-    if (tab === 'catalogos') {
-      return undefined
-    }
-
-    let vigente = true
-    const controlador = new AbortController()
+  const consulta = useMemo(() => {
     const parametros = new URLSearchParams({ page: String(pagina) })
     if (busqueda) {
       parametros.set('search', busqueda)
-    }
-    if (
-      sucursalActiva &&
-      !(tab === 'stock' && todasLasSucursales)
-    ) {
-      parametros.set('sucursal', sucursalActiva)
     }
 
     let ruta = '/productos/'
@@ -195,46 +174,33 @@ export default function Inventario() {
     } else if (tab === 'depositos') {
       ruta = '/depositos/'
     }
+    return `${ruta}?${parametros.toString()}`
+  }, [tab, pagina, busqueda, categoria, marca, unidad, orden, alerta])
 
-    pedir(`${ruta}?${parametros.toString()}`, {
-      signal: controlador.signal,
-    })
-      .then((respuesta) => {
-        if (vigente) {
-          setDatos(respuesta)
-          setError('')
-        }
-      })
-      .catch((e) => {
-        if (!vigente || e.name === 'AbortError') {
-          return
-        }
-        setError(e.message)
-      })
-      .finally(() => {
-        if (vigente) {
-          setCargando(false)
-          setActualizando(false)
-        }
-      })
+  const consultar = useCallback(
+    ({ signal } = {}) => pedir(consulta, { signal }),
+    [consulta],
+  )
 
-    return () => {
-      vigente = false
-      controlador.abort()
-    }
-  }, [
-    tab,
-    pagina,
-    busqueda,
-    sucursalActiva,
-    todasLasSucursales,
-    categoria,
-    marca,
-    unidad,
-    orden,
-    alerta,
-    refresco,
-  ])
+  const {
+    datos,
+    cargando,
+    actualizando,
+    error,
+    refrescar,
+    invalidar,
+    limpiarError,
+  } = useCacheModulo({
+    clave:
+      tab === 'catalogos'
+        ? ''
+        : `inventario|${user?.id ?? ''}|${consulta}`,
+    consultar,
+    inicial: PAGINA_VACIA,
+    activo: tab !== 'catalogos',
+  })
+
+  const buscando = texto.trim() !== busqueda || actualizando
 
   function cambiarTab(nuevoTab) {
     setTab(nuevoTab)
@@ -245,39 +211,34 @@ export default function Inventario() {
     setUnidad('')
     setOrden('')
     setAlerta('')
-    setError('')
-    setCargando(true)
+    limpiarError()
   }
 
   function limpiarTexto() {
     setTexto('')
     setPagina(1)
-    setError('')
+    limpiarError()
   }
 
   function cambiarFiltro(setter, valor) {
     setter(valor)
     setPagina(1)
-    setError('')
-    setActualizando(true)
+    limpiarError()
   }
 
   function cambiarAlerta(valor) {
     setAlerta(valor)
     setPagina(1)
-    setError('')
-    setActualizando(true)
+    limpiarError()
   }
 
   function irAPagina(nueva) {
     setPagina(nueva)
-    setError('')
-    setActualizando(true)
   }
 
   function refrescarListado() {
-    setRefresco((valor) => valor + 1)
-    setActualizando(true)
+    invalidar(`inventario|${user?.id ?? ''}`)
+    refrescar(true)
   }
 
   function guardadoProducto(_, esEdicion) {
@@ -326,8 +287,8 @@ export default function Inventario() {
       setCategorias(categoriasData)
       setMarcas(marcasData)
       setUnidades(unidadesData)
-    } catch (e) {
-      setError(e.message)
+    } catch {
+      // Los catálogos auxiliares se reintentan al reabrir el módulo.
     }
   }
 
@@ -533,10 +494,6 @@ export default function Inventario() {
     try {
       const parametros = new URLSearchParams()
       if (busqueda) parametros.set('search', busqueda)
-      if (sucursalActiva && !(tab === 'stock' && todasLasSucursales)) {
-        parametros.set('sucursal', sucursalActiva)
-      }
-
       let encabezados = []
       let filas = []
 
@@ -555,7 +512,6 @@ export default function Inventario() {
           'Precio venta',
           'Costo máximo',
           'Margen',
-          'Sucursales',
           'Descripción',
         ]
         filas = todos.map((item) => [
@@ -567,7 +523,6 @@ export default function Inventario() {
           numeroCsv(item.precio_unidad),
           item.costo_max ? numeroCsv(item.costo_max) : '',
           item.margen ? numeroCsv(item.margen) : '',
-          (item.sucursales_detalle || []).join(' / '),
           item.descripcion || '',
         ])
       } else if (tab === 'stock') {
@@ -575,7 +530,6 @@ export default function Inventario() {
         const todos = await pedirTodas(`/stocks/?${parametros}`)
         encabezados = [
           'Producto',
-          'Sucursal',
           'Cantidad',
           'Mínimo',
           'Negativo máximo',
@@ -583,7 +537,6 @@ export default function Inventario() {
         ]
         filas = todos.map((item) => [
           item.producto_detalle,
-          item.sucursal_detalle,
           cantidadCsv(item.cantidad),
           cantidadCsv(item.cant_min),
           cantidadCsv(item.cant_negativa_max),
@@ -591,10 +544,9 @@ export default function Inventario() {
         ])
       } else if (tab === 'depositos') {
         const todos = await pedirTodas(`/depositos/?${parametros}`)
-        encabezados = ['Depósito', 'Sucursal', 'Predeterminado', 'Descripción']
+        encabezados = ['Depósito', 'Predeterminado', 'Descripción']
         filas = todos.map((item) => [
           item.nombre,
-          item.sucursal_detalle || '',
           item.es_predeterminado ? 'Sí' : 'No',
           item.descripcion || '',
         ])
@@ -638,175 +590,163 @@ export default function Inventario() {
         subtitulo="Productos, stock y depósitos"
       />
 
-      <div className="comercial inventario">
-        {tab !== 'catalogos' && (
-          <section className="comercial-barra">
-            <form
-              className="comercial-busqueda"
-              onSubmit={(evento) => evento.preventDefault()}
-            >
-              <IconSearch size={20} />
-              <input
-                type="search"
-                value={texto}
-                onChange={(evento) => {
-                  setTexto(evento.target.value)
-                  setPagina(1)
-                }}
-                placeholder="Buscar producto, código, categoría o marca"
-                aria-label="Buscar en inventario"
-              />
-              {buscando && (
-                <IconLoader2 className="icono-girando" size={18} />
-              )}
-              {texto && (
-                <button
-                  type="button"
-                  className="boton-limpiar-busqueda"
-                  onClick={limpiarTexto}
-                  aria-label="Limpiar búsqueda"
-                >
-                  <IconX size={16} />
-                </button>
-              )}
-            </form>
-
-            <div className="comercial-acciones-barra">
-              {mostrarBotonExportar && (
-                <button
-                  type="button"
-                  className="boton-comercial-secundario"
-                  onClick={exportar}
-                  disabled={exportando}
-                >
-                  <IconDownload size={18} />
-                  {exportando ? 'Exportando…' : 'Exportar CSV'}
-                </button>
-              )}
-              {mostrarCargaStock && (
-                <button
-                  type="button"
-                  className="boton-comercial-primario"
-                  onClick={() => setCargaStockAbierta(true)}
-                >
-                  <IconBox size={18} />
-                  Cargar stock
-                </button>
-              )}
-              {mostrarNuevoProducto && (
-                <button
-                  type="button"
-                  className="boton-comercial-primario"
-                  onClick={() => setProductoEditando({})}
-                >
-                  <IconPlus size={18} />
-                  Nuevo producto
-                </button>
-              )}
-              {mostrarNuevoDeposito && (
-                <button
-                  type="button"
-                  className="boton-comercial-primario"
-                  onClick={() => setDepositoEditando({})}
-                >
-                  <IconPlus size={18} />
-                  Nuevo depósito
-                </button>
-              )}
-            </div>
-          </section>
-        )}
-
-        <section className="inventario-tabs">
-          {TABS.map((item) => {
-            const Icono = item.icono
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={tab === item.id ? 'activo' : ''}
-                onClick={() => cambiarTab(item.id)}
+      <div className="comercial inventario inventario-modulo">
+        <section className="filtros-area">
+          {tab !== 'catalogos' && (
+            <section className="comercial-barra">
+              <form
+                className="comercial-busqueda"
+                onSubmit={(evento) => evento.preventDefault()}
               >
-                <Icono size={18} />
-                {item.etiqueta}
-              </button>
-            )
-          })}
+                <IconSearch size={20} />
+                <input
+                  type="search"
+                  value={texto}
+                  onChange={(evento) => {
+                    setTexto(evento.target.value)
+                    setPagina(1)
+                  }}
+                  placeholder="Buscar producto, código, categoría o marca"
+                  aria-label="Buscar en inventario"
+                />
+                {buscando && (
+                  <IconLoader2 className="icono-girando" size={18} />
+                )}
+                {texto && (
+                  <button
+                    type="button"
+                    className="boton-limpiar-busqueda"
+                    onClick={limpiarTexto}
+                    aria-label="Limpiar búsqueda"
+                  >
+                    <IconX size={16} />
+                  </button>
+                )}
+              </form>
+
+              <div className="comercial-acciones-barra">
+                {mostrarBotonExportar && (
+                  <button
+                    type="button"
+                    className="boton-comercial-secundario"
+                    onClick={exportar}
+                    disabled={exportando}
+                  >
+                    <IconDownload size={18} />
+                    {exportando ? 'Exportando…' : 'Exportar CSV'}
+                  </button>
+                )}
+                {mostrarCargaStock && (
+                  <button
+                    type="button"
+                    className="boton-comercial-primario"
+                    onClick={() => setCargaStockAbierta(true)}
+                  >
+                    <IconBox size={18} />
+                    Cargar stock
+                  </button>
+                )}
+                {mostrarNuevoProducto && (
+                  <button
+                    type="button"
+                    className="boton-comercial-primario"
+                    onClick={() => setProductoEditando({})}
+                  >
+                    <IconPlus size={18} />
+                    Nuevo producto
+                  </button>
+                )}
+                {mostrarNuevoDeposito && (
+                  <button
+                    type="button"
+                    className="boton-comercial-primario"
+                    onClick={() => setDepositoEditando({})}
+                  >
+                    <IconPlus size={18} />
+                    Nuevo depósito
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
+
+          <section className="filtros-tabs filtros-pills">
+            {TABS.map((item) => {
+              const Icono = item.icono
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={tab === item.id ? 'activo' : ''}
+                  onClick={() => cambiarTab(item.id)}
+                >
+                  <Icono size={18} />
+                  {item.etiqueta}
+                </button>
+              )
+            })}
+          </section>
+
+          {tab === 'productos' && (
+            <section className="filtros-campos filtros-campos-inline">
+              <CampoSelectorBuscable
+                etiqueta="Categoría"
+                valor={categoria}
+                onCambiar={(valor) => cambiarFiltro(setCategoria, valor)}
+                opciones={categorias}
+                textoOpcion={(item) => item.categorias}
+                placeholder="Todas"
+              />
+              <CampoSelectorBuscable
+                etiqueta="Marca"
+                valor={marca}
+                onCambiar={(valor) => cambiarFiltro(setMarca, valor)}
+                opciones={marcas}
+                textoOpcion={(item) => item.marcas}
+                placeholder="Todas"
+              />
+              <CampoSelectorBuscable
+                etiqueta="Unidad"
+                valor={unidad}
+                onCambiar={(valor) => cambiarFiltro(setUnidad, valor)}
+                opciones={unidades}
+                textoOpcion={(item) => item.unidades}
+                placeholder="Todas"
+              />
+              <label className="campo-comercial">
+                <span>Orden</span>
+                <select
+                  value={orden}
+                  onChange={(evento) =>
+                    cambiarFiltro(setOrden, evento.target.value)
+                  }
+                >
+                  <option value="">Por nombre</option>
+                  <option value="-id">Más recientes</option>
+                  <option value="id">Más antiguos</option>
+                </select>
+              </label>
+            </section>
+          )}
+
+          {tab === 'stock' && (
+            <section className="filtros-campos filtros-campos-inline">
+              <label className="campo-comercial">
+                <span>Alerta</span>
+                <select
+                  value={alerta}
+                  onChange={(evento) => cambiarAlerta(evento.target.value)}
+                >
+                  <option value="">Todas</option>
+                  <option value="ok">OK</option>
+                  <option value="minimo">Mínimo</option>
+                  <option value="negativo">Negativo</option>
+                  <option value="critico">Crítico</option>
+                </select>
+              </label>
+            </section>
+          )}
         </section>
-
-        {tab === 'productos' && (
-          <section className="inventario-filtros">
-            <CampoSelectorBuscable
-              etiqueta="Categoría"
-              valor={categoria}
-              onCambiar={(valor) => cambiarFiltro(setCategoria, valor)}
-              opciones={categorias}
-              textoOpcion={(item) => item.categorias}
-              placeholder="Todas"
-            />
-            <CampoSelectorBuscable
-              etiqueta="Marca"
-              valor={marca}
-              onCambiar={(valor) => cambiarFiltro(setMarca, valor)}
-              opciones={marcas}
-              textoOpcion={(item) => item.marcas}
-              placeholder="Todas"
-            />
-            <CampoSelectorBuscable
-              etiqueta="Unidad"
-              valor={unidad}
-              onCambiar={(valor) => cambiarFiltro(setUnidad, valor)}
-              opciones={unidades}
-              textoOpcion={(item) => item.unidades}
-              placeholder="Todas"
-            />
-            <label className="campo-comercial">
-              <span>Orden</span>
-              <select
-                value={orden}
-                onChange={(evento) =>
-                  cambiarFiltro(setOrden, evento.target.value)
-                }
-              >
-                <option value="">Por nombre</option>
-                <option value="-id">Más recientes</option>
-                <option value="id">Más antiguos</option>
-              </select>
-            </label>
-          </section>
-        )}
-
-        {tab === 'stock' && (
-          <section className="inventario-filtros">
-            <label className="campo-comercial">
-              <span>Alerta</span>
-              <select
-                value={alerta}
-                onChange={(evento) => cambiarAlerta(evento.target.value)}
-              >
-                <option value="">Todas</option>
-                <option value="ok">OK</option>
-                <option value="minimo">Mínimo</option>
-                <option value="negativo">Negativo</option>
-                <option value="critico">Crítico</option>
-              </select>
-            </label>
-            <label className="inventario-check">
-              <input
-                type="checkbox"
-                checked={todasLasSucursales}
-                onChange={(evento) => {
-                  setTodasLasSucursales(evento.target.checked)
-                  setPagina(1)
-                }}
-              />
-              <span>
-                Ver el stock de{' '}
-                <strong>todas las sucursales</strong>
-              </span>
-            </label>
-          </section>
-        )}
 
         {error && <p className="comercial-error">{error}</p>}
 
@@ -819,7 +759,7 @@ export default function Inventario() {
           >
             <div className="comercial-tabla-scroll">
               {tab === 'productos' && (
-                <table className="tabla-comercial">
+                <table className="tabla-comercial tabla-inventario-productos">
                   <thead>
                     <tr>
                       <th>Código</th>
@@ -830,21 +770,20 @@ export default function Inventario() {
                       <th className="numero">Precio</th>
                       <th className="numero">Costo</th>
                       <th className="numero">Margen</th>
-                      <th>Sucursales</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {cargando && (
                       <tr>
-                        <td colSpan="10" className="comercial-vacio">
+                        <td colSpan="9" className="comercial-vacio">
                           Cargando productos…
                         </td>
                       </tr>
                     )}
                     {!cargando && datos.results.length === 0 && (
                       <tr>
-                        <td colSpan="10" className="comercial-vacio">
+                        <td colSpan="9" className="comercial-vacio">
                           No se encontraron productos.
                         </td>
                       </tr>
@@ -868,9 +807,6 @@ export default function Inventario() {
                         </td>
                         <td className="numero">
                           {item.margen ? formatearMoneda(item.margen) : '—'}
-                        </td>
-                        <td className="texto-chico">
-                          {(item.sucursales_detalle || []).join(' / ') || '—'}
                         </td>
                         <td>
                           <div className="acciones-fila">
@@ -911,11 +847,10 @@ export default function Inventario() {
               )}
 
               {tab === 'stock' && (
-                <table className="tabla-comercial">
+                <table className="tabla-comercial tabla-inventario-stock">
                   <thead>
                     <tr>
                       <th>Producto</th>
-                      <th>Sucursal</th>
                       <th className="numero">Cantidad</th>
                       <th className="numero">Mínimo</th>
                       <th className="numero">Negativo máx.</th>
@@ -926,14 +861,14 @@ export default function Inventario() {
                   <tbody>
                     {cargando && (
                       <tr>
-                        <td colSpan="7" className="comercial-vacio">
+                        <td colSpan="6" className="comercial-vacio">
                           Cargando stock…
                         </td>
                       </tr>
                     )}
                     {!cargando && datos.results.length === 0 && (
                       <tr>
-                        <td colSpan="7" className="comercial-vacio">
+                        <td colSpan="6" className="comercial-vacio">
                           No se encontraron registros de stock.
                         </td>
                       </tr>
@@ -943,7 +878,6 @@ export default function Inventario() {
                         <td>
                           <strong>{item.producto_detalle}</strong>
                         </td>
-                        <td>{item.sucursal_detalle}</td>
                         <td className="numero">
                           {formatearNumero(item.cantidad)}
                         </td>
@@ -997,11 +931,10 @@ export default function Inventario() {
               )}
 
               {tab === 'depositos' && (
-                <table className="tabla-comercial">
+                <table className="tabla-comercial tabla-inventario-depositos">
                   <thead>
                     <tr>
                       <th>Depósito</th>
-                      <th>Sucursal</th>
                       <th>Predeterminado</th>
                       <th>Descripción</th>
                       <th>Acciones</th>
@@ -1010,14 +943,14 @@ export default function Inventario() {
                   <tbody>
                     {cargando && (
                       <tr>
-                        <td colSpan="5" className="comercial-vacio">
+                        <td colSpan="4" className="comercial-vacio">
                           Cargando depósitos…
                         </td>
                       </tr>
                     )}
                     {!cargando && datos.results.length === 0 && (
                       <tr>
-                        <td colSpan="5" className="comercial-vacio">
+                        <td colSpan="4" className="comercial-vacio">
                           No se encontraron depósitos.
                         </td>
                       </tr>
@@ -1027,7 +960,6 @@ export default function Inventario() {
                         <td>
                           <strong>{item.nombre}</strong>
                         </td>
-                        <td>{item.sucursal_detalle || '—'}</td>
                         <td>
                           {item.es_predeterminado ? (
                             <span className="inventario-alerta ok">
@@ -1281,12 +1213,11 @@ export default function Inventario() {
               </p>
             ) : (
               <>
-                <h3 className="inventario-subtitulo">Stock por sucursal</h3>
+                <h3 className="inventario-subtitulo">Stock</h3>
                 <div className="comercial-tabla-scroll">
                   <table className="tabla-comercial tabla-lineas">
                     <thead>
                       <tr>
-                        <th>Sucursal</th>
                         <th className="numero">Cantidad</th>
                         <th className="numero">Mínimo</th>
                         <th>Alerta</th>
@@ -1295,7 +1226,6 @@ export default function Inventario() {
                     <tbody>
                       {(detalleProductoData?.stock || []).map((item) => (
                         <tr key={item.id}>
-                          <td>{item.sucursal_detalle}</td>
                           <td className="numero">
                             {formatearNumero(item.cantidad)}
                           </td>
@@ -1311,7 +1241,7 @@ export default function Inventario() {
                       ))}
                       {(detalleProductoData?.stock || []).length === 0 && (
                         <tr>
-                          <td colSpan="4" className="comercial-vacio">
+                          <td colSpan="3" className="comercial-vacio">
                             Sin registros de stock.
                           </td>
                         </tr>
@@ -1401,10 +1331,6 @@ export default function Inventario() {
             </div>
 
             <div className="detalle-cabecera">
-              <div>
-                <span>Sucursal</span>
-                <strong>{detalleStock.sucursal_detalle}</strong>
-              </div>
               <div>
                 <span>Stock</span>
                 <strong>{formatearNumero(detalleStock.cantidad)}</strong>
