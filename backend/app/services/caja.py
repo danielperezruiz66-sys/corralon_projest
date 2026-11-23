@@ -450,20 +450,22 @@ def pausar_seccion(movimiento, motivo, usuario):
 def reanudar_seccion(movimiento, clave, usuario):
     """Vuelve a abrir un movimiento pausado.
 
-    Solo lo reanuda el empleado que lo abrió y tiene que volver a poner su
-    contraseña: asi nadie mas puede quedarse con la caja.
+    Puede reanudarlo el empleado que lo abrió o un administrador/gerente.
+    En todos los casos se exige la contraseña del usuario autenticado: así
+    nadie más puede quedarse con la caja.
     """
     movimiento = MovimientoCaja.objects.select_for_update().get(pk=movimiento.pk)
     if movimiento.estado != MovimientoCaja.EstadoMovimiento.PAUSADA:
-        raise ValueError('El movimiento de caja no esta pausado.')
-    if not _es_dueno(movimiento, usuario):
+        raise ValueError('El movimiento de caja no está pausado.')
+    if not _es_dueno(movimiento, usuario) and not _puede_gestionar(usuario):
         raise ValueError(
-            'Solo el empleado que abrió el movimiento puede reanudarlo.'
+            'Solo el empleado que abrió el movimiento o un '
+            'administrador/gerente puede reanudarlo.'
         )
     if not clave or not usuario.check_password(clave):
         raise ValueError('La contraseña no es correcta.')
 
-    movimiento._change_reason = 'Reanudación de caja por el dueño'[:100]
+    movimiento._change_reason = 'Reanudación de caja'[:100]
     movimiento.estado = MovimientoCaja.EstadoMovimiento.ABIERTA
     movimiento.motivo_pausa = ''
     movimiento.save(update_fields=['estado', 'motivo_pausa'])

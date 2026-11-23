@@ -245,6 +245,10 @@ export default function Caja() {
     return Boolean(id) && Number(seccion.empleado) === Number(id)
   }
 
+  function puedeReanudar(seccion) {
+    return esDueño(seccion) || puedeGestionar
+  }
+
   async function pausarSeccion(seccion) {
     const resultado = await Swal.fire({
       title: `¿Pausar el movimiento #${seccion.id}?`,
@@ -296,7 +300,7 @@ export default function Caja() {
   async function reanudarSeccion(seccion) {
     const resultado = await Swal.fire({
       title: `¿Reanudar el movimiento #${seccion.id}?`,
-      text: 'Poné tu contraseña para volver a abrir la caja.',
+      text: 'Poné tu contraseña de usuario para volver a abrir la caja.',
       icon: 'question',
       input: 'password',
       inputLabel: 'Tu contraseña *',
@@ -531,7 +535,7 @@ export default function Caja() {
                       <IconEye size={17} />
                       Ver
                     </button>
-                    {puedeOperar && (
+                    {puedeOperar && seccion.estado === 'AB' && (
                       <button
                         type="button"
                         className="boton-comercial-primario"
@@ -539,6 +543,16 @@ export default function Caja() {
                       >
                         <IconCash size={17} />
                         Cerrar caja
+                      </button>
+                    )}
+                    {seccion.estado === 'PA' && puedeReanudar(seccion) && (
+                      <button
+                        type="button"
+                        className="boton-comercial-primario"
+                        onClick={() => reanudarSeccion(seccion)}
+                      >
+                        <IconPlayerPlay size={17} />
+                        Reanudar movimiento
                       </button>
                     )}
                   </div>
@@ -667,7 +681,7 @@ export default function Caja() {
                                 <IconPlayerPause size={17} />
                               </button>
                             )}
-                            {item.estado === 'PA' && esDueño(item) && (
+                            {item.estado === 'PA' && puedeReanudar(item) && (
                               <button
                                 type="button"
                                 className="boton-icono boton-icono-exito"
@@ -811,7 +825,7 @@ export default function Caja() {
           seccion={detalleSeccion}
           puedeAuditar={puedeGestionar}
           puedePausar={puedeOperar}
-          puedeReanudar={esDueño(detalleSeccion)}
+          puedeReanudar={puedeReanudar(detalleSeccion)}
           onPausar={pausarSeccion}
           onReanudar={reanudarSeccion}
           onCerrar={() => setDetalleSeccion(null)}

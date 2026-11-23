@@ -784,7 +784,7 @@ class PausaCajaSerializer(serializers.Serializer):
 class ReanudarCajaSerializer(serializers.Serializer):
     clave = serializers.CharField(
         write_only=True,
-        help_text='Contraseña del empleado que abrió el movimiento.',
+        help_text='Contraseña del usuario autenticado (dueño, administrador o gerente).',
     )
 
 
