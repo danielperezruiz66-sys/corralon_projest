@@ -55,6 +55,136 @@ class ProveedorApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('cuit', respuesta.data)
 
+    def test_no_crea_proveedor_con_nombre_con_numeros(self):
+        self.autenticar(self.user_deposito)
+
+        respuesta = self.client.post(
+            '/api/proveedores/',
+            {
+                'cuit': '30799999991',
+                'nombre': 'Proveedor 123',
+                'razon_social': 'Proveedor 123 SA',
+                'sucursales': [self.sucursal.id],
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('nombre', respuesta.data)
+
+    def test_no_crea_proveedor_con_razon_social_sin_letras(self):
+        self.autenticar(self.user_deposito)
+
+        respuesta = self.client.post(
+            '/api/proveedores/',
+            {
+                'cuit': '30799999992',
+                'nombre': 'Proveedor Válido',
+                'razon_social': '1234',
+                'sucursales': [self.sucursal.id],
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('razon_social', respuesta.data)
+
+    def test_no_crea_proveedor_con_telefono_con_letras(self):
+        self.autenticar(self.user_deposito)
+
+        respuesta = self.client.post(
+            '/api/proveedores/',
+            {
+                'cuit': '30799999993',
+                'nombre': 'Proveedor Válido',
+                'razon_social': 'Proveedor Válido SA',
+                'contacto': '387ABC1234',
+                'sucursales': [self.sucursal.id],
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('contacto', respuesta.data)
+
+    def test_no_crea_proveedor_con_telefono_sin_digitos_suficientes(self):
+        self.autenticar(self.user_deposito)
+
+        respuesta = self.client.post(
+            '/api/proveedores/',
+            {
+                'cuit': '30799999994',
+                'nombre': 'Proveedor Válido',
+                'razon_social': 'Proveedor Válido SA',
+                'contacto': '++----',
+                'sucursales': [self.sucursal.id],
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('contacto', respuesta.data)
+
+    def test_no_crea_proveedor_con_email_duplicado(self):
+        self.autenticar(self.user_deposito)
+        primero = self.client.post(
+            '/api/proveedores/',
+            {
+                'cuit': '30799999995',
+                'nombre': 'Proveedor Uno',
+                'razon_social': 'Proveedor Uno SA',
+                'email_prov': 'duplicado@proveedor.com',
+                'sucursales': [self.sucursal.id],
+            },
+            format='json',
+        )
+
+        segundo = self.client.post(
+            '/api/proveedores/',
+            {
+                'cuit': '30799999996',
+                'nombre': 'Proveedor Dos',
+                'razon_social': 'Proveedor Dos SA',
+                'email_prov': 'duplicado@proveedor.com',
+                'sucursales': [self.sucursal.id],
+            },
+            format='json',
+        )
+
+        self.assertEqual(primero.status_code, 201)
+        self.assertEqual(segundo.status_code, 400)
+        self.assertIn('email_prov', segundo.data)
+        self.assertIn('Ya existe un proveedor', segundo.data['email_prov'][0])
+
+    def test_no_crea_proveedor_con_cuit_duplicado(self):
+        self.autenticar(self.user_deposito)
+        primero = self.client.post(
+            '/api/proveedores/',
+            {
+                'cuit': '30799999997',
+                'nombre': 'Proveedor Uno',
+                'razon_social': 'Proveedor Uno SA',
+                'sucursales': [self.sucursal.id],
+            },
+            format='json',
+        )
+
+        segundo = self.client.post(
+            '/api/proveedores/',
+            {
+                'cuit': '30799999997',
+                'nombre': 'Proveedor Dos',
+                'razon_social': 'Proveedor Dos SA',
+                'sucursales': [self.sucursal.id],
+            },
+            format='json',
+        )
+
+        self.assertEqual(primero.status_code, 201)
+        self.assertEqual(segundo.status_code, 400)
+        self.assertIn('cuit', segundo.data)
+        self.assertIn('Ya existe un proveedor', segundo.data['cuit'][0])
+
     def test_no_crea_proveedor_sin_sucursal(self):
         self.autenticar(self.user_deposito)
 

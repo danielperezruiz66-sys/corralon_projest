@@ -16,3 +16,10 @@
   justify-content: flex-end;
   margin-bottom: 0.5rem;
 }
+
+.mensaje-advertencia {
+  display: block;
+  color: #b45309;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}

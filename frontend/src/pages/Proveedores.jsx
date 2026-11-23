@@ -250,7 +250,7 @@ export default function Proveedores() {
           'Razón social',
           'Nombre',
           'CUIT',
-          'Contacto',
+          'Teléfono',
           'Email',
           'Estado',
         ]
@@ -418,7 +418,7 @@ export default function Proveedores() {
                     <th>Razón social</th>
                     <th>Nombre</th>
                     <th>CUIT</th>
-                    <th>Contacto</th>
+                    <th>Teléfono</th>
                     <th>Email</th>
                     <th>Estado</th>
                     <th>Acciones</th>
@@ -627,7 +627,7 @@ export default function Proveedores() {
                 <strong>{detalleProveedor.cuit}</strong>
               </div>
               <div>
-                <span>Contacto</span>
+                <span>Teléfono</span>
                 <strong>{detalleProveedor.contacto || '—'}</strong>
               </div>
               <div>

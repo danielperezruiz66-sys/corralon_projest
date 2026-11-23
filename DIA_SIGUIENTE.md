@@ -15,6 +15,11 @@
   Inventario y Actividad.
 - Backend: consumidor final obligatorio sin cliente, mensaje de documento
   duplicado y tests (263 OK). Frontend: lint 0 warnings y build OK.
+- Compras: filtros de pago y entrega separados; alta rápida de proveedor con
+  validación en vivo de CUIT, nombre, razón social, teléfono y email, más
+  duplicados; compra con validación de cantidades/costos, pagos idempotentes,
+  recepción, anulación y permisos por rol verificados contra stock, lotes y
+  Actividad. Backend de proveedores: 19 tests OK.
 
 ## Próximo módulo: Caja
 
@@ -28,9 +33,15 @@
 - [ ] Confirmar que la alerta de vencidas del Dashboard enruta a
       `/ventas?alerta=vencida`. “Por vencer” ya no existe en la UI.
 
+## Compras
+
+- [ ] Definir si un costo de compra superior al precio de venta debe
+      bloquearse, actualizar `precio_unidad` o solo advertir (hoy advierte y no
+      actualiza el catálogo).
+- [ ] Definir si la compra necesita un campo de observaciones (hoy no existe).
+
 ## Revisión módulo por módulo
 
-- [ ] Compras.
 - [ ] Clientes.
 - [ ] Inventario.
 - [ ] Proveedores.

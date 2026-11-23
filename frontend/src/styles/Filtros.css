@@ -64,11 +64,20 @@
   color: #ffffff;
 }
 
-.filtros-area .filtros-tabs-grupo {
+.filtros-area .filtros-tabs-principal {
   display: flex;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   gap: 0.45rem;
-  margin-left: 0;
+  min-width: 0;
+}
+
+.filtros-area .filtros-tabs-grupo {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-left: auto;
 }
 
 .filtros-area .filtros-pills .filtro-destacado {
@@ -143,6 +152,15 @@
   .filtros-area .filtros-pills button {
     flex: 1 1 auto;
     text-align: center;
+  }
+
+  .filtros-area .filtros-tabs-principal,
+  .filtros-area .filtros-tabs-grupo {
+    width: 100%;
+  }
+
+  .filtros-area .filtros-tabs-grupo {
+    margin-left: 0;
   }
 
   .filtros-area .filtros-campos {

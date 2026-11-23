@@ -697,18 +697,20 @@ export default function Compras() {
                 </div>
               </section>
 
-              <section className="filtros-tabs filtros-pills">
-                {ESTADOS.map((opcion) => (
-                  <button
-                    key={opcion.id || 'todas'}
-                    type="button"
-                    className={estado === opcion.id ? 'activo' : ''}
-                    onClick={() => cambiarEstado(opcion.id)}
-                    title={opcion.ayuda}
-                  >
-                    {opcion.etiqueta}
-                  </button>
-                ))}
+              <section className="filtros-tabs filtros-pills filtros-pills-estados">
+                <div className="filtros-tabs-principal">
+                  {ESTADOS.map((opcion) => (
+                    <button
+                      key={opcion.id || 'todas'}
+                      type="button"
+                      className={estado === opcion.id ? 'activo' : ''}
+                      onClick={() => cambiarEstado(opcion.id)}
+                      title={opcion.ayuda}
+                    >
+                      {opcion.etiqueta}
+                    </button>
+                  ))}
+                </div>
                 <div className="filtros-tabs-grupo">
                   <button
                     type="button"

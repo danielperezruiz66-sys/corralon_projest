@@ -7,8 +7,9 @@ import MensajeError from '../common/MensajeError.jsx'
 import {
   normalizarDocumento,
   validarEmail,
+  validarNombreProveedor,
+  validarRazonSocialProveedor,
   validarTelefono,
-  validarTexto,
 } from '../../utils/validaciones'
 
 export default function FormularioProveedor({
@@ -26,48 +27,59 @@ export default function FormularioProveedor({
   const [estado, setEstado] = useState(proveedor?.estado_prov ?? true)
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
+  const hayErrores = Object.values(errores).some(Boolean)
+
+  function validarCampo(campo, valor) {
+    if (campo === 'cuit') {
+      const numero = normalizarDocumento(valor)
+      if (!numero) {
+        return 'Ingresá el CUIT.'
+      }
+      return /^\d{11}$/.test(numero)
+        ? ''
+        : 'El CUIT debe tener 11 números, sin letras ni símbolos.'
+    }
+    if (campo === 'nombre') {
+      return validarNombreProveedor(valor)
+    }
+    if (campo === 'razon_social') {
+      return validarRazonSocialProveedor(valor)
+    }
+    if (campo === 'contacto') {
+      return validarTelefono(valor)
+    }
+    if (campo === 'email_prov') {
+      return validarEmail(valor)
+    }
+    return ''
+  }
+
+  function actualizar(campo, setter, valor) {
+    setter(valor)
+    setErrores((previos) => ({
+      ...previos,
+      [campo]: validarCampo(campo, valor),
+    }))
+  }
 
   async function guardar(evento) {
     evento.preventDefault()
     const nuevos = {}
     const cuitNumero = normalizarDocumento(cuit)
 
-    if (!cuitNumero) {
-      nuevos.cuit = 'Ingresá el CUIT.'
-    } else if (!/^\d{11}$/.test(cuitNumero)) {
-      nuevos.cuit =
-        'El CUIT debe tener 11 números, sin letras ni símbolos.'
+    const valores = {
+      cuit,
+      nombre,
+      razon_social: razonSocial,
+      contacto,
+      email_prov: email,
     }
-
-    const errorNombre = validarTexto(nombre, 'El nombre', {
-      min: 2,
-      max: 80,
+    Object.keys(valores).forEach((campo) => {
+      const error = validarCampo(campo, valores[campo])
+      if (error) {
+        nuevos[campo] = error
+      }
     })
-    if (errorNombre) {
-      nuevos.nombre = errorNombre
-    }
-
-    const errorRazon = validarTexto(razonSocial, 'La razón social', {
-      min: 2,
-      max: 100,
-    })
-    if (errorRazon) {
-      nuevos.razon_social = errorRazon
-    }
-
-    const errorContacto =
-      validarTexto(contacto, 'El contacto', { min: 0, max: 30 }) ||
-      validarTelefono(contacto)
-    if (errorContacto) {
-      nuevos.contacto = errorContacto
-    }
-
-    const errorEmail =
-      validarTexto(email, 'El email', { min: 0, max: 80 }) ||
-      validarEmail(email)
-    if (errorEmail) {
-      nuevos.email_prov = errorEmail
-    }
 
     if (Object.keys(nuevos).length > 0) {
       setErrores(nuevos)
@@ -156,7 +168,9 @@ export default function FormularioProveedor({
               inputMode="numeric"
               className={errores.cuit ? 'input-error' : ''}
               value={cuit}
-              onChange={(evento) => setCuit(evento.target.value)}
+              onChange={(evento) =>
+                actualizar('cuit', setCuit, evento.target.value)
+              }
             />
             <MensajeError>{errores.cuit}</MensajeError>
           </label>
@@ -167,7 +181,9 @@ export default function FormularioProveedor({
               type="text"
               className={errores.nombre ? 'input-error' : ''}
               value={nombre}
-              onChange={(evento) => setNombre(evento.target.value)}
+              onChange={(evento) =>
+                actualizar('nombre', setNombre, evento.target.value)
+              }
             />
             <MensajeError>{errores.nombre}</MensajeError>
           </label>
@@ -178,19 +194,28 @@ export default function FormularioProveedor({
               type="text"
               className={errores.razon_social ? 'input-error' : ''}
               value={razonSocial}
-              onChange={(evento) => setRazonSocial(evento.target.value)}
+              onChange={(evento) =>
+                actualizar(
+                  'razon_social',
+                  setRazonSocial,
+                  evento.target.value,
+                )
+              }
             />
             <MensajeError>{errores.razon_social}</MensajeError>
           </label>
 
           <label className="campo-comercial">
-            <span>Contacto</span>
+            <span>Teléfono</span>
             <input
-              type="text"
+              type="tel"
               inputMode="tel"
+              placeholder="Ej. 3875551234"
               className={errores.contacto ? 'input-error' : ''}
               value={contacto}
-              onChange={(evento) => setContacto(evento.target.value)}
+              onChange={(evento) =>
+                actualizar('contacto', setContacto, evento.target.value)
+              }
             />
             <MensajeError>{errores.contacto}</MensajeError>
           </label>
@@ -199,9 +224,12 @@ export default function FormularioProveedor({
             <span>Email</span>
             <input
               type="email"
+              placeholder="Ej. ventas@proveedor.com"
               className={errores.email_prov ? 'input-error' : ''}
               value={email}
-              onChange={(evento) => setEmail(evento.target.value)}
+              onChange={(evento) =>
+                actualizar('email_prov', setEmail, evento.target.value)
+              }
             />
             <MensajeError>{errores.email_prov}</MensajeError>
           </label>
@@ -226,7 +254,7 @@ export default function FormularioProveedor({
             <button
               type="submit"
               className="boton-comercial-primario"
-              disabled={guardando}
+              disabled={guardando || hayErrores}
             >
               {guardando ? (
                 <>

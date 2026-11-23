@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Swal from 'sweetalert2'
 import {
   IconLoader2,
@@ -14,6 +14,7 @@ import {
   unidadPermiteDecimales,
   validarCantidadPorUnidad,
   validarFecha,
+  validarNumero,
 } from '../../utils/validaciones'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 import MensajeError from '../common/MensajeError.jsx'
@@ -21,6 +22,8 @@ import FormularioProductosProveedor from '../proveedores/FormularioProductosProv
 import FormularioProveedor from '../proveedores/FormularioProveedor.jsx'
 import SelectorProductos from './SelectorProductos'
 import '../../styles/components/comercial/FormularioCompra.css'
+
+const MAX_COSTO = 99999999.99
 
 function fechaHoyLocal() {
   const hoy = new Date()
@@ -64,6 +67,7 @@ export default function FormularioCompra({
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [errores, setErrores] = useState({})
+  const [errorItemsVacio, setErrorItemsVacio] = useState('')
   const solicitudProveedor = useRef(0)
   const productoInicialAplicado = useRef(false)
 
@@ -143,6 +147,34 @@ export default function FormularioCompra({
     (acumulado, item) => acumulado + Number(item.cantidad || 0) * Number(item.precio || 0),
     0,
   )
+  const erroresItems = useMemo(() => {
+    const mapa = {}
+    items.forEach((item, indice) => {
+      const errorCantidad = validarCantidadPorUnidad(
+        item.cantidad,
+        item.producto?.unidad_detalle,
+      )
+      if (errorCantidad) {
+        mapa[`cantidad-${indice}`] = errorCantidad
+      }
+      const errorPrecio = validarNumero(item.precio, {
+        etiqueta: 'El costo',
+        mayorQueCero: true,
+        maximo: MAX_COSTO,
+        decimales: 2,
+      })
+      if (errorPrecio) {
+        mapa[`precio-${indice}`] = errorPrecio
+      }
+    })
+    return mapa
+  }, [items])
+  const hayErroresFormulario =
+    Boolean(errores.seccion) ||
+    Boolean(errores.proveedor) ||
+    Boolean(errores.fechaLlegada) ||
+    Boolean(errorItemsVacio) ||
+    Object.keys(erroresItems).length > 0
 
   useEffect(() => {
     let vigente = true
@@ -281,6 +313,7 @@ export default function FormularioCompra({
     setProductosProveedor([])
     setProductosProveedorData([])
     setError('')
+    setErrores((previos) => ({ ...previos, proveedor: '' }))
     setCargandoProveedor(Boolean(siguiente))
 
     if (!siguiente) {
@@ -296,6 +329,7 @@ export default function FormularioCompra({
   }
 
   function agregarProducto(producto) {
+    setErrorItemsVacio('')
     if (!proveedor) {
       setErrores((previos) => ({
         ...previos,
@@ -323,7 +357,9 @@ export default function FormularioCompra({
         const copia = [...previos]
         copia[indice] = {
           ...copia[indice],
-          cantidad: copia[indice].cantidad + 1,
+          cantidad: Number(
+            (Number(copia[indice].cantidad || 0) + 1).toFixed(3),
+          ),
         }
         return copia
       }
@@ -371,30 +407,50 @@ export default function FormularioCompra({
 
   function validarItems() {
     if (items.length === 0) {
-      setErrores((previos) => ({
-        ...previos,
-        items: 'Agregá al menos un producto.',
-      }))
+      setErrorItemsVacio('Agregá al menos un producto.')
       return false
     }
-    const nuevos = {}
-    items.forEach((item, indice) => {
-      const errorCantidad = validarCantidadPorUnidad(
-        item.cantidad,
-        item.producto?.unidad_detalle,
-      )
-      if (errorCantidad) {
-        nuevos[`cantidad-${indice}`] = errorCantidad
+    setErrorItemsVacio('')
+    return Object.keys(erroresItems).length === 0
+  }
+
+  function advertenciaCosto(item) {
+    const precio = Number(item.precio)
+    const precioVenta = Number(item.producto?.precio_unidad)
+    if (!(precio > 0) || !(precioVenta > 0) || precio <= precioVenta) {
+      return ''
+    }
+    return `El costo supera el precio de venta actual (${formatearMoneda(
+      precioVenta,
+    )}). No se actualiza el precio del producto.`
+  }
+
+  function actualizarFechaLlegada(valor) {
+    setFechaLlegada(valor)
+    let errorFecha = ''
+    if (estadoEntrega === 'EC') {
+      if (!valor) {
+        errorFecha = 'Indicá la fecha estimada de llegada.'
+      } else {
+        const errorFormato = validarFecha(valor, 'La fecha estimada')
+        if (errorFormato) {
+          errorFecha = errorFormato
+        } else if (valor < fechaMinima) {
+          errorFecha =
+            'La fecha estimada no puede ser anterior a la compra.'
+        }
       }
-      if (!(Number(item.precio) > 0)) {
-        nuevos[`precio-${indice}`] = 'Ingresá un costo mayor a cero.'
-      }
-    })
-    setErrores((previos) => ({ ...previos, items: nuevos }))
-    return Object.keys(nuevos).length === 0
+    }
+    setErrores((previos) => ({
+      ...previos,
+      fechaLlegada: errorFecha,
+    }))
   }
 
   async function registrarCompra() {
+    if (guardando) {
+      return
+    }
     const nuevos = {}
     if (!seccion) {
       nuevos.seccion = 'No hay una sección de caja abierta.'
@@ -421,7 +477,8 @@ export default function FormularioCompra({
       }
     }
     setErrores(nuevos)
-    if (Object.keys(nuevos).length > 0 || !validarItems()) {
+    const itemsValidos = validarItems()
+    if (Object.keys(nuevos).length > 0 || !itemsValidos) {
       requestAnimationFrame(() => {
         document.querySelector('.input-error')?.focus()
       })
@@ -520,7 +577,13 @@ export default function FormularioCompra({
               <CampoSelectorBuscable
                 etiqueta="Sección de caja"
                 valor={seccion}
-                onCambiar={setSeccion}
+                onCambiar={(valor) => {
+                  setSeccion(valor)
+                  setErrores((previos) => ({
+                    ...previos,
+                    seccion: '',
+                  }))
+                }}
                 opciones={secciones}
                 textoOpcion={(item) =>
                   `Sección #${item.id} · ${item.caja_detalle} · ${item.empleado_detalle}`
@@ -582,6 +645,10 @@ export default function FormularioCompra({
                       value={estadoEntrega}
                       onChange={(evento) => {
                         setEstadoEntrega(evento.target.value)
+                        setErrores((previos) => ({
+                          ...previos,
+                          fechaLlegada: '',
+                        }))
                         if (evento.target.value !== 'EC') {
                           setFechaLlegada('')
                         }
@@ -601,7 +668,7 @@ export default function FormularioCompra({
                         value={fechaLlegada}
                         min={fechaMinima}
                         onChange={(evento) =>
-                          setFechaLlegada(evento.target.value)
+                          actualizarFechaLlegada(evento.target.value)
                         }
                       />
                       <MensajeError>{errores.fechaLlegada}</MensajeError>
@@ -706,7 +773,7 @@ export default function FormularioCompra({
                         <input
                           type="number"
                           className={`input-tabla ${
-                            errores.items?.[`cantidad-${indice}`]
+                            erroresItems[`cantidad-${indice}`]
                               ? 'input-error'
                               : ''
                           }`}
@@ -722,14 +789,14 @@ export default function FormularioCompra({
                           }
                         />
                         <MensajeError>
-                          {errores.items?.[`cantidad-${indice}`]}
+                          {erroresItems[`cantidad-${indice}`]}
                         </MensajeError>
                       </td>
                       <td className="numero">
                         <input
                           type="number"
                           className={`input-tabla ${
-                            errores.items?.[`precio-${indice}`]
+                            erroresItems[`precio-${indice}`]
                               ? 'input-error'
                               : ''
                           }`}
@@ -741,8 +808,13 @@ export default function FormularioCompra({
                           }
                         />
                         <MensajeError>
-                          {errores.items?.[`precio-${indice}`]}
+                          {erroresItems[`precio-${indice}`]}
                         </MensajeError>
+                        {advertenciaCosto(item) && (
+                          <small className="mensaje-advertencia">
+                            {advertenciaCosto(item)}
+                          </small>
+                        )}
                       </td>
                       <td className="numero">
                         {formatearMoneda(Number(item.cantidad) * Number(item.precio))}
@@ -762,8 +834,9 @@ export default function FormularioCompra({
                 </tbody>
               </table>
             </div>
-            {typeof errores.items === 'string' && (
-              <MensajeError>{errores.items}</MensajeError>
+            {(errorItemsVacio ||
+              (typeof errores.items === 'string' && errores.items)) && (
+              <MensajeError>{errorItemsVacio || errores.items}</MensajeError>
             )}
 
             <div className="comercial-total">
@@ -783,7 +856,7 @@ export default function FormularioCompra({
                 type="button"
                 className="boton-comercial-primario"
                 onClick={registrarCompra}
-                disabled={guardando}
+                disabled={guardando || hayErroresFormulario}
               >
                 {guardando ? (
                   <>

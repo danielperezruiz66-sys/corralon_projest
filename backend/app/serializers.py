@@ -1585,6 +1585,15 @@ class MoverLoteSerializer(serializers.Serializer):
 # =============================================================================
 
 class ProveedorSerializer(serializers.ModelSerializer):
+    cuit = serializers.CharField(
+        max_length=30,
+        validators=[
+            UniqueValidator(
+                queryset=Proveedor.objects.all(),
+                message='Ya existe un proveedor con ese CUIT.',
+            )
+        ],
+    )
     sucursales = serializers.PrimaryKeyRelatedField(
         queryset=Sucursal.objects.all(),
         many=True,
@@ -1637,16 +1646,68 @@ class ProveedorSerializer(serializers.ModelSerializer):
             )
         return cuit
 
+    def validate_nombre(self, value):
+        nombre = (value or '').strip()
+        if len(nombre) < 2:
+            raise serializers.ValidationError(
+                'El nombre debe tener al menos 2 caracteres.'
+            )
+        if re.search(r'\d', nombre):
+            raise serializers.ValidationError(
+                'El nombre no puede contener números.'
+            )
+        if not re.fullmatch(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' .&-]+", nombre):
+            raise serializers.ValidationError(
+                'El nombre contiene caracteres no válidos.'
+            )
+        return nombre
+
+    def validate_razon_social(self, value):
+        razon_social = (value or '').strip()
+        if len(razon_social) < 2:
+            raise serializers.ValidationError(
+                'La razón social debe tener al menos 2 caracteres.'
+            )
+        if not re.search(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]', razon_social):
+            raise serializers.ValidationError(
+                'La razón social debe contener al menos una letra.'
+            )
+        if not re.fullmatch(
+            r"[A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ' .,&/()#°-]+",
+            razon_social,
+        ):
+            raise serializers.ValidationError(
+                'La razón social contiene caracteres no válidos.'
+            )
+        return razon_social
+
     def validate_contacto(self, value):
         contacto = (value or '').strip()
         if not contacto:
-            return value
-        if not re.fullmatch(r'[0-9+()\s-]{6,20}', contacto):
+            return None
+        if not re.fullmatch(r'[0-9+()\s-]+', contacto):
             raise serializers.ValidationError(
-                'El contacto solo puede tener números, espacios, +, - y '
-                'paréntesis (mínimo 6 números).'
+                'El teléfono solo puede tener números, espacios, +, - y '
+                'paréntesis.'
+            )
+        if len(re.sub(r'\D', '', contacto)) < 6:
+            raise serializers.ValidationError(
+                'El teléfono debe tener al menos 6 números.'
             )
         return contacto
+
+    def validate_email_prov(self, value):
+        email = (value or '').strip()
+        if not email:
+            return None
+        duplicados = Proveedor.objects.filter(email_prov__iexact=email)
+        if self.instance is not None:
+            duplicados = duplicados.exclude(pk=self.instance.pk)
+        if duplicados.exists():
+            raise serializers.ValidationError(
+                'Ya existe un proveedor con ese email.'
+            )
+        return email
 
     def validate(self, attrs):
         sucursales = attrs.get('sucursales')

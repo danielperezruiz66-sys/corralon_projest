@@ -58,7 +58,7 @@ export function validarEmail(valor) {
   if (!texto) {
     return ''
   }
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(texto)
+  return /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(texto)
     ? ''
     : 'Ingresá un email válido.'
 }
@@ -101,6 +101,40 @@ export function validarRazonSocial(valor) {
   return texto.length >= 2
     ? ''
     : 'La razón social debe tener al menos 2 caracteres.'
+}
+
+export function validarNombreProveedor(valor) {
+  const texto = limpiar(valor)
+  if (!texto) {
+    return 'Ingresá el nombre.'
+  }
+  if (texto.length < 2) {
+    return 'El nombre debe tener al menos 2 caracteres.'
+  }
+  if (/\d/.test(texto)) {
+    return 'El nombre no puede contener números.'
+  }
+  if (!/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü' .&-]+$/.test(texto)) {
+    return 'El nombre contiene caracteres no válidos.'
+  }
+  return ''
+}
+
+export function validarRazonSocialProveedor(valor) {
+  const texto = limpiar(valor)
+  if (!texto) {
+    return 'Ingresá la razón social.'
+  }
+  if (texto.length < 2) {
+    return 'La razón social debe tener al menos 2 caracteres.'
+  }
+  if (!/[A-Za-zÁÉÍÓÚáéíóúÑñÜü]/.test(texto)) {
+    return 'La razón social debe contener al menos una letra.'
+  }
+  if (!/^[A-Za-z0-9ÁÉÍÓÚáéíóúÑñÜü' .,&/()#°-]+$/.test(texto)) {
+    return 'La razón social contiene caracteres no válidos.'
+  }
+  return ''
 }
 
 export function validarCodigo(valor) {
