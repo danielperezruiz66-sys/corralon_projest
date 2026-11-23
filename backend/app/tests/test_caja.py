@@ -371,6 +371,10 @@ class CajaApiTests(BaseCorralonTestCase):
             format='json',
         )
         self.assertEqual(repetida.status_code, 400)
+        self.assertEqual(
+            repetida.data['numero_caja'],
+            ['Ya existe una caja con ese número.'],
+        )
 
         otra = self._sucursal_extra()
         permitida = self.client.post(
@@ -379,6 +383,93 @@ class CajaApiTests(BaseCorralonTestCase):
             format='json',
         )
         self.assertEqual(permitida.status_code, 201)
+
+    def test_busqueda_encuentra_por_caja_y_empleado(self):
+        self.autenticar(self.admin)
+        caja2 = self._caja(numero=2)
+        movimiento = MovimientoCaja.objects.create(
+            caja=caja2,
+            empleado=self.emp_vendedor,
+            fecha_hora_apertura=timezone.now(),
+            monto_inicial=Decimal('100.00'),
+        )
+
+        por_nombre = self.client.get(
+            '/api/movimientos-caja/',
+            {'search': 'Caja 2'},
+        )
+        self.assertEqual(por_nombre.status_code, 200)
+        self.assertEqual(por_nombre.data['count'], 1)
+        self.assertEqual(por_nombre.data['results'][0]['id'], movimiento.id)
+
+        por_numero = self.client.get(
+            '/api/movimientos-caja/',
+            {'search': '2'},
+        )
+        self.assertEqual(por_numero.data['count'], 1)
+        self.assertEqual(por_numero.data['results'][0]['id'], movimiento.id)
+
+        por_empleado = self.client.get(
+            '/api/movimientos-caja/',
+            {'search': 'Cajero2'},
+        )
+        self.assertEqual(por_empleado.data['count'], 1)
+        self.assertEqual(por_empleado.data['results'][0]['id'], self.seccion.id)
+
+        todas = self.client.get('/api/movimientos-caja/', {'search': 'Caja'})
+        self.assertEqual(todas.data['count'], 2)
+
+        cerradas = self.client.get(
+            '/api/movimientos-caja/',
+            {'search': 'Caja 2', 'estado': 'CE'},
+        )
+        self.assertEqual(cerradas.data['count'], 0)
+
+    def test_apertura_con_monto_invalido_devuelve_mensajes_en_espanol(self):
+        self.autenticar(self.user_cajero)
+        caja = self._caja()
+
+        sin_monto = self.client.post(
+            APERTURA,
+            {'caja': caja.id, 'sucursal': self.sucursal.id},
+            format='json',
+        )
+        self.assertEqual(sin_monto.status_code, 400)
+        self.assertEqual(
+            sin_monto.data['monto_inicial'],
+            ['Ingresá el monto inicial.'],
+        )
+
+        for monto in ('', 'abc'):
+            respuesta = self.client.post(
+                APERTURA,
+                {
+                    'caja': caja.id,
+                    'sucursal': self.sucursal.id,
+                    'monto_inicial': monto,
+                },
+                format='json',
+            )
+            self.assertEqual(respuesta.status_code, 400)
+            self.assertEqual(
+                respuesta.data['monto_inicial'],
+                ['El monto inicial debe ser un número.'],
+            )
+
+        negativo = self.client.post(
+            APERTURA,
+            {
+                'caja': caja.id,
+                'sucursal': self.sucursal.id,
+                'monto_inicial': '-1.00',
+            },
+            format='json',
+        )
+        self.assertEqual(negativo.status_code, 400)
+        self.assertEqual(
+            negativo.data['monto_inicial'],
+            ['El monto inicial no puede ser negativo.'],
+        )
 
     def test_cerrar_calcula_teorico_y_real(self):
         respuesta = self._cerrar(
@@ -401,6 +492,10 @@ class CajaApiTests(BaseCorralonTestCase):
             format='json',
         )
         self.assertEqual(sin_password.status_code, 400)
+        self.assertEqual(
+            sin_password.data['password'],
+            ['Ingresá tu contraseña para cerrar el movimiento.'],
+        )
 
         incorrecta = self._cerrar(self.seccion, password='incorrecta')
         self.assertEqual(incorrecta.status_code, 400)
@@ -427,7 +522,7 @@ class CajaApiTests(BaseCorralonTestCase):
         respuesta = self._cerrar(self.seccion)
 
         self.assertEqual(respuesta.status_code, 400)
-        self.assertIn('no esta abierto', respuesta.data['detail'])
+        self.assertIn('no está abierto', respuesta.data['detail'])
 
     def test_auditar_solo_movimientos_cerrados(self):
         self.autenticar(self.user_gerente)

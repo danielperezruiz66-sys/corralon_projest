@@ -51,7 +51,7 @@ def registrar_compra(
         .get(pk=movimiento_caja.pk)
     )
     if movimiento_caja.estado != MovimientoCaja.EstadoMovimiento.ABIERTA:
-        raise ValueError('El movimiento de caja no esta abierto.')
+        raise ValueError('El movimiento de caja no está abierto.')
 
     if not isinstance(proveedor, Proveedor):
         proveedor = Proveedor.objects.get(pk=proveedor)

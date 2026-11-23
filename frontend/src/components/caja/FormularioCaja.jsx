@@ -12,8 +12,44 @@ const ESTADOS = [
   { id: 'MT', etiqueta: 'En mantenimiento' },
 ]
 
+const MAXIMO_NUMERO_CAJA = 999999
+
+function errorNumeroCaja(valor, cajas, cajaActual, sucursalId) {
+  const error = validarNumero(valor, {
+    etiqueta: 'El número de caja',
+    mayorQueCero: true,
+    decimales: 0,
+    maximo: MAXIMO_NUMERO_CAJA,
+  })
+  if (error) {
+    return error
+  }
+  const numero = Number(valor)
+  const repetida = (cajas || []).some(
+    (otra) =>
+      Number(otra.numero_caja) === numero &&
+      (!sucursalId || Number(otra.sucursal) === Number(sucursalId)) &&
+      (!cajaActual?.id || Number(otra.id) !== Number(cajaActual.id)),
+  )
+  return repetida ? 'Ya existe una caja con ese número.' : ''
+}
+
+function esErrorDeDuplicado(error) {
+  const texto = `${error?.message || ''}`.toLowerCase()
+  const sinCampo = error?.datos?.non_field_errors
+  const detalle = Array.isArray(sinCampo)
+    ? sinCampo.join(' ').toLowerCase()
+    : String(sinCampo || '').toLowerCase()
+  return (
+    texto.includes('unique set') ||
+    detalle.includes('unique set') ||
+    texto.includes('ya existe una caja')
+  )
+}
+
 export default function FormularioCaja({
   caja = null,
+  cajas = [],
   onCerrar,
   onGuardado,
 }) {
@@ -28,22 +64,39 @@ export default function FormularioCaja({
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
 
+  const errorActual = errorNumeroCaja(
+    numeroCaja,
+    cajas,
+    caja,
+    sucursalActiva,
+  )
+  const formularioInvalido = Boolean(errorActual)
+
+  function cambiarNumero(evento) {
+    const valor = evento.target.value
+    setNumeroCaja(valor)
+    const mensaje = errorNumeroCaja(valor, cajas, caja, sucursalActiva)
+    setErrores((previos) => {
+      const siguientes = { ...previos }
+      if (mensaje) {
+        siguientes.numero_caja = mensaje
+      } else {
+        delete siguientes.numero_caja
+      }
+      return siguientes
+    })
+  }
+
   async function guardar(evento) {
     evento.preventDefault()
-    const nuevos = {}
-
-    const errorNumero = validarNumero(numeroCaja, {
-      etiqueta: 'El número de caja',
-      mayorQueCero: true,
-      decimales: 0,
-      maximo: 999999,
-    })
-    if (errorNumero) {
-      nuevos.numero_caja = errorNumero
-    }
-
-    if (Object.keys(nuevos).length > 0) {
-      setErrores(nuevos)
+    const error = errorNumeroCaja(
+      numeroCaja,
+      cajas,
+      caja,
+      sucursalActiva,
+    )
+    if (error) {
+      setErrores({ numero_caja: error })
       requestAnimationFrame(() => {
         document.querySelector('.input-error')?.focus()
       })
@@ -76,8 +129,12 @@ export default function FormularioCaja({
       )
       onGuardado?.(guardada, esEdicion)
     } catch (e) {
-      if (e.campos) {
-        setErrores(e.campos)
+      const campos = { ...(e.campos || {}) }
+      if (esErrorDeDuplicado(e)) {
+        campos.numero_caja = 'Ya existe una caja con ese número.'
+      }
+      if (Object.keys(campos).length > 0) {
+        setErrores(campos)
         requestAnimationFrame(() => {
           document.querySelector('.input-error')?.focus()
         })
@@ -114,7 +171,7 @@ export default function FormularioCaja({
 
         <form onSubmit={guardar} className="comercial-grid" noValidate>
           <p className="caja-nota-total ancho-completo">
-            El número de caja no se puede repetir.
+            El número de caja no se puede repetir dentro de la sucursal.
           </p>
 
           <label className="campo-comercial ancho-completo">
@@ -123,13 +180,20 @@ export default function FormularioCaja({
               type="number"
               inputMode="numeric"
               min="1"
+              max={MAXIMO_NUMERO_CAJA}
               step="1"
               className={errores.numero_caja ? 'input-error' : ''}
               value={numeroCaja}
-              onChange={(evento) => setNumeroCaja(evento.target.value)}
+              onChange={cambiarNumero}
               placeholder="1"
+              aria-invalid={Boolean(errores.numero_caja)}
             />
             <MensajeError>{errores.numero_caja}</MensajeError>
+            {!errores.numero_caja && (
+              <small className="caja-nota-total">
+                Ingresá un número entero del 1 al {MAXIMO_NUMERO_CAJA}.
+              </small>
+            )}
           </label>
 
           <label className="campo-comercial ancho-completo">
@@ -157,7 +221,7 @@ export default function FormularioCaja({
             <button
               type="submit"
               className="boton-comercial-primario"
-              disabled={guardando}
+              disabled={guardando || formularioInvalido}
             >
               {guardando ? (
                 <>

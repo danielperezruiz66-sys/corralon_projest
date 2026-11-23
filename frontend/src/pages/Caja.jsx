@@ -25,9 +25,7 @@ import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
 import useCacheModulo from '../hooks/useCacheModulo'
 import {
-  formatearFecha,
   formatearFechaHora,
-  formatearHora,
   formatearMoneda,
   sinSucursal,
 } from '../utils/formato'
@@ -51,7 +49,7 @@ const CAJA_VACIA = {
 
 const TABS = [
   { id: 'listado', etiqueta: 'Movimientos', icono: IconCash },
-  { id: 'gestion', etiqueta: 'Gestion de cajas', icono: IconSettings, soloGestion: true },
+  { id: 'gestion', etiqueta: 'Gestión de cajas', icono: IconSettings, soloGestion: true },
 ]
 
 const FILTROS_ESTADO = [
@@ -67,19 +65,6 @@ const CLASE_ESTADO = {
   PA: 'estado-pa',
   CE: 'estado-ce',
   AU: 'estado-au',
-}
-
-function FechaHoraCelda({ valor }) {
-  if (!valor) {
-    return <span className="caja-hora">—</span>
-  }
-
-  return (
-    <span className="caja-fecha-hora">
-      <span className="caja-fecha">{formatearFecha(valor)}</span>
-      <span className="caja-hora">{formatearHora(valor)}</span>
-    </span>
-  )
 }
 
 export default function Caja() {
@@ -224,6 +209,12 @@ export default function Caja() {
 
   function irAPagina(nueva) {
     setPagina(nueva)
+  }
+
+  function limpiarFiltros() {
+    setTexto('')
+    setEstado('')
+    setPagina(1)
   }
 
   function seccionAbiertaGuardada(seccion) {
@@ -413,6 +404,17 @@ export default function Caja() {
               )}
             </form>
 
+            {(texto || estado) && (
+              <button
+                type="button"
+                className="boton-comercial-secundario"
+                onClick={limpiarFiltros}
+              >
+                <IconX size={16} />
+                Limpiar filtros
+              </button>
+            )}
+
           </section>
 
           <section className="filtros-tabs filtros-pills">
@@ -559,10 +561,9 @@ export default function Caja() {
                     <th>Movimiento</th>
                     <th>Caja</th>
                     <th>Empleado</th>
-                    <th>Apertura</th>
-                    <th>Cierre</th>
+                    <th>Apertura / Cierre</th>
                     <th>Inicial</th>
-                    <th>Teorico</th>
+                    <th>Teórico</th>
                     <th>Final</th>
                     <th>Diferencia</th>
                     <th>Estado</th>
@@ -572,14 +573,14 @@ export default function Caja() {
                 <tbody>
                   {cargando && (
                     <tr>
-                      <td colSpan="11" className="comercial-vacio">
+                      <td colSpan="10" className="comercial-vacio">
                         Cargando movimientos…
                       </td>
                     </tr>
                   )}
                   {!cargando && datos.results.length === 0 && (
                     <tr>
-                      <td colSpan="11" className="comercial-vacio">
+                      <td colSpan="10" className="comercial-vacio">
                         No se encontraron movimientos.
                       </td>
                     </tr>
@@ -599,11 +600,13 @@ export default function Caja() {
                           )}
                         </td>
                         <td>{item.empleado_detalle}</td>
-                        <td className="mono">
-                          <FechaHoraCelda valor={item.fecha_hora_apertura} />
-                        </td>
-                        <td className="mono">
-                          <FechaHoraCelda valor={item.fecha_hora_cierre} />
+                        <td className="caja-fechas">
+                          <span className="caja-fecha-linea">
+                            {formatearFechaHora(item.fecha_hora_apertura)}
+                          </span>
+                          <span className="caja-fecha-linea caja-fecha-cierre">
+                            → {formatearFechaHora(item.fecha_hora_cierre)}
+                          </span>
                         </td>
                         <td className="numero">
                           {formatearMoneda(item.monto_inicial)}
@@ -726,7 +729,7 @@ export default function Caja() {
               <div className="caja-panel-cabecera">
                 <h2 className="caja-panel-titulo">
                   <IconCash size={22} />
-                  Cajas fisicas
+                  Cajas físicas
                 </h2>
                 <button
                   type="button"
@@ -822,6 +825,7 @@ export default function Caja() {
       {cajaEditando !== null && (
         <FormularioCaja
           caja={cajaEditando}
+          cajas={cajasFisicas}
           onCerrar={() => setCajaEditando(null)}
           onGuardado={guardadoCaja}
         />

@@ -16,6 +16,7 @@ Los permisos de escritura se declaran por viewset en `roles_escritura`
 """
 
 import calendar
+import re
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
@@ -24,9 +25,11 @@ from django.db.models import Count, F, Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
@@ -1056,6 +1059,30 @@ class SucursalXEmpleadoViewSet(viewsets.ModelViewSet):
 # CAJA
 # =============================================================================
 
+PATRON_CAJA = re.compile(
+    r'^(?:caja\s*)?(?:n[°º.]?\s*)?(\d+)$',
+    re.IGNORECASE,
+)
+
+
+class BusquedaMovimientoCajaFilter(SearchFilter):
+    """Busca por número de caja cuando el término es "Caja N" o "N".
+
+    El resto de los términos (empleado o sucursal) se resuelven con el
+    `SearchFilter` normal. Así "Caja 2" no se confunde con un empleado cuyo
+    nombre contenga un número.
+    """
+
+    def filter_queryset(self, request, queryset, view):
+        termino = (request.query_params.get('search') or '').strip()
+        if termino.casefold() in {'caja', 'cajas'}:
+            return queryset
+        coincidencia = PATRON_CAJA.match(termino)
+        if coincidencia:
+            return queryset.filter(caja__numero_caja=int(coincidencia.group(1)))
+        return super().filter_queryset(request, queryset, view)
+
+
 class CajaViewSet(viewsets.ModelViewSet):
     queryset = Caja.objects.select_related('sucursal')
     serializer_class = serializers.CajaSerializer
@@ -1078,6 +1105,11 @@ class MovimientoCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewS
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, CAJERO)
     filterset_fields = ['caja', 'empleado', 'estado']
+    filter_backends = [
+        DjangoFilterBackend,
+        BusquedaMovimientoCajaFilter,
+        OrderingFilter,
+    ]
     search_fields = [
         'caja__sucursal__nombre',
         'empleado__apellido',
@@ -1321,14 +1353,14 @@ class MovimientoCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewS
         if seccion.estado == MovimientoCaja.EstadoMovimiento.PAUSADA:
             raise ValidationError(
                 {
-                    'detail': 'La sección está en pausa: primero hay que reanudarla.',
+                    'detail': 'El movimiento está en pausa: primero hay que reanudarlo.',
                     'codigo': 'error_de_negocio',
                 }
             )
         if seccion.estado != MovimientoCaja.EstadoMovimiento.ABIERTA:
             raise ValidationError(
                 {
-                    'detail': 'La seccion de caja no esta abierta.',
+                    'detail': 'El movimiento de caja no está abierto.',
                     'codigo': 'error_de_negocio',
                 }
             )

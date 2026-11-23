@@ -119,17 +119,81 @@ export default function FormularioAperturaSeccion({
   const sinEmpleadoParaElegir = !esGestion && sinPropio
   const seleccionInvalida = esGestion && sinPropio && !aperturaPara
   const sinElegibles = esGestion && sinPropio && !cargandoElegibles && elegibles.length === 0
+  const montoError = validarNumero(montoInicial, {
+    etiqueta: 'El monto inicial',
+    mayorQueCero: false,
+    decimales: 2,
+    maximo: 9999999999.99,
+  })
   // El motivo es obligatorio cuando el monto difiere del sugerido.
   const motivoObligatorio =
-    Number(montoInicial) !== Number(sugerencia.monto_sugerido)
+    !montoError && Number(montoInicial) !== Number(sugerencia.monto_sugerido)
+  const motivoFaltante = motivoObligatorio && observaciones.trim() === ''
 
   const notaCabecera = empleadoPropio
     ? esGestion
-      ? 'Se abre a tu nombre o a nombre de un empleado habilitado (AD/GE o cajero). Queda registrado quien la abre.'
+      ? 'Se abre a tu nombre o a nombre de un empleado habilitado (AD/GE o cajero). Queda registrado quién la abre.'
       : 'El movimiento se abre a tu nombre.'
     : esGestion
       ? 'Tu usuario no tiene un empleado asociado: elegí a nombre de quién se abre el movimiento. Queda registrado quién lo abre.'
       : 'Tu usuario no tiene un empleado asociado. Pedile a un administrador que te asocie uno para poder abrir la caja.'
+
+  function cambiarMonto(evento) {
+    const valor = evento.target.value
+    setMontoInicial(valor)
+    const mensaje = validarNumero(valor, {
+      etiqueta: 'El monto inicial',
+      mayorQueCero: false,
+      decimales: 2,
+      maximo: 9999999999.99,
+    })
+    const requiereMotivo =
+      !mensaje && Number(valor) !== Number(sugerencia.monto_sugerido)
+    setErrores((previos) => {
+      const siguientes = { ...previos }
+      if (mensaje) {
+        siguientes.monto_inicial = mensaje
+      } else {
+        delete siguientes.monto_inicial
+      }
+      if (requiereMotivo && !observaciones.trim()) {
+        siguientes.observaciones_apertura =
+          'Indicá el motivo del monto inicial (difiere del efectivo contado en el último cierre).'
+      } else if (!requiereMotivo) {
+        delete siguientes.observaciones_apertura
+      }
+      return siguientes
+    })
+  }
+
+  function cambiarObservaciones(evento) {
+    const valor = evento.target.value
+    setObservaciones(valor)
+    setErrores((previos) => {
+      const siguientes = { ...previos }
+      if (motivoObligatorio && !valor.trim()) {
+        siguientes.observaciones_apertura =
+          'Indicá el motivo del monto inicial (difiere del efectivo contado en el último cierre).'
+      } else {
+        delete siguientes.observaciones_apertura
+      }
+      return siguientes
+    })
+  }
+
+  function cambiarAperturaPara(evento) {
+    const valor = evento.target.value
+    setAperturaPara(valor)
+    setErrores((previos) => {
+      const siguientes = { ...previos }
+      if (esGestion && !empleadoPropio && !valor) {
+        siguientes.empleado = 'Elegí a nombre de quién se abre el movimiento.'
+      } else {
+        delete siguientes.empleado
+      }
+      return siguientes
+    })
+  }
 
   async function guardar(evento) {
     evento.preventDefault()
@@ -139,14 +203,14 @@ export default function FormularioAperturaSeccion({
       nuevos.caja = 'Elegí una caja física.'
     }
 
-    const montoError = validarNumero(montoInicial, {
+    const errorMonto = validarNumero(montoInicial, {
       etiqueta: 'El monto inicial',
       mayorQueCero: false,
       decimales: 2,
       maximo: 9999999999.99,
     })
-    if (montoError) {
-      nuevos.monto_inicial = montoError
+    if (errorMonto) {
+      nuevos.monto_inicial = errorMonto
     }
 
     if (seleccionInvalida || sinElegibles) {
@@ -214,6 +278,9 @@ export default function FormularioAperturaSeccion({
     guardando ||
     sinDisponibles ||
     sinEmpleadoParaElegir ||
+    seleccionInvalida ||
+    Boolean(montoError) ||
+    motivoFaltante ||
     (esGestion && sinPropio && cargandoElegibles)
 
   return (
@@ -240,7 +307,7 @@ export default function FormularioAperturaSeccion({
           </p>
 
           <label className="campo-comercial ancho-completo">
-            <span>Caja fisica *</span>
+            <span>Caja física *</span>
             <select
               className={errores.caja ? 'input-error' : ''}
               value={valorActual}
@@ -313,7 +380,7 @@ export default function FormularioAperturaSeccion({
                   <select
                     className={errores.empleado ? 'input-error' : ''}
                     value={aperturaPara}
-                    onChange={(evento) => setAperturaPara(evento.target.value)}
+                    onChange={cambiarAperturaPara}
                     disabled={cargandoElegibles || sinElegibles}
                   >
                     <option value="">
@@ -331,6 +398,12 @@ export default function FormularioAperturaSeccion({
                     <p className="caja-nota-total">
                       No hay empleados habilitados para abrir caja (AD/GE
                       en cualquiera; cajero habilitado).
+                    </p>
+                  )}
+                  {seleccionInvalida && !errores.empleado && (
+                    <p className="caja-nota-total">
+                      Elegí el empleado a nombre de quién se abre el
+                      movimiento.
                     </p>
                   )}
                   {errorElegibles && (
@@ -358,7 +431,8 @@ export default function FormularioAperturaSeccion({
               step="0.01"
               className={errores.monto_inicial ? 'input-error' : ''}
               value={montoInicial}
-              onChange={(evento) => setMontoInicial(evento.target.value)}
+              onChange={cambiarMonto}
+              aria-invalid={Boolean(errores.monto_inicial)}
             />
             <MensajeError>{errores.monto_inicial}</MensajeError>
             <p className="caja-nota-total">
@@ -387,7 +461,7 @@ export default function FormularioAperturaSeccion({
               maxLength="500"
               className={errores.observaciones_apertura ? 'input-error' : ''}
               value={observaciones}
-              onChange={(evento) => setObservaciones(evento.target.value)}
+              onChange={cambiarObservaciones}
               placeholder={
                 motivoObligatorio
                   ? 'Por qué se agrega o se quita dinero respecto del cierre anterior…'

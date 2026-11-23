@@ -323,10 +323,10 @@ def cerrar_seccion(
         return movimiento
     if movimiento.estado == MovimientoCaja.EstadoMovimiento.PAUSADA:
         raise ValueError(
-            'La sección está en pausa: primero hay que reanudarla.'
+            'El movimiento está en pausa: primero hay que reanudarlo.'
         )
     if movimiento.estado != MovimientoCaja.EstadoMovimiento.ABIERTA:
-        raise ValueError('El movimiento de caja no esta abierto.')
+        raise ValueError('El movimiento de caja no está abierto.')
 
     reales = {}
     for metodo_clave, valor in montos_reales.items():

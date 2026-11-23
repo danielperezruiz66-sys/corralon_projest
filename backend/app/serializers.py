@@ -613,21 +613,53 @@ class CajaSerializer(serializers.ModelSerializer):
             'estado',
             'estado_detalle',
         ]
+        # La unicidad (sucursal, numero_caja) se valida abajo con un mensaje
+        # claro; el validador automático de DRF responde en inglés.
+        validators = []
+        extra_kwargs = {
+            'sucursal': {
+                'error_messages': {
+                    'required': 'Elegí la sucursal de la caja.',
+                    'null': 'Elegí la sucursal de la caja.',
+                    'does_not_exist': 'La sucursal seleccionada no existe.',
+                    'incorrect_type': 'La sucursal seleccionada no es válida.',
+                },
+            },
+            'numero_caja': {
+                'error_messages': {
+                    'required': 'Ingresá el número de caja.',
+                    'null': 'Ingresá el número de caja.',
+                    'invalid': 'El número de caja debe ser un número entero.',
+                    'min_value': 'El número de caja debe ser mayor que cero.',
+                    'max_value': 'El número de caja no puede superar 999999.',
+                },
+            },
+            'estado': {
+                'error_messages': {
+                    'invalid_choice': 'Elegí un estado válido para la caja.',
+                },
+            },
+        }
 
     def validate_numero_caja(self, value):
         if value is None or value < 1:
             raise serializers.ValidationError(
                 'El número de caja debe ser mayor que cero.'
             )
+        if value > 999999:
+            raise serializers.ValidationError(
+                'El número de caja no puede superar 999999.'
+            )
         return value
 
     def validate(self, attrs):
-        sucursal = attrs.get('sucursal') or getattr(self.instance, 'sucursal', None)
-        numero = attrs.get('numero_caja') or getattr(
-            self.instance,
-            'numero_caja',
-            None,
-        )
+        sucursal = attrs.get('sucursal')
+        if sucursal is None:
+            sucursal = getattr(self.instance, 'sucursal', None)
+        if 'numero_caja' in attrs:
+            numero = attrs['numero_caja']
+        else:
+            numero = getattr(self.instance, 'numero_caja', None)
         if sucursal is not None and numero is not None:
             existentes = Caja.objects.filter(
                 sucursal=sucursal,
@@ -637,11 +669,7 @@ class CajaSerializer(serializers.ModelSerializer):
                 existentes = existentes.exclude(pk=self.instance.pk)
             if existentes.exists():
                 raise serializers.ValidationError(
-                    {
-                        'numero_caja': (
-                            'Ya existe una caja con ese número en la sucursal.'
-                        )
-                    }
+                    {'numero_caja': 'Ya existe una caja con ese número.'}
                 )
         return attrs
 
@@ -756,23 +784,52 @@ class PausaCajaSerializer(serializers.Serializer):
 class ReanudarCajaSerializer(serializers.Serializer):
     clave = serializers.CharField(
         write_only=True,
-        help_text='Contraseña del empleado que abrió la sección.',
+        help_text='Contraseña del empleado que abrió el movimiento.',
     )
 
 
 class AperturaCajaSerializer(serializers.Serializer):
-    caja = serializers.PrimaryKeyRelatedField(queryset=Caja.objects.all())
-    sucursal = serializers.PrimaryKeyRelatedField(queryset=Sucursal.objects.all())
+    caja = serializers.PrimaryKeyRelatedField(
+        queryset=Caja.objects.all(),
+        error_messages={
+            'required': 'Elegí la caja.',
+            'null': 'Elegí la caja.',
+            'does_not_exist': 'La caja seleccionada no existe.',
+            'incorrect_type': 'La caja seleccionada no es válida.',
+        },
+    )
+    sucursal = serializers.PrimaryKeyRelatedField(
+        queryset=Sucursal.objects.all(),
+        error_messages={
+            'required': 'Elegí la sucursal.',
+            'null': 'Elegí la sucursal.',
+            'does_not_exist': 'La sucursal seleccionada no existe.',
+            'incorrect_type': 'La sucursal seleccionada no es válida.',
+        },
+    )
     monto_inicial = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
         min_value=Decimal('0.00'),
+        error_messages={
+            'required': 'Ingresá el monto inicial.',
+            'null': 'Ingresá el monto inicial.',
+            'invalid': 'El monto inicial debe ser un número.',
+            'min_value': 'El monto inicial no puede ser negativo.',
+            'max_digits': 'El monto inicial no puede tener más de 10 dígitos.',
+            'max_decimal_places': 'El monto inicial admite hasta 2 decimales.',
+            'max_value': 'El monto inicial es demasiado grande.',
+        },
     )
     # Solo un administrador o gerente puede abrir la caja a nombre de otro empleado.
     empleado = serializers.PrimaryKeyRelatedField(
         queryset=Empleado.objects.all(),
         required=False,
         allow_null=True,
+        error_messages={
+            'does_not_exist': 'El empleado seleccionado no existe.',
+            'incorrect_type': 'El empleado seleccionado no es válido.',
+        },
     )
     # Obligatoria cuando el monto difiere del sugerido (efectivo del ultimo cierre).
     observaciones_apertura = serializers.CharField(
@@ -798,8 +855,23 @@ class CierreCajaSerializer(serializers.Serializer):
             max_digits=12,
             decimal_places=2,
             min_value=Decimal('0.00'),
+            error_messages={
+                'required': 'Ingresá el monto contado.',
+                'null': 'Ingresá el monto contado.',
+                'invalid': 'El monto contado debe ser un número.',
+                'min_value': 'El monto contado no puede ser negativo.',
+                'max_digits': 'El monto contado no puede tener más de 12 dígitos.',
+                'max_decimal_places': 'El monto contado admite hasta 2 decimales.',
+                'max_value': 'El monto contado es demasiado grande.',
+            },
         ),
         allow_empty=False,
+        error_messages={
+            'required': 'Ingresá los montos contados.',
+            'null': 'Ingresá los montos contados.',
+            'not_a_dict': 'Los montos contados tienen un formato inválido.',
+            'empty': 'Ingresá al menos un monto contado.',
+        },
     )
     observaciones = serializers.CharField(
         required=False,
@@ -816,6 +888,11 @@ class CierreCajaSerializer(serializers.Serializer):
     password = serializers.CharField(
         write_only=True,
         trim_whitespace=False,
+        error_messages={
+            'required': 'Ingresá tu contraseña para cerrar el movimiento.',
+            'null': 'Ingresá tu contraseña para cerrar el movimiento.',
+            'blank': 'Ingresá tu contraseña para cerrar el movimiento.',
+        },
         help_text='Contraseña del usuario autenticado.',
     )
 
@@ -826,7 +903,7 @@ class CierreCajaSerializer(serializers.Serializer):
                 ids.append(int(clave))
             except (TypeError, ValueError):
                 raise serializers.ValidationError(
-                    f'El metodo de pago "{clave}" no es valido.'
+                    f'El método de pago "{clave}" no es válido.'
                 )
 
         existentes = set(
@@ -835,7 +912,7 @@ class CierreCajaSerializer(serializers.Serializer):
         faltantes = set(ids) - existentes
         if faltantes:
             raise serializers.ValidationError(
-                f'No existe el metodo de pago {sorted(faltantes)[0]}.'
+                f'No existe el método de pago {sorted(faltantes)[0]}.'
             )
         return value
 

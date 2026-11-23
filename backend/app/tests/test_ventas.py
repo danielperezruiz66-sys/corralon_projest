@@ -193,7 +193,7 @@ class VentaApiTests(BaseCorralonTestCase):
         respuesta = self.crear_venta()
 
         self.assertEqual(respuesta.status_code, 400)
-        self.assertIn('no esta abierto', respuesta.data['detail'])
+        self.assertIn('no está abierto', respuesta.data['detail'])
 
     def test_confirmar_venta_sin_pagos_devuelve_400(self):
         creada = self.crear_venta()

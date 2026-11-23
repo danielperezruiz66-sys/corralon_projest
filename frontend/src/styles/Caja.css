@@ -376,7 +376,7 @@ CAJA - APERTURA, CIERRE E HISTORIAL
 }
 
 .caja-modulo .tabla-caja-secciones {
-  min-width: 1320px;
+  min-width: 1040px;
 }
 
 .caja-modulo .tabla-cajas-fisicas {
@@ -413,49 +413,59 @@ CAJA - APERTURA, CIERRE E HISTORIAL
   border-bottom: none;
 }
 
+/* Movimientos: tabla compacta que entra sin scroll horizontal en escritorio. */
+.caja-modulo .tabla-caja-secciones th,
+.caja-modulo .tabla-caja-secciones td {
+  padding: 0.8rem 0.45rem;
+}
+
+.caja-modulo .tabla-caja-secciones th {
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 .caja-modulo .tabla-caja-secciones th:nth-child(1),
 .caja-modulo .tabla-caja-secciones td:nth-child(1) {
-  width: 5%;
+  width: 8%;
 }
 
 .caja-modulo .tabla-caja-secciones th:nth-child(2),
 .caja-modulo .tabla-caja-secciones td:nth-child(2) {
-  width: 8%;
+  width: 7%;
 }
 
 .caja-modulo .tabla-caja-secciones th:nth-child(3),
 .caja-modulo .tabla-caja-secciones td:nth-child(3) {
-  width: 9%;
+  width: 13%;
 }
 
 .caja-modulo .tabla-caja-secciones th:nth-child(4),
-.caja-modulo .tabla-caja-secciones td:nth-child(4),
-.caja-modulo .tabla-caja-secciones th:nth-child(5),
-.caja-modulo .tabla-caja-secciones td:nth-child(5) {
-  width: 10%;
+.caja-modulo .tabla-caja-secciones td:nth-child(4) {
+  width: 15%;
 }
 
+.caja-modulo .tabla-caja-secciones th:nth-child(5),
+.caja-modulo .tabla-caja-secciones td:nth-child(5),
 .caja-modulo .tabla-caja-secciones th:nth-child(6),
 .caja-modulo .tabla-caja-secciones td:nth-child(6),
 .caja-modulo .tabla-caja-secciones th:nth-child(7),
 .caja-modulo .tabla-caja-secciones td:nth-child(7),
 .caja-modulo .tabla-caja-secciones th:nth-child(8),
-.caja-modulo .tabla-caja-secciones td:nth-child(8),
-.caja-modulo .tabla-caja-secciones th:nth-child(9),
-.caja-modulo .tabla-caja-secciones td:nth-child(9) {
-  width: 10%;
+.caja-modulo .tabla-caja-secciones td:nth-child(8) {
+  width: 9%;
   text-align: right;
 }
 
-.caja-modulo .tabla-caja-secciones th:nth-child(10),
-.caja-modulo .tabla-caja-secciones td:nth-child(10) {
+.caja-modulo .tabla-caja-secciones th:nth-child(9),
+.caja-modulo .tabla-caja-secciones td:nth-child(9) {
   width: 8%;
   text-align: center;
 }
 
-.caja-modulo .tabla-caja-secciones th:nth-child(11),
-.caja-modulo .tabla-caja-secciones td:nth-child(11) {
-  width: 10%;
+.caja-modulo .tabla-caja-secciones th:nth-child(10),
+.caja-modulo .tabla-caja-secciones td:nth-child(10) {
+  width: 13%;
   text-align: center;
 }
 
@@ -471,45 +481,43 @@ CAJA - APERTURA, CIERRE E HISTORIAL
   white-space: normal;
 }
 
-.caja-modulo .tabla-caja-secciones td:nth-child(4),
-.caja-modulo .tabla-caja-secciones td:nth-child(5) {
-  color: rgba(15, 42, 48, 0.72);
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 0.82rem;
+.caja-modulo .tabla-caja-secciones td:nth-child(4) {
   white-space: nowrap;
 }
 
-.caja-modulo .tabla-caja-secciones .caja-fecha-hora {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  line-height: 1.2;
+.caja-modulo .tabla-caja-secciones .caja-fechas {
+  line-height: 1.25;
 }
 
-.caja-modulo .tabla-caja-secciones .caja-fecha {
-  color: rgba(15, 42, 48, 0.52);
-  font-size: 0.72rem;
-  letter-spacing: 0.01em;
-}
-
-.caja-modulo .tabla-caja-secciones .caja-hora {
+.caja-modulo .tabla-caja-secciones .caja-fecha-linea {
+  display: block;
   color: var(--color-oscuro);
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
+.caja-modulo .tabla-caja-secciones .caja-fecha-cierre {
+  color: rgba(15, 42, 48, 0.62);
+}
+
+.caja-modulo .tabla-caja-secciones td:nth-child(5),
 .caja-modulo .tabla-caja-secciones td:nth-child(6),
 .caja-modulo .tabla-caja-secciones td:nth-child(7),
-.caja-modulo .tabla-caja-secciones td:nth-child(8),
-.caja-modulo .tabla-caja-secciones td:nth-child(9) {
-  font-size: 0.9rem;
+.caja-modulo .tabla-caja-secciones td:nth-child(8) {
+  font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.caja-modulo .tabla-caja-secciones td:nth-child(10),
-.caja-modulo .tabla-caja-secciones td:nth-child(11) {
+.caja-modulo .tabla-caja-secciones .estado-badge {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.74rem;
+}
+
+.caja-modulo .tabla-caja-secciones td:nth-child(9),
+.caja-modulo .tabla-caja-secciones td:nth-child(10) {
   white-space: nowrap;
 }
 

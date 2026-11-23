@@ -566,7 +566,7 @@ export default function Inicio() {
                         <div className="caja-item-info">
                           <strong>{item.caja}</strong>
                           <small>
-                            Sección #{item.id} · {item.empleado}
+                            Movimiento #{item.id} · {item.empleado}
                           </small>
                           {item.estado === 'PA' && (
                             <span className="caja-item-pausa">En pausa</span>

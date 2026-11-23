@@ -209,7 +209,7 @@ export default function DetalleSeccionCaja({
 
         <div className="caja-detalle-grid">
           <div>
-            <span>Caja fisica</span>
+            <span>Caja física</span>
             <strong>
               {sinSucursal(seccion.caja_detalle, seccion.sucursal_detalle)}
             </strong>
@@ -251,7 +251,7 @@ export default function DetalleSeccionCaja({
             <strong>{formatearMoneda(seccion.monto_inicial)}</strong>
           </div>
           <div>
-            <span>Monto teorico</span>
+            <span>Monto teórico</span>
             <strong>
               {seccion.monto_teorico === null
                 ? '—'
@@ -269,15 +269,15 @@ export default function DetalleSeccionCaja({
         </div>
 
         <div className="caja-detalle-bloque">
-          <h3>Arqueo por metodo de pago</h3>
+          <h3>Arqueo por método de pago</h3>
           {seccion.detalles_cierre.length === 0 ? (
             <p className="comercial-nota">Todavia no hay un cierre registrado.</p>
           ) : (
             <table className="caja-cierre-tabla">
               <thead>
                 <tr>
-                  <th>Metodo</th>
-                  <th>Teorico</th>
+                  <th>Método</th>
+                  <th>Teórico</th>
                   <th>Contado</th>
                   <th>Diferencia</th>
                 </tr>

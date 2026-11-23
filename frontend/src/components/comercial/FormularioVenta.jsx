@@ -331,7 +331,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
     }
     const nuevosErrores = {}
     if (!seccion) {
-      nuevosErrores.seccion = 'No hay una sección de caja abierta.'
+      nuevosErrores.seccion = 'No hay un movimiento de caja abierto.'
     }
     if (!cliente) {
       const errorConsumidor = validarNombreConsumidor(clienteVenta)
@@ -558,7 +558,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
             <div className="comercial-grid">
               {modo === 'venta' && (
                 <CampoSelectorBuscable
-                  etiqueta="Sección de caja"
+                  etiqueta="Movimiento de caja"
                   valor={seccion}
                   onCambiar={(valor) => {
                     setSeccion(valor)
@@ -568,12 +568,12 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
                   }}
                   opciones={secciones}
                   textoOpcion={(item) =>
-                    `Sección #${item.id} · ${item.caja_detalle} · ${item.empleado_detalle}`
+                    `Movimiento #${item.id} · ${item.caja_detalle} · ${item.empleado_detalle}`
                   }
                   placeholder={
                     secciones.length === 0
                       ? 'No hay cajas abiertas'
-                      : 'Buscar sección'
+                      : 'Buscar movimiento'
                   }
                   error={Boolean(errores.seccion)}
                   mensajeError={errores.seccion}

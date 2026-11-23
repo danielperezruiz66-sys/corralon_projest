@@ -692,7 +692,7 @@ export default function Compras() {
                         </button>
                       </th>
                       <th>Proveedor</th>
-                      <th>Caja / Sección</th>
+                      <th>Caja / Movimiento</th>
                       <th
                         className="numero"
                         aria-sort={
@@ -902,7 +902,7 @@ export default function Compras() {
                 <strong>{formatearFechaHora(detalle.fecha_compra)}</strong>
               </div>
               <div>
-                <span>Caja / Sección</span>
+                <span>Caja / Movimiento</span>
                 <strong>{detalle.movimiento_caja_detalle || '—'}</strong>
               </div>
               <div>

@@ -5,14 +5,53 @@ import { pedir } from '../../api/client'
 import { nuevaClave } from '../../utils/clave'
 import { formatearMoneda, sinSucursal } from '../../utils/formato'
 import MensajeError from '../common/MensajeError.jsx'
-import { validarNumero } from '../../utils/validaciones'
 
-function diferenciaDe(montos, fila) {
-  const contado = montos[fila.metodo_pago]
-  if (contado === '' || contado === undefined) {
+const MAXIMO_CONTADO = 9999999999.99
+
+function validarContado(valor, metodo) {
+  const texto = String(valor ?? '').trim()
+  if (!texto) {
+    return `Ingresá el monto contado en ${metodo}.`
+  }
+  const numero = Number(texto.replace(',', '.'))
+  if (!Number.isFinite(numero)) {
+    return `El monto contado en ${metodo} debe ser un número.`
+  }
+  if (numero < 0) {
+    return `El monto contado en ${metodo} no puede ser negativo.`
+  }
+  if (numero > MAXIMO_CONTADO) {
+    return `El monto contado en ${metodo} es demasiado grande.`
+  }
+  const partes = texto.replace(',', '.').split('.')
+  if (partes[1] && partes[1].length > 2) {
+    return `El monto contado en ${metodo} admite hasta 2 decimales.`
+  }
+  return ''
+}
+
+function numeroValido(valor) {
+  const texto = String(valor ?? '').trim()
+  if (!texto) {
     return null
   }
-  return Number(contado) - Number(fila.monto_sistema)
+  const numero = Number(texto.replace(',', '.'))
+  if (!Number.isFinite(numero) || numero < 0 || numero > MAXIMO_CONTADO) {
+    return null
+  }
+  const partes = texto.replace(',', '.').split('.')
+  if (partes[1] && partes[1].length > 2) {
+    return null
+  }
+  return numero
+}
+
+function diferenciaDe(montos, fila) {
+  const contado = numeroValido(montos[fila.metodo_pago])
+  if (contado === null) {
+    return null
+  }
+  return contado - Number(fila.monto_sistema)
 }
 
 export default function FormularioCierreSeccion({
@@ -29,6 +68,7 @@ export default function FormularioCierreSeccion({
   const [errorCarga, setErrorCarga] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
+  const [passwordTocada, setPasswordTocada] = useState(false)
   // Clave de idempotencia: si el cierre se reintenta, no repite el arqueo.
   const [claveCierre] = useState(() => nuevaClave())
 
@@ -65,32 +105,33 @@ export default function FormularioCierreSeccion({
     0,
   )
   const totalContado = teorico.reduce(
-    (acumulado, fila) => acumulado + (Number(montos[fila.metodo_pago]) || 0),
+    (acumulado, fila) =>
+      acumulado + (numeroValido(montos[fila.metodo_pago]) ?? 0),
     0,
   )
   const totalDiferencia = totalContado - totalSistema
+  const hayErrorMontos = teorico.some((fila) =>
+    Boolean(validarContado(montos[fila.metodo_pago], fila.metodo_pago_detalle)),
+  )
+  const formularioInvalido =
+    guardando || teorico.length === 0 || hayErrorMontos || !password
 
   async function cerrar() {
     const nuevos = {}
     const montosReales = {}
     teorico.forEach((fila) => {
       const valor = montos[fila.metodo_pago]
-      const mensaje = validarNumero(valor, {
-        etiqueta: `El contado en ${fila.metodo_pago_detalle}`,
-        mayorQueCero: false,
-        decimales: 2,
-        maximo: 9999999999.99,
-      })
+      const mensaje = validarContado(valor, fila.metodo_pago_detalle)
       if (mensaje) {
         nuevos[String(fila.metodo_pago)] = mensaje
       } else {
-        montosReales[String(fila.metodo_pago)] =
-          valor === '' || valor === undefined ? '0' : valor
+        montosReales[String(fila.metodo_pago)] = valor
       }
     })
 
     if (!password) {
       nuevos.password = 'Ingresá tu contraseña para cerrar el movimiento.'
+      setPasswordTocada(true)
     }
 
     if (Object.keys(nuevos).length > 0) {
@@ -174,7 +215,7 @@ export default function FormularioCierreSeccion({
         {cargando ? (
           <p className="comercial-nota">
             <IconLoader2 className="icono-girando" size={18} />
-            Calculando el teorico por metodo de pago…
+            Calculando el teórico por método de pago…
           </p>
         ) : (
           <>
@@ -182,7 +223,7 @@ export default function FormularioCierreSeccion({
 
             <div className="caja-detalle-grid">
               <div>
-                <span>Caja fisica</span>
+                <span>Caja física</span>
                 <strong>
                   {sinSucursal(seccion.caja_detalle, seccion.sucursal_detalle)}
                 </strong>
@@ -200,8 +241,8 @@ export default function FormularioCierreSeccion({
             <table className="caja-cierre-tabla">
               <thead>
                 <tr>
-                  <th>Metodo</th>
-                  <th>Teorico</th>
+                  <th>Método</th>
+                  <th>Teórico</th>
                   <th>Contado</th>
                   <th>Diferencia</th>
                 </tr>
@@ -222,7 +263,10 @@ export default function FormularioCierreSeccion({
                       <td>
                         {fila.metodo_pago_detalle}
                         {fila.es_efectivo && (
-                          <span className="caja-chip-efectivo">efectivo</span>
+                          <>
+                            {' '}
+                            <span className="caja-chip-efectivo">efectivo</span>
+                          </>
                         )}
                       </td>
                       <td className="mono">
@@ -241,20 +285,28 @@ export default function FormularioCierreSeccion({
                           }
                           value={montos[fila.metodo_pago] ?? ''}
                           onChange={(evento) => {
+                            const valor = evento.target.value
                             setMontos((actuales) => ({
                               ...actuales,
-                              [fila.metodo_pago]: evento.target.value,
+                              [fila.metodo_pago]: valor,
                             }))
-                            if (errores[String(fila.metodo_pago)]) {
-                              setErrores((previos) => {
-                                const siguientes = { ...previos }
+                            const mensaje = validarContado(
+                              valor,
+                              fila.metodo_pago_detalle,
+                            )
+                            setErrores((previos) => {
+                              const siguientes = { ...previos }
+                              if (mensaje) {
+                                siguientes[String(fila.metodo_pago)] = mensaje
+                              } else {
                                 delete siguientes[String(fila.metodo_pago)]
-                                return siguientes
-                              })
-                            }
+                              }
+                              return siguientes
+                            })
                           }}
                           placeholder="0.00"
                           aria-label={`Contado en ${fila.metodo_pago_detalle}`}
+                          aria-invalid={Boolean(errores[String(fila.metodo_pago)])}
                         />
                         <MensajeError>{errores[String(fila.metodo_pago)]}</MensajeError>
                       </td>
@@ -271,23 +323,27 @@ export default function FormularioCierreSeccion({
                 <tr>
                   <td>Total</td>
                   <td className="mono">{formatearMoneda(totalSistema)}</td>
-                  <td className="mono">{formatearMoneda(totalContado)}</td>
+                  <td className="mono">
+                    {hayErrorMontos ? '—' : formatearMoneda(totalContado)}
+                  </td>
                   <td
                     className={`mono ${
-                      totalDiferencia > 0
-                        ? 'caja-diferencia-positiva'
-                        : totalDiferencia < 0
-                          ? 'caja-diferencia-negativa'
-                          : 'caja-diferencia-cero'
+                      hayErrorMontos
+                        ? 'caja-diferencia-cero'
+                        : totalDiferencia > 0
+                          ? 'caja-diferencia-positiva'
+                          : totalDiferencia < 0
+                            ? 'caja-diferencia-negativa'
+                            : 'caja-diferencia-cero'
                     }`}
                   >
-                    {formatearMoneda(totalDiferencia)}
+                    {hayErrorMontos ? '—' : formatearMoneda(totalDiferencia)}
                   </td>
                 </tr>
               </tfoot>
             </table>
 
-            {totalDiferencia !== 0 && (
+            {!hayErrorMontos && totalDiferencia !== 0 && (
               <p className="caja-aviso-diferencia" role="status">
                 Diferencia de{' '}
                 <strong>{formatearMoneda(Math.abs(totalDiferencia))}</strong>
@@ -316,21 +372,33 @@ export default function FormularioCierreSeccion({
                 className={errores.password ? 'input-error' : ''}
                 value={password}
                 onChange={(evento) => {
-                  setPassword(evento.target.value)
-                  if (errores.password) {
-                    setErrores((previos) => {
-                      const siguientes = { ...previos }
+                  const valor = evento.target.value
+                  setPassword(valor)
+                  setPasswordTocada(true)
+                  setErrores((previos) => {
+                    const siguientes = { ...previos }
+                    if (!valor) {
+                      siguientes.password =
+                        'Ingresá tu contraseña para cerrar el movimiento.'
+                    } else {
                       delete siguientes.password
-                      return siguientes
-                    })
-                  }
+                    }
+                    return siguientes
+                  })
                 }}
                 placeholder="Se pide para confirmar el cierre"
+                aria-invalid={Boolean(errores.password)}
               />
-              <MensajeError>{errores.password}</MensajeError>
+              <MensajeError>
+                {errores.password ||
+                  (passwordTocada && !password
+                    ? 'Ingresá tu contraseña para cerrar el movimiento.'
+                    : '')}
+              </MensajeError>
               <p className="caja-nota-total">
-                Quien cierra queda registrado en el historial y en la
-                actividad del sistema.
+                {password
+                  ? 'Quien cierra queda registrado en el historial y en la actividad del sistema.'
+                  : 'Ingresá tu contraseña para habilitar el cierre.'}
               </p>
             </label>
 
@@ -345,7 +413,7 @@ export default function FormularioCierreSeccion({
               <button
                 type="button"
                 className="boton-comercial-primario"
-                disabled={guardando || teorico.length === 0}
+                disabled={formularioInvalido}
                 onClick={cerrar}
               >
                 {guardando ? (

@@ -9,7 +9,7 @@ export default function SidebarFooter({ abierto, cajaAbierta, onLogoutClick }) {
         <NavLink
           to="/caja"
           className="sidebar-caja-abierta"
-          title={`Sección #${cajaAbierta.id} · ${sinSucursal(
+          title={`Movimiento #${cajaAbierta.id} · ${sinSucursal(
             cajaAbierta.caja_detalle,
             cajaAbierta.sucursal_detalle,
           )}`}
@@ -18,7 +18,7 @@ export default function SidebarFooter({ abierto, cajaAbierta, onLogoutClick }) {
           {abierto && (
             <span>
               {cajaAbierta.estado === 'PA' ? 'Caja en pausa' : 'Caja abierta'}
-              <small>Sección #{cajaAbierta.id}</small>
+              <small>Movimiento #{cajaAbierta.id}</small>
             </span>
           )}
         </NavLink>

@@ -72,10 +72,10 @@ def crear_venta(movimiento_caja, items, cliente=None, cliente_venta=None):
     )
     if movimiento_caja.estado == MovimientoCaja.EstadoMovimiento.PAUSADA:
         raise ValueError(
-            'La sección de caja está en pausa: primero hay que reanudarla.'
+            'El movimiento de caja está en pausa: primero hay que reanudarlo.'
         )
     if movimiento_caja.estado != MovimientoCaja.EstadoMovimiento.ABIERTA:
-        raise ValueError('El movimiento de caja no esta abierto.')
+        raise ValueError('El movimiento de caja no está abierto.')
 
     venta = Venta.objects.create(
         movimiento_caja=movimiento_caja,
