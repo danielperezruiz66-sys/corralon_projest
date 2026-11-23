@@ -89,52 +89,6 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.filtros-area .filtros-campos .filtros-fechas {
-  display: grid;
-  gap: 0.75rem;
-  border: none;
-  border-radius: 0;
-  background-color: transparent;
-  padding: 0;
-  box-shadow: none;
-}
-
-.filtros-area .filtros-campos .filtros-fechas-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.filtros-area .filtros-campos .filtros-fechas-campos {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  align-items: end;
-  gap: 0.75rem;
-  margin-left: 0;
-  border-left: none;
-  padding-left: 0;
-  width: 100%;
-}
-
-.filtros-area .filtros-campos .filtros-fechas-campos label {
-  min-width: 0;
-}
-
-.filtros-area .filtros-campos .filtros-fechas-campos input {
-  width: 100%;
-  border-radius: 0.75rem;
-  padding: 0.5rem 0.7rem;
-  font-size: 0.85rem;
-}
-
-.filtros-area .filtros-campos .filtros-fechas-separador {
-  display: none;
-}
-
-.filtros-area .filtros-campos .boton-limpiar-fechas {
-  justify-self: start;
-}
-
 .filtros-area .filtros-pie {
   display: flex;
   flex-wrap: wrap;
@@ -177,12 +131,6 @@
   box-shadow: 0 0 0 3px rgba(74, 157, 168, 0.15);
 }
 
-@media (max-width: 900px) {
-  .filtros-area .filtros-campos .filtros-fechas-campos {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 640px) {
   .filtros-area {
     gap: 0.65rem;
@@ -199,10 +147,6 @@
 
   .filtros-area .filtros-campos {
     padding: 0.75rem;
-  }
-
-  .filtros-area .filtros-campos .filtros-fechas-campos {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .filtros-area .filtros-pie {

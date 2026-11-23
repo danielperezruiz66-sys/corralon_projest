@@ -17,6 +17,7 @@ from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 
 from .models import (
     Caja,
@@ -1928,6 +1929,18 @@ class MetodoPagoSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 class ClienteSerializer(serializers.ModelSerializer):
+    dni = serializers.CharField(
+        max_length=15,
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        validators=[
+            UniqueValidator(
+                queryset=Cliente.objects.all(),
+                message='Ya existe un cliente con ese documento.',
+            )
+        ],
+    )
     condicion_iva_detalle = serializers.CharField(
         source='get_condicion_iva_display',
         read_only=True,
@@ -2147,17 +2160,23 @@ class VentaCreateSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         errores = {}
-        if attrs.get('cliente') and attrs.get('cliente_venta'):
+        cliente = attrs.get('cliente')
+        cliente_venta = str(attrs.get('cliente_venta') or '').strip()
+        if cliente and cliente_venta:
             errores['cliente_venta'] = (
                 'El nombre libre es solo para consumidor final. '
                 'Quitalo o elegi un cliente registrado.'
             )
-        elif not attrs.get('cliente') and attrs.get('cliente_venta'):
-            error_consumidor = validar_nombre_consumidor(attrs.get('cliente_venta'))
+        elif not cliente and cliente_venta:
+            error_consumidor = validar_nombre_consumidor(cliente_venta)
             if error_consumidor:
                 errores['cliente_venta'] = error_consumidor
             else:
-                attrs['cliente_venta'] = str(attrs.get('cliente_venta')).strip()
+                attrs['cliente_venta'] = cliente_venta
+        elif not cliente:
+            errores['cliente_venta'] = (
+                'Ingresa el nombre del consumidor final o selecciona un cliente.'
+            )
 
         for indice, item in enumerate(attrs.get('items') or [], start=1):
             producto = item.get('producto')

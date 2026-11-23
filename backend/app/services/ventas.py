@@ -60,6 +60,10 @@ def crear_venta(movimiento_caja, items, cliente=None, cliente_venta=None):
         error_consumidor = validar_nombre_consumidor(cliente_venta)
         if error_consumidor:
             raise ValueError(error_consumidor)
+    else:
+        raise ValueError(
+            'Ingresa el nombre del consumidor final o selecciona un cliente.'
+        )
 
     movimiento_caja = (
         MovimientoCaja.objects.select_for_update()

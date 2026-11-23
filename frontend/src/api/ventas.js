@@ -19,15 +19,9 @@ export function claveListadoVentas(usuarioId, consulta) {
   return `${prefijoCacheVentas(usuarioId)}${consulta}`
 }
 
-/** Consulta de la vista inicial: página 1, sin filtros, con la sucursal. */
-export function consultaListadoVentas({
-  sucursal = '',
-  orden = ORDEN_VENTAS,
-} = {}) {
+/** Consulta de la vista inicial: página 1, sin filtros ni sucursal. */
+export function consultaListadoVentas({ orden = ORDEN_VENTAS } = {}) {
   const parametros = new URLSearchParams({ page: '1' })
-  if (sucursal) {
-    parametros.set('sucursal', sucursal)
-  }
   if (orden) {
     parametros.set('ordering', orden)
   }
@@ -43,16 +37,15 @@ const precargas = new Set()
  * al entrar al módulo la tabla aparece de inmediato mientras se revalida.
  */
 export function precargarListadoVentas(perfil) {
-  const sucursales = perfil?.sucursales ?? []
   const codigos = perfil?.codigos ?? []
   const puedeVer =
     perfil?.is_superuser ||
     codigos.some((codigo) => ROLES_VENTAS.includes(codigo))
-  if (!perfil?.id || !puedeVer || sucursales.length !== 1) {
+  if (!perfil?.id || !puedeVer) {
     return
   }
 
-  const consulta = consultaListadoVentas({ sucursal: sucursales[0].id })
+  const consulta = consultaListadoVentas()
   const clave = claveListadoVentas(perfil.id, consulta)
   if (precargas.has(clave)) {
     return

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Swal from 'sweetalert2'
 import {
   IconFileText,
@@ -12,11 +12,12 @@ import { pedirTodas } from '../../api/catalogos'
 import { pedir } from '../../api/client'
 import FormularioCliente from '../clientes/FormularioCliente.jsx'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
-import { formatearMoneda } from '../../utils/formato'
+import { formatearMoneda, formatearNumero } from '../../utils/formato'
 import {
   unidadPermiteDecimales,
   validarCantidadPorUnidad,
   validarNombreConsumidor,
+  validarNumero,
 } from '../../utils/validaciones'
 import MensajeError from '../common/MensajeError.jsx'
 import SelectorProductos from './SelectorProductos'
@@ -56,6 +57,59 @@ function documentoCliente(cliente) {
   return `${cliente.tipo_documento_detalle || 'Documento'} ${cliente.dni}`
 }
 
+function stockDelProducto(stocks, producto) {
+  if (!producto?.id) {
+    return null
+  }
+  return stocks?.[producto.id] || null
+}
+
+function limiteVentaStock(stock) {
+  if (!stock) {
+    return null
+  }
+  const cantidad = Number(stock.cantidad)
+  const piso = Number(stock.cant_negativa_max ?? 0)
+  if (!Number.isFinite(cantidad) || !Number.isFinite(piso)) {
+    return null
+  }
+  return cantidad - piso
+}
+
+function errorCantidadItem(cantidad, producto, stocks, validarStock) {
+  const errorUnidad = validarCantidadPorUnidad(
+    cantidad,
+    producto?.unidad_detalle,
+  )
+  if (errorUnidad) {
+    return errorUnidad
+  }
+  if (!validarStock) {
+    return ''
+  }
+  const stock = stockDelProducto(stocks, producto)
+  const limite = limiteVentaStock(stock)
+  if (limite === null) {
+    return ''
+  }
+  if (Number(cantidad) > limite) {
+    return `Solo podés vender hasta ${formatearNumero(
+      limite,
+    )} de este producto (stock ${formatearNumero(
+      stock.cantidad,
+    )}, límite negativo ${formatearNumero(stock.cant_negativa_max)}).`
+  }
+  return ''
+}
+
+function errorPrecioItem(precio) {
+  return validarNumero(precio, {
+    etiqueta: 'El precio',
+    mayorQueCero: true,
+    decimales: 2,
+  })
+}
+
 export default function FormularioVenta({ modo = 'venta', clienteInicial = '', onCerrar, onGuardado }) {
   const [secciones, setSecciones] = useState([])
   const [seccion, setSeccion] = useState('')
@@ -71,6 +125,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [errores, setErrores] = useState({})
+  const [errorItemsVacio, setErrorItemsVacio] = useState('')
 
   const buscarClientes = useCallback(async (texto) => {
     const respuesta = await pedir(
@@ -129,6 +184,30 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
     (acumulado, item) => acumulado + Number(item.cantidad || 0) * Number(item.precio || 0),
     0,
   )
+  const erroresItems = useMemo(() => {
+    const mapa = {}
+    items.forEach((item, indice) => {
+      const errorCantidad = errorCantidadItem(
+        item.cantidad,
+        item.producto,
+        stocks,
+        modo === 'venta',
+      )
+      if (errorCantidad) {
+        mapa[`cantidad-${indice}`] = errorCantidad
+      }
+      const errorPrecio = errorPrecioItem(item.precio)
+      if (errorPrecio) {
+        mapa[`precio-${indice}`] = errorPrecio
+      }
+    })
+    return mapa
+  }, [items, stocks, modo])
+  const hayErroresFormulario =
+    Boolean(errores.cliente_venta) ||
+    Boolean(errores.seccion) ||
+    Boolean(errorItemsVacio) ||
+    Object.keys(erroresItems).length > 0
 
   const buscarProductos = useCallback(async (texto) => {
     const parametros = new URLSearchParams({
@@ -187,7 +266,9 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
     })
   }
 
-  function agregarProducto(producto) {    setItems((previos) => {
+  function agregarProducto(producto) {
+    setErrorItemsVacio('')
+    setItems((previos) => {
       const indice = previos.findIndex(
         (item) => item.producto.id === producto.id,
       )
@@ -195,7 +276,9 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
         const copia = [...previos]
         copia[indice] = {
           ...copia[indice],
-          cantidad: copia[indice].cantidad + 1,
+          cantidad: Number(
+            (Number(copia[indice].cantidad || 0) + 1).toFixed(3),
+          ),
         }
         return copia
       }
@@ -217,14 +300,6 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
           posicion === indice ? { ...item, cantidad: valor } : item,
         ),
       )
-      setErrores((previos) => {
-        if (!previos.items || typeof previos.items !== 'object') {
-          return previos
-        }
-        const itemsErrores = { ...previos.items }
-        delete itemsErrores[`cantidad-${indice}`]
-        return { ...previos, items: itemsErrores }
-      })
       return
     }
     const numero = valor === '' ? 0 : Number(valor)
@@ -243,30 +318,17 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
 
   function validarItems() {
     if (items.length === 0) {
-      setErrores((previos) => ({
-        ...previos,
-        items: 'Agregá al menos un producto.',
-      }))
+      setErrorItemsVacio('Agregá al menos un producto.')
       return false
     }
-    const nuevos = {}
-    items.forEach((item, indice) => {
-      const errorCantidad = validarCantidadPorUnidad(
-        item.cantidad,
-        item.producto?.unidad_detalle,
-      )
-      if (errorCantidad) {
-        nuevos[`cantidad-${indice}`] = errorCantidad
-      }
-      if (!(Number(item.precio) > 0)) {
-        nuevos[`precio-${indice}`] = 'Ingresá un precio mayor a cero.'
-      }
-    })
-    setErrores((previos) => ({ ...previos, items: nuevos }))
-    return Object.keys(nuevos).length === 0
+    setErrorItemsVacio('')
+    return Object.keys(erroresItems).length === 0
   }
 
   async function registrarVenta() {
+    if (guardando) {
+      return
+    }
     const nuevosErrores = {}
     if (!seccion) {
       nuevosErrores.seccion = 'No hay una sección de caja abierta.'
@@ -502,6 +564,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
                     setSeccion(valor)
                     setItems([])
                     setStocks({})
+                    setErrores((previos) => ({ ...previos, seccion: '' }))
                   }}
                   opciones={secciones}
                   textoOpcion={(item) =>
@@ -550,13 +613,12 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
                     className={errores.cliente_venta ? 'input-error' : ''}
                     value={clienteVenta}
                     onChange={(evento) => {
-                      setClienteVenta(evento.target.value)
-                      if (errores.cliente_venta) {
-                        setErrores((previos) => ({
-                          ...previos,
-                          cliente_venta: '',
-                        }))
-                      }
+                      const valor = evento.target.value
+                      setClienteVenta(valor)
+                      setErrores((previos) => ({
+                        ...previos,
+                        cliente_venta: validarNombreConsumidor(valor),
+                      }))
                     }}
                     placeholder="Ej. Juan Pérez"
                   />
@@ -603,7 +665,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
                         <input
                           type="number"
                           className={`input-tabla ${
-                            errores.items?.[`cantidad-${indice}`]
+                            erroresItems[`cantidad-${indice}`]
                               ? 'input-error'
                               : ''
                           }`}
@@ -619,14 +681,14 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
                           }
                         />
                         <MensajeError>
-                          {errores.items?.[`cantidad-${indice}`]}
+                          {erroresItems[`cantidad-${indice}`]}
                         </MensajeError>
                       </td>
                       <td className="numero">
                         <input
                           type="number"
                           className={`input-tabla ${
-                            errores.items?.[`precio-${indice}`]
+                            erroresItems[`precio-${indice}`]
                               ? 'input-error'
                               : ''
                           }`}
@@ -638,7 +700,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
                           }
                         />
                         <MensajeError>
-                          {errores.items?.[`precio-${indice}`]}
+                          {erroresItems[`precio-${indice}`]}
                         </MensajeError>
                       </td>
                       <td className="numero">
@@ -659,8 +721,9 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
                 </tbody>
               </table>
             </div>
-            {typeof errores.items === 'string' && (
-              <MensajeError>{errores.items}</MensajeError>
+            {(errorItemsVacio ||
+              (typeof errores.items === 'string' && errores.items)) && (
+              <MensajeError>{errorItemsVacio || errores.items}</MensajeError>
             )}
 
             <div className="comercial-total">
@@ -681,6 +744,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
                   type="button"
                   className="boton-comercial-primario"
                   onClick={generarPresupuesto}
+                  disabled={hayErroresFormulario}
                 >
                   <IconFileText size={18} />
                   Generar presupuesto
@@ -691,7 +755,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
                   type="button"
                   className="boton-comercial-primario"
                   onClick={registrarVenta}
-                  disabled={guardando}
+                  disabled={guardando || hayErroresFormulario}
                 >
                   {guardando ? (
                     <>

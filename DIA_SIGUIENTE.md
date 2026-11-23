@@ -5,19 +5,16 @@
 > Se trabaja módulo por módulo, sin fases cerradas: al terminar uno se corrige,
 > se verifica y se actualizan estos pendientes.
 
-## Contexto al cierre — 2026-11-22
+## Contexto al cierre — 2026-11-23
 
-- Solución #1 cerrada: constraints únicos en las 3 relaciones N:M, validadores
-  de precio, bloqueo de costos duplicados con `PATCH` del existente y tests.
-- Integración visual de `combinacion-etapas`: estilos compartidos, módulo
-  Configuración, Perfil/Actividad/Facturación rediseñados y **toda la UI sin
-  sucursales** (sin filtros, columnas ni checklists).
-- `useCacheModulo` aplicado en todos los módulos: Inicio, Ventas, Compras,
-  Inventario, Proveedores, Clientes, Caja, Empleados, Actividad, Facturación,
-  Perfil y Configuración.
-- QA de 12 rutas sin errores de consola; flujo de costo duplicado revalidado.
-- Backend: 259 tests OK. Frontend: lint 0 warnings y build OK.
-- La rama `main` quedó actualizada con este estado.
+- Filtros de fecha de Ventas y Compras unificados en una sola tarjeta, con
+  topes de fecha, aviso de ajuste y rango inválido sin datos viejos.
+- QA E2E de Ventas: pestañas, presets y búsqueda; alta sin cliente; cliente
+  rápido con documento inválido/duplicado; cantidades y stock; cobro parcial
+  y total; idempotencia con doble clic; anulación con restauración de stock,
+  Inventario y Actividad.
+- Backend: consumidor final obligatorio sin cliente, mensaje de documento
+  duplicado y tests (263 OK). Frontend: lint 0 warnings y build OK.
 
 ## Próximo módulo: Caja
 
@@ -28,13 +25,8 @@
 
 ## Ventas
 
-- [ ] QA visual: estados `PE`/`PC`/`CO`/`AN`, pestañas, cobro/confirmación/
-      anulación por rol, filtro Vencidas y atajos.
 - [ ] Confirmar que la alerta de vencidas del Dashboard enruta a
-      `/ventas?alerta=vencida` y que “Por vencer” no existe en la UI.
-- [ ] QA: fechas (Desde tope ayer; Hasta y Un día tope hoy) y consumidor final
-      obligatorio sin cliente / oculto con cliente, con nombre y documento en
-      el selector.
+      `/ventas?alerta=vencida`. “Por vencer” ya no existe en la UI.
 
 ## Revisión módulo por módulo
 

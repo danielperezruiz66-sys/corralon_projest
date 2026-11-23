@@ -815,6 +815,14 @@ export default function Compras() {
                       </tr>
                     )}
 
+                    {rangoInvalido && (
+                      <tr>
+                        <td colSpan="8" className="comercial-vacio">
+                          Corregí el rango de fechas para ver las compras.
+                        </td>
+                      </tr>
+                    )}
+
                     {!cargando &&
                       !rangoInvalido &&
                       !error &&
@@ -827,6 +835,7 @@ export default function Compras() {
                       )}
 
                     {!cargando &&
+                      !rangoInvalido &&
                       datos.results.map((compra) => (
                         <tr key={compra.id}>
                           <td className="mono">#{compra.id}</td>

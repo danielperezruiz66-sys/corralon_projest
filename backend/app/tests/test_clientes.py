@@ -37,6 +37,27 @@ class ClienteApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.data['nombre'], 'Ana')
         self.assertEqual(respuesta.data['apellido'], 'Pérez')
 
+    def test_no_crea_cliente_con_documento_duplicado(self):
+        self.autenticar(self.user_cajero)
+        datos = {
+            'razon_social': 'Duplicado SA',
+            'tipo_documento': 'CUIT',
+            'dni': '30712345678',
+            'telefono': '3415550000',
+        }
+
+        primero = self.client.post('/api/clientes/', datos, format='json')
+        segundo = self.client.post(
+            '/api/clientes/',
+            {**datos, 'razon_social': 'Duplicado 2 SA'},
+            format='json',
+        )
+
+        self.assertEqual(primero.status_code, 201)
+        self.assertEqual(segundo.status_code, 400)
+        self.assertIn('dni', segundo.data)
+        self.assertIn('Ya existe un cliente', segundo.data['dni'][0])
+
     def test_no_crea_cliente_sin_contacto(self):
         self.autenticar(self.user_cajero)
 

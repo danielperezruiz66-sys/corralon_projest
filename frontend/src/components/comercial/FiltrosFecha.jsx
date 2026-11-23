@@ -7,6 +7,11 @@ function inicioDelMes(fecha) {
   return new Date(fecha.getFullYear(), fecha.getMonth(), 1)
 }
 
+function fechaLegible(iso) {
+  const [anio, mes, dia] = String(iso || '').split('-')
+  return anio && mes && dia ? `${dia}/${mes}/${anio}` : iso
+}
+
 function menorIso(primera, segunda) {
   if (!primera) {
     return segunda || ''
@@ -27,6 +32,7 @@ export default function FiltrosFecha({
 }) {
   const { desde, hasta, fecha } = valores
   const [hoy] = useState(() => new Date())
+  const [aviso, setAviso] = useState('')
   const hoyIso = fechaIso(hoy)
   const ayerIso = fechaIso(sumarDias(hoy, -1))
   const haceSeisIso = fechaIso(sumarDias(hoy, -6))
@@ -38,7 +44,21 @@ export default function FiltrosFecha({
     onCambiar({ ...valores, ...cambios })
   }
 
+  function limitarFecha(valor, maximo, etiqueta) {
+    if (!valor || !maximo || valor <= maximo) {
+      setAviso('')
+      return valor
+    }
+    setAviso(
+      `${etiqueta} no puede ser posterior a ${fechaLegible(
+        maximo,
+      )}. Se ajustó al máximo permitido.`,
+    )
+    return maximo
+  }
+
   function aplicarPreset(tipo) {
+    setAviso('')
     if (tipo === 'todas') {
       cambiar({ desde: '', hasta: '', fecha: '' })
     } else if (tipo === 'hoy') {
@@ -69,8 +89,8 @@ export default function FiltrosFecha({
   ]
 
   return (
-    <>
-      <section className="filtros-tabs filtros-pills filtros-fechas-presets">
+    <section className="filtros-fechas">
+      <div className="filtros-tabs filtros-fechas-presets">
         {presets.map((preset) => (
           <button
             key={preset.id}
@@ -81,9 +101,9 @@ export default function FiltrosFecha({
             {preset.etiqueta}
           </button>
         ))}
-      </section>
+      </div>
 
-      <section className="filtros-campos filtros-campos-inline filtros-fechas-campos">
+      <div className="filtros-fechas-campos">
         <label className="campo-comercial">
           <span>Desde</span>
           <input
@@ -91,7 +111,14 @@ export default function FiltrosFecha({
             value={desde}
             max={maximoDesde || undefined}
             onChange={(evento) =>
-              cambiar({ desde: evento.target.value, fecha: '' })
+              cambiar({
+                desde: limitarFecha(
+                  evento.target.value,
+                  desdeMaximo,
+                  'La fecha desde',
+                ),
+                fecha: '',
+              })
             }
           />
         </label>
@@ -103,7 +130,14 @@ export default function FiltrosFecha({
             min={minimoHasta || undefined}
             max={hastaMaximo || undefined}
             onChange={(evento) =>
-              cambiar({ hasta: evento.target.value, fecha: '' })
+              cambiar({
+                hasta: limitarFecha(
+                  evento.target.value,
+                  hastaMaximo,
+                  'La fecha hasta',
+                ),
+                fecha: '',
+              })
             }
           />
         </label>
@@ -115,7 +149,11 @@ export default function FiltrosFecha({
             max={diaMaximo || undefined}
             onChange={(evento) =>
               cambiar({
-                fecha: evento.target.value,
+                fecha: limitarFecha(
+                  evento.target.value,
+                  diaMaximo,
+                  'La fecha',
+                ),
                 desde: '',
                 hasta: '',
               })
@@ -132,9 +170,10 @@ export default function FiltrosFecha({
             Limpiar fechas
           </button>
         )}
-      </section>
+      </div>
 
       {error && <p className="filtros-fecha-error">{error}</p>}
-    </>
+      {aviso && !error && <p className="filtros-fecha-aviso">{aviso}</p>}
+    </section>
   )
 }

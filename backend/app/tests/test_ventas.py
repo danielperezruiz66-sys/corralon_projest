@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.utils import timezone
 
 from app.models import DetalleStock, DetalleVenta, ProductoXProveedor, Venta
+from app.services.ventas import crear_venta as crear_venta_service
 
 from .base import BaseCorralonTestCase
 
@@ -71,6 +72,28 @@ class VentaApiTests(BaseCorralonTestCase):
 
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('cliente_venta', respuesta.data)
+
+    def test_exige_cliente_o_consumidor_final(self):
+        payload = self.payload_venta()
+        payload.pop('cliente')
+
+        respuesta = self.client.post('/api/ventas/', payload, format='json')
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('cliente_venta', respuesta.data)
+
+    def test_exige_consumidor_final_con_texto_vacio(self):
+        respuesta = self.crear_venta(cliente=None, cliente_venta='   ')
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('cliente_venta', respuesta.data)
+
+    def test_servicio_exige_consumidor_final(self):
+        with self.assertRaisesMessage(ValueError, 'consumidor final'):
+            crear_venta_service(
+                self.seccion,
+                [{'producto': self.producto, 'cantidad': '1.000'}],
+            )
 
     def test_filtra_ventas_por_fecha(self):
         creada = self.crear_venta()

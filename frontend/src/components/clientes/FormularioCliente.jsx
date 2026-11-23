@@ -51,7 +51,7 @@ export default function FormularioCliente({
     getValues,
     formState: { errors, isSubmitting },
   } = useForm({
-    mode: 'onBlur',
+    mode: 'onChange',
     defaultValues: {
       razon_social: cliente?.razon_social ?? '',
       tipo_documento: cliente?.tipo_documento ?? '',
