@@ -31,15 +31,31 @@
   rápida, regla de margen, duplicados y edición verificados; corregida la
   validación del código de proveedor (máximo 30, caracteres permitidos) en
   frontend y backend. Sin errores 500; solo 400 controlados en duplicados.
+- Caja: renombrado visual de “sección” a “movimiento” en pestañas, tarjetas,
+  tablas, paginador, detalles y modales; auditoría forzada de búsqueda,
+  apertura/cierre, pausa, auditoría y cajas físicas. Hallazgos funcionales
+  anotados en la sección Caja, sin corregir por alcance.
 - Backend: migraciones 0006 (CUIT 3–13) y 0007 (unicidad de catálogo/stock);
   suite completa 275 tests OK. Frontend: lint 0 warnings y build OK.
 
 ## Próximo módulo: Caja
 
-- [ ] Revisar pantalla, secciones `AB`/`PA`/`CE`/`AU`, apertura, cierre,
+- [ ] Revisar pantalla, movimientos `AB`/`PA`/`CE`/`AU`, apertura, cierre,
       pausa, reanudación, auditoría y arqueo por método.
 - [ ] Verificar montos sugeridos, notas inborrables y permisos (`CA` en sus
       sucursales, `AD/GE` en cualquiera).
+- [ ] Corregir el buscador: “Buscar por caja o empleado” no encuentra por caja
+      (`Caja 2` y `2` devuelven 0); solo funciona por empleado.
+- [ ] Alta/edición de caja física: el número vacío no deshabilita el guardado
+      en vivo y el duplicado muestra un error técnico en inglés
+      (`non_field_errors: ... must make a unique set`).
+- [ ] Cierre de caja: el monto contado vacío o negativo no se valida en vivo;
+      el botón permanece habilitado y la diferencia se calcula igual.
+- [ ] Abrir caja: la API devuelve mensajes en inglés para monto vacío/texto/
+      negativo; la UI no permite ejercitarlo cuando todas las cajas están
+      abiertas. El duplicado de caja abierta sí devuelve un mensaje claro.
+- [ ] Probar reanudación cuando exista un movimiento en pausa; hoy no hay
+      movimientos `PA` en los datos.
 
 ## Ventas
 

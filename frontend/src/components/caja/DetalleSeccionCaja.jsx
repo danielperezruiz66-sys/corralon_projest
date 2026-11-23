@@ -87,7 +87,7 @@ export default function DetalleSeccionCaja({
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Arqueo - Seccion #${escaparHtml(seccion.id)} - Corralon Fer-Cons</title>
+  <title>Arqueo - Movimiento #${escaparHtml(seccion.id)} - Corralon Fer-Cons</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: Arial, sans-serif; color: #0f2a30; margin: 2.5rem; }
@@ -112,7 +112,7 @@ export default function DetalleSeccionCaja({
     </div>
     <div>
       <h1>ARQUEO DE CAJA</h1>
-      <p>Sección #${escaparHtml(seccion.id)}</p>
+      <p>Movimiento #${escaparHtml(seccion.id)}</p>
     </div>
   </header>
   <div class="datos">
@@ -156,7 +156,7 @@ export default function DetalleSeccionCaja({
 
   async function auditar() {
     const resultado = await Swal.fire({
-      title: `¿Auditar la seccion #${seccion.id}?`,
+      title: `¿Auditar el movimiento #${seccion.id}?`,
       text: 'El cierre queda marcado como auditado y no admite cambios.',
       icon: 'question',
       showCancelButton: true,
@@ -174,7 +174,7 @@ export default function DetalleSeccionCaja({
       })
       Swal.fire({
         icon: 'success',
-        title: 'Seccion auditada',
+        title: 'Movimiento auditado',
         timer: 1400,
         showConfirmButton: false,
       })
@@ -182,7 +182,7 @@ export default function DetalleSeccionCaja({
     } catch (e) {
       Swal.fire({
         icon: 'error',
-        title: 'No se pudo auditar la seccion',
+        title: 'No se pudo auditar el movimiento',
         text: e.message,
         confirmButtonColor: '#4a9da8',
       })
@@ -195,7 +195,7 @@ export default function DetalleSeccionCaja({
         <div className="comercial-modal-cabecera">
           <h2>
             <IconCash size={24} />
-            Seccion #{seccion.id}
+            Movimiento #{seccion.id}
           </h2>
           <button
             type="button"
@@ -360,7 +360,7 @@ export default function DetalleSeccionCaja({
               onClick={() => onPausar?.(seccion)}
             >
               <IconPlayerPause size={17} />
-              Pausar seccion
+              Pausar movimiento
             </button>
           )}
           {puedeReanudar && seccion.estado === 'PA' && (
@@ -370,7 +370,7 @@ export default function DetalleSeccionCaja({
               onClick={() => onReanudar?.(seccion)}
             >
               <IconPlayerPlay size={17} />
-              Reanudar seccion
+              Reanudar movimiento
             </button>
           )}
           {(seccion.estado === 'CE' || seccion.estado === 'AU') && (
@@ -390,7 +390,7 @@ export default function DetalleSeccionCaja({
               onClick={auditar}
             >
               <IconCheck size={18} />
-              Auditar seccion
+              Auditar movimiento
             </button>
           )}
         </div>

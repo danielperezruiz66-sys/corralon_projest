@@ -50,7 +50,7 @@ const CAJA_VACIA = {
 }
 
 const TABS = [
-  { id: 'listado', etiqueta: 'Secciones', icono: IconCash },
+  { id: 'listado', etiqueta: 'Movimientos', icono: IconCash },
   { id: 'gestion', etiqueta: 'Gestion de cajas', icono: IconSettings, soloGestion: true },
 ]
 
@@ -230,8 +230,8 @@ export default function Caja() {
     setAperturaAbierta(false)
     Swal.fire({
       icon: 'success',
-      title: 'Seccion abierta',
-      text: `${sinSucursal(seccion.caja_detalle, seccion.sucursal_detalle)} · Sección #${seccion.id} · a nombre de ${seccion.empleado_detalle}`,
+      title: 'Movimiento abierto',
+      text: `${sinSucursal(seccion.caja_detalle, seccion.sucursal_detalle)} · Movimiento #${seccion.id} · a nombre de ${seccion.empleado_detalle}`,
       timer: 1800,
       showConfirmButton: false,
     })
@@ -242,7 +242,7 @@ export default function Caja() {
     setCierreSeccion(null)
     Swal.fire({
       icon: 'success',
-      title: 'Seccion cerrada',
+      title: 'Movimiento cerrado',
       timer: 1500,
       showConfirmButton: false,
     })
@@ -256,7 +256,7 @@ export default function Caja() {
 
   async function pausarSeccion(seccion) {
     const resultado = await Swal.fire({
-      title: `¿Pausar la sección #${seccion.id}?`,
+      title: `¿Pausar el movimiento #${seccion.id}?`,
       text: 'La caja queda bloqueada: no se pueden registrar ventas ni pagos hasta que la reanudes.',
       icon: 'warning',
       input: 'textarea',
@@ -286,7 +286,7 @@ export default function Caja() {
       })
       Swal.fire({
         icon: 'success',
-        title: 'Sección en pausa',
+        title: 'Movimiento en pausa',
         text: 'Quedó registrada la pausa con su motivo.',
         timer: 1800,
         showConfirmButton: false,
@@ -295,7 +295,7 @@ export default function Caja() {
     } catch (e) {
       Swal.fire({
         icon: 'error',
-        title: 'No se pudo pausar la sección',
+        title: 'No se pudo pausar el movimiento',
         text: e.message,
         confirmButtonColor: '#4a9da8',
       })
@@ -304,7 +304,7 @@ export default function Caja() {
 
   async function reanudarSeccion(seccion) {
     const resultado = await Swal.fire({
-      title: `¿Reanudar la sección #${seccion.id}?`,
+      title: `¿Reanudar el movimiento #${seccion.id}?`,
       text: 'Poné tu contraseña para volver a abrir la caja.',
       icon: 'question',
       input: 'password',
@@ -333,7 +333,7 @@ export default function Caja() {
       })
       Swal.fire({
         icon: 'success',
-        title: 'Sección reanudada',
+        title: 'Movimiento reanudado',
         timer: 1600,
         showConfirmButton: false,
       })
@@ -341,7 +341,7 @@ export default function Caja() {
     } catch (e) {
       Swal.fire({
         icon: 'error',
-        title: 'No se pudo reanudar la sección',
+        title: 'No se pudo reanudar el movimiento',
         text: e.message,
         confirmButtonColor: '#4a9da8',
       })
@@ -374,7 +374,7 @@ export default function Caja() {
     <>
       <Encabezado
         titulo="Caja"
-        subtitulo="Apertura, cierre y auditoria de las secciones de caja"
+        subtitulo="Apertura, cierre y auditoría de los movimientos de caja"
       />
 
       <div className="comercial inventario caja-modulo">
@@ -393,7 +393,7 @@ export default function Caja() {
                   setPagina(1)
                 }}
                 placeholder="Buscar por caja o empleado"
-                aria-label="Buscar secciones de caja"
+                aria-label="Buscar movimientos de caja"
               />
               {buscando && (
                 <IconLoader2 className="icono-girando" size={18} />
@@ -467,10 +467,10 @@ export default function Caja() {
                   className="boton-comercial-primario"
                   disabled={!sucursalActiva}
                   onClick={() => setAperturaAbierta(true)}
-                  title="Abrir una seccion de caja"
+                  title="Abrir una caja"
                 >
                   <IconPlus size={18} />
-                  Abrir seccion
+                  Abrir caja
                 </button>
               )}
             </div>
@@ -485,7 +485,7 @@ export default function Caja() {
             <div className="caja-abiertas">
               {abiertas.length === 0 && (
                 <p className="caja-abierta-vacia">
-                  No hay cajas con secciones abiertas.
+                  No hay cajas con movimientos abiertos.
                 </p>
               )}
               {abiertas.map((seccion) => (
@@ -498,7 +498,7 @@ export default function Caja() {
                           seccion.sucursal_detalle,
                         )}
                       </strong>
-                      <small>Sección #{seccion.id}</small>
+                      <small>Movimiento #{seccion.id}</small>
                     </div>
                     <span className={`estado-badge ${CLASE_ESTADO[seccion.estado]}`}>
                       {seccion.estado_detalle}
@@ -536,7 +536,7 @@ export default function Caja() {
                         onClick={() => setCierreSeccion(seccion)}
                       >
                         <IconCash size={17} />
-                        Cerrar seccion
+                        Cerrar caja
                       </button>
                     )}
                   </div>
@@ -556,7 +556,7 @@ export default function Caja() {
               <table className="tabla-comercial tabla-caja-secciones">
                 <thead>
                   <tr>
-                    <th>Sección</th>
+                    <th>Movimiento</th>
                     <th>Caja</th>
                     <th>Empleado</th>
                     <th>Apertura</th>
@@ -573,14 +573,14 @@ export default function Caja() {
                   {cargando && (
                     <tr>
                       <td colSpan="11" className="comercial-vacio">
-                        Cargando secciones…
+                        Cargando movimientos…
                       </td>
                     </tr>
                   )}
                   {!cargando && datos.results.length === 0 && (
                     <tr>
                       <td colSpan="11" className="comercial-vacio">
-                        No se encontraron secciones.
+                        No se encontraron movimientos.
                       </td>
                     </tr>
                   )}
@@ -659,7 +659,7 @@ export default function Caja() {
                                 type="button"
                                 className="boton-icono"
                                 onClick={() => pausarSeccion(item)}
-                                title="Pausar seccion"
+                                title="Pausar movimiento"
                               >
                                 <IconPlayerPause size={17} />
                               </button>
@@ -669,7 +669,7 @@ export default function Caja() {
                                 type="button"
                                 className="boton-icono boton-icono-exito"
                                 onClick={() => reanudarSeccion(item)}
-                                title="Reanudar seccion"
+                                title="Reanudar movimiento"
                               >
                                 <IconPlayerPlay size={17} />
                               </button>
@@ -679,7 +679,7 @@ export default function Caja() {
                                 type="button"
                                 className="boton-icono boton-icono-exito"
                                 onClick={() => setCierreSeccion(item)}
-                                title="Cerrar seccion"
+                                title="Cerrar movimiento"
                               >
                                 <IconCash size={17} />
                               </button>
@@ -695,7 +695,7 @@ export default function Caja() {
 
             <div className="comercial-paginacion">
               <span>
-                {datos.count} seccion{datos.count === 1 ? '' : 'es'}
+                {datos.count} movimiento{datos.count === 1 ? '' : 's'}
               </span>
               <div>
                 <button

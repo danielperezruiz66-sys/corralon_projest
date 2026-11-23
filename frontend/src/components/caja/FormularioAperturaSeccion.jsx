@@ -126,9 +126,9 @@ export default function FormularioAperturaSeccion({
   const notaCabecera = empleadoPropio
     ? esGestion
       ? 'Se abre a tu nombre o a nombre de un empleado habilitado (AD/GE o cajero). Queda registrado quien la abre.'
-      : 'La seccion se abre a tu nombre.'
+      : 'El movimiento se abre a tu nombre.'
     : esGestion
-      ? 'Tu usuario no tiene un empleado asociado: elegi a nombre de quien se abre la seccion. Queda registrado quien la abre.'
+      ? 'Tu usuario no tiene un empleado asociado: elegí a nombre de quién se abre el movimiento. Queda registrado quién lo abre.'
       : 'Tu usuario no tiene un empleado asociado. Pedile a un administrador que te asocie uno para poder abrir la caja.'
 
   async function guardar(evento) {
@@ -152,7 +152,7 @@ export default function FormularioAperturaSeccion({
     if (seleccionInvalida || sinElegibles) {
       nuevos.empleado = sinElegibles
         ? 'No hay empleados habilitados para abrir caja.'
-        : 'Elegí a nombre de quién se abre la sección.'
+        : 'Elegí a nombre de quién se abre el movimiento.'
     }
 
     if (motivoObligatorio && observaciones.trim() === '') {
@@ -200,7 +200,7 @@ export default function FormularioAperturaSeccion({
       }
       Swal.fire({
         icon: 'error',
-        title: 'No se pudo abrir la seccion',
+        title: 'No se pudo abrir el movimiento',
         text: e.message,
         confirmButtonColor: '#4a9da8',
       })
@@ -222,7 +222,7 @@ export default function FormularioAperturaSeccion({
         <div className="comercial-modal-cabecera">
           <h2>
             <IconCash size={24} />
-            Abrir seccion de caja
+            Abrir movimiento de caja
           </h2>
           <button
             type="button"
@@ -260,8 +260,8 @@ export default function FormularioAperturaSeccion({
             <MensajeError>{errores.caja}</MensajeError>
             {sinDisponibles && (
               <p className="caja-nota-total">
-                Todas las cajas ya tienen una seccion abierta o en pausa. Cerrá una
-                para poder abrir otra.
+                Todas las cajas ya tienen un movimiento abierto o en pausa.
+                Cerrá uno para poder abrir otro.
               </p>
             )}
           </label>
@@ -293,7 +293,7 @@ export default function FormularioAperturaSeccion({
                   {errorElegibles && (
                     <p className="caja-nota-total">
                       No se pudo cargar la lista de empleados: {errorElegibles}.
-                      La sección se abre a tu nombre.
+                      El movimiento se abre a tu nombre.
                     </p>
                   )}
                 </>
@@ -365,7 +365,7 @@ export default function FormularioAperturaSeccion({
               {sugerencia.encontrado ? (
                 <>
                   Sugerido: <strong>{formatearMoneda(Number(sugerencia.monto_sugerido))}</strong>
-                  {' · '}efectivo contado en la seccion #{sugerencia.seccion_id}
+                  {' · '}efectivo contado en el movimiento #{sugerencia.seccion_id}
                   {sugerencia.fecha_hora_cierre
                     ? ` (cerrada el ${formatearFechaHora(sugerencia.fecha_hora_cierre)})`
                     : ''}
@@ -416,7 +416,7 @@ export default function FormularioAperturaSeccion({
                   Abriendo…
                 </>
               ) : (
-                'Abrir seccion'
+                'Abrir movimiento'
               )}
             </button>
           </div>
