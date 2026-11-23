@@ -913,7 +913,7 @@ class MarcaSerializer(serializers.ModelSerializer):
 class UnidadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Unidad
-        fields = ['id', 'unidades']
+        fields = ['id', 'unidades', 'permite_decimales']
         extra_kwargs = {
             'unidades': {
                 'error_messages': {
@@ -974,6 +974,10 @@ class ProductoSerializer(serializers.ModelSerializer):
     categoria_detalle = serializers.StringRelatedField(source='categoria', read_only=True)
     marca_detalle = serializers.StringRelatedField(source='marca', read_only=True)
     unidad_detalle = serializers.StringRelatedField(source='unidad', read_only=True)
+    unidad_permite_decimales = serializers.BooleanField(
+        source='unidad.permite_decimales',
+        read_only=True,
+    )
     sucursales = serializers.PrimaryKeyRelatedField(
         queryset=Sucursal.objects.all(),
         many=True,
@@ -1017,6 +1021,7 @@ class ProductoSerializer(serializers.ModelSerializer):
             'marca_detalle',
             'unidad',
             'unidad_detalle',
+            'unidad_permite_decimales',
             'nombre',
             'precio_unidad',
             'descripcion',
@@ -1470,6 +1475,10 @@ class StockSerializer(serializers.ModelSerializer):
         source='producto.unidad',
         read_only=True,
     )
+    producto_unidad_permite_decimales = serializers.BooleanField(
+        source='producto.unidad.permite_decimales',
+        read_only=True,
+    )
     sucursal_detalle = serializers.StringRelatedField(source='sucursal', read_only=True)
     alerta = serializers.SerializerMethodField()
 
@@ -1480,6 +1489,7 @@ class StockSerializer(serializers.ModelSerializer):
             'producto',
             'producto_detalle',
             'producto_unidad_detalle',
+            'producto_unidad_permite_decimales',
             'sucursal',
             'sucursal_detalle',
             'cantidad',
@@ -1563,7 +1573,7 @@ class AjusteStockSerializer(serializers.Serializer):
         if stock is None:
             return attrs
 
-        nombre_unidad = str(getattr(stock.producto, 'unidad', '') or '')
+        unidad = stock.producto.unidad
         vistos_detalles = set()
 
         for item in reducciones:
@@ -1599,7 +1609,7 @@ class AjusteStockSerializer(serializers.Serializer):
 
             error_cantidad = validar_cantidad_por_unidad(
                 cantidad_nueva,
-                nombre_unidad,
+                unidad,
                 etiqueta='La cantidad del lote',
                 permitir_no_positiva=True,
             )
@@ -1623,7 +1633,7 @@ class AjusteStockSerializer(serializers.Serializer):
 
             error_cantidad = validar_cantidad_por_unidad(
                 cantidad,
-                nombre_unidad,
+                unidad,
                 etiqueta='La cantidad a ingresar',
             )
             if error_cantidad:
@@ -1684,10 +1694,10 @@ class CargaStockSerializer(serializers.Serializer):
             cantidad = item.get('cantidad')
             if producto is None or cantidad is None:
                 continue
-            nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+            unidad = producto.unidad
             error_cantidad = validar_cantidad_por_unidad(
                 cantidad,
-                nombre_unidad,
+                unidad,
                 etiqueta=f'La cantidad del ítem {indice}',
             )
             if error_cantidad:
@@ -2050,6 +2060,10 @@ class ProductoXProveedorSerializer(serializers.ModelSerializer):
         source='producto.unidad.unidades',
         read_only=True,
     )
+    producto_unidad_permite_decimales = serializers.BooleanField(
+        source='producto.unidad.permite_decimales',
+        read_only=True,
+    )
     producto_precio_unidad = serializers.DecimalField(
         source='producto.precio_unidad',
         max_digits=10,
@@ -2076,6 +2090,7 @@ class ProductoXProveedorSerializer(serializers.ModelSerializer):
             'producto_categoria_detalle',
             'producto_marca_detalle',
             'producto_unidad_detalle',
+            'producto_unidad_permite_decimales',
             'producto_precio_unidad',
             'proveedor',
             'proveedor_detalle',
@@ -2327,6 +2342,7 @@ class ClienteEstadoSerializer(serializers.Serializer):
 
 class DetalleVentaSerializer(serializers.ModelSerializer):
     producto_detalle = serializers.StringRelatedField(source='producto', read_only=True)
+    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
 
     class Meta:
         model = DetalleVenta
@@ -2335,6 +2351,7 @@ class DetalleVentaSerializer(serializers.ModelSerializer):
             'venta',
             'producto',
             'producto_detalle',
+            'producto_codigo',
             'cantidad_venta',
             'precio_venta',
             'subtotal',
@@ -2445,10 +2462,10 @@ class VentaCreateSerializer(serializers.Serializer):
             cantidad = item.get('cantidad')
             if producto is None or cantidad is None:
                 continue
-            nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+            unidad = producto.unidad
             error_cantidad = validar_cantidad_por_unidad(
                 cantidad,
-                nombre_unidad,
+                unidad,
                 etiqueta=f'La cantidad del ítem {indice}',
             )
             if error_cantidad:
@@ -2510,6 +2527,7 @@ class VentaCancelarSerializer(serializers.Serializer):
 
 class DetalleCompraSerializer(serializers.ModelSerializer):
     producto_detalle = serializers.StringRelatedField(source='producto', read_only=True)
+    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
 
     class Meta:
         model = DetalleCompra
@@ -2518,6 +2536,7 @@ class DetalleCompraSerializer(serializers.ModelSerializer):
             'compra',
             'producto',
             'producto_detalle',
+            'producto_codigo',
             'cantidad_compra',
             'precio_compra',
             'subtotal',
@@ -2674,10 +2693,10 @@ class CompraCreateSerializer(serializers.Serializer):
             cantidad = item.get('cantidad')
             if producto is None or cantidad is None:
                 continue
-            nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+            unidad = producto.unidad
             error_cantidad = validar_cantidad_por_unidad(
                 cantidad,
-                nombre_unidad,
+                unidad,
                 etiqueta=f'La cantidad del ítem {indice}',
             )
             if error_cantidad:

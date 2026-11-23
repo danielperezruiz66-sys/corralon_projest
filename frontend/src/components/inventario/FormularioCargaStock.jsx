@@ -114,7 +114,10 @@ export default function FormularioCargaStock({
     if (campo === 'cantidad') {
       return validarCantidadPorUnidad(
         valor,
-        objeto?.unidad_detalle || fila.productoObjeto?.unidad_detalle,
+        objeto?.unidad_permite_decimales ??
+          objeto?.unidad_detalle ??
+          fila.productoObjeto?.unidad_permite_decimales ??
+          fila.productoObjeto?.unidad_detalle,
         'La cantidad',
       )
     }
@@ -233,7 +236,10 @@ export default function FormularioCargaStock({
       } else {
         usados.add(fila.producto)
       }
-      const unidadFila = fila.productoObjeto?.unidad_detalle || ''
+      const unidadFila =
+        fila.productoObjeto?.unidad_permite_decimales ??
+        fila.productoObjeto?.unidad_detalle ??
+        ''
       const errorCantidad = validarCantidadPorUnidad(
         fila.cantidad,
         unidadFila,
@@ -472,8 +478,22 @@ export default function FormularioCargaStock({
                       className={
                         erroresFila.cantidad ? 'input-error' : ''
                       }
-                      min={unidadPermiteDecimales(fila.productoObjeto?.unidad_detalle) ? '0.001' : '1'}
-                      step={unidadPermiteDecimales(fila.productoObjeto?.unidad_detalle) ? '0.001' : '1'}
+                      min={
+                        unidadPermiteDecimales(
+                          fila.productoObjeto?.unidad_permite_decimales ??
+                            fila.productoObjeto?.unidad_detalle,
+                        )
+                          ? '0.001'
+                          : '1'
+                      }
+                      step={
+                        unidadPermiteDecimales(
+                          fila.productoObjeto?.unidad_permite_decimales ??
+                            fila.productoObjeto?.unidad_detalle,
+                        )
+                          ? '0.001'
+                          : '1'
+                      }
                       value={fila.cantidad}
                       onChange={(evento) =>
                         actualizarFila(

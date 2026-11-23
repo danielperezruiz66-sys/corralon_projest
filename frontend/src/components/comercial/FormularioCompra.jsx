@@ -152,7 +152,8 @@ export default function FormularioCompra({
     items.forEach((item, indice) => {
       const errorCantidad = validarCantidadPorUnidad(
         item.cantidad,
-        item.producto?.unidad_detalle,
+        item.producto?.unidad_permite_decimales ??
+          item.producto?.unidad_detalle,
       )
       if (errorCantidad) {
         mapa[`cantidad-${indice}`] = errorCantidad
@@ -257,6 +258,7 @@ export default function FormularioCompra({
           categoria_detalle: item.producto_categoria_detalle,
           marca_detalle: item.producto_marca_detalle,
           unidad_detalle: item.producto_unidad_detalle,
+          unidad_permite_decimales: item.producto_unidad_permite_decimales,
           precio_unidad: item.producto_precio_unidad,
         })
       })
@@ -777,8 +779,22 @@ export default function FormularioCompra({
                               ? 'input-error'
                               : ''
                           }`}
-                          min={unidadPermiteDecimales(item.producto?.unidad_detalle) ? '0.001' : '1'}
-                          step={unidadPermiteDecimales(item.producto?.unidad_detalle) ? '0.001' : '1'}
+                          min={
+                            unidadPermiteDecimales(
+                              item.producto?.unidad_permite_decimales ??
+                                item.producto?.unidad_detalle,
+                            )
+                              ? '0.001'
+                              : '1'
+                          }
+                          step={
+                            unidadPermiteDecimales(
+                              item.producto?.unidad_permite_decimales ??
+                                item.producto?.unidad_detalle,
+                            )
+                              ? '0.001'
+                              : '1'
+                          }
                           value={item.cantidad}
                           onChange={(evento) =>
                             actualizarItem(

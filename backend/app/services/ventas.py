@@ -95,10 +95,10 @@ def crear_venta(movimiento_caja, items, cliente=None, cliente_venta=None):
         if cantidad <= 0:
             raise ValueError('La cantidad vendida debe ser mayor que cero.')
 
-        nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+        unidad = producto.unidad
         error_cantidad = validar_cantidad_por_unidad(
             cantidad,
-            nombre_unidad,
+            unidad,
             etiqueta='La cantidad vendida',
         )
         if error_cantidad:

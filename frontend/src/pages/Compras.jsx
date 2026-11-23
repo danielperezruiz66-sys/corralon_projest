@@ -7,10 +7,10 @@ import {
   IconCheck,
   IconChevronDown,
   IconChevronUp,
-  IconDownload,
   IconEye,
   IconLoader2,
   IconPlus,
+  IconPrinter,
   IconSearch,
   IconTrash,
   IconTruck,
@@ -25,7 +25,7 @@ import FormularioCompra from '../components/comercial/FormularioCompra.jsx'
 import { useAuth } from '../context/auth-context'
 import useCacheModulo from '../hooks/useCacheModulo'
 import useDebounce from '../hooks/useDebounce'
-import { descargarCsv, numeroCsv } from '../utils/csv'
+import { imprimirComprobante } from '../utils/comprobantes'
 import { nuevaClave } from '../utils/clave'
 import { formatearFecha, formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
@@ -153,7 +153,6 @@ export default function Compras() {
   const [pagina, setPagina] = useState(
     () => Number(searchParams.get('page')) || 1,
   )
-  const [exportando, setExportando] = useState(false)
   const [detalle, setDetalle] = useState(null)
   const [pago, setPago] = useState(null)
   const [metodos, setMetodos] = useState([])
@@ -331,88 +330,6 @@ export default function Compras() {
       return <IconChevronDown size={14} />
     }
     return null
-  }
-
-  async function exportar() {
-    if (rangoInvalido) {
-      return
-    }
-    setExportando(true)
-    try {
-      const parametros = new URLSearchParams()
-      if (busqueda) {
-        parametros.set('search', busqueda)
-      }
-      if (estado) {
-        parametros.set('estado', estado)
-      }
-      if (entrega === 'por_recibir') {
-        parametros.set('por_recibir', '1')
-      } else if (entrega) {
-        parametros.set('estado_entrega', entrega)
-      }
-      if (fechas.fecha) {
-        parametros.set('fecha', fechas.fecha)
-      }
-      if (fechas.desde) {
-        parametros.set('fecha_desde', fechas.desde)
-      }
-      if (fechas.hasta) {
-        parametros.set('fecha_hasta', fechas.hasta)
-      }
-      if (orden) {
-        parametros.set('ordering', orden)
-      }
-
-      const todas = await pedirTodas(
-        `/compras/?${parametros.toString()}`,
-      )
-      if (todas.length === 0) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin resultados',
-          text: 'No hay compras para exportar con los filtros actuales.',
-          confirmButtonColor: '#4a9da8',
-        })
-        return
-      }
-
-      const filas = todas.map((compra) => [
-        compra.id,
-        formatearFechaHora(compra.fecha_compra),
-        compra.proveedor_detalle || 'Sin proveedor',
-        compra.movimiento_caja_detalle || '',
-        numeroCsv(compra.monto_compra),
-        compra.estado_detalle,
-        etiquetaEntrega(compra),
-        compra.fecha_estimada_llegada
-          ? formatearFecha(compra.fecha_estimada_llegada)
-          : '',
-      ])
-      descargarCsv(
-        `compras-${new Date().toISOString().slice(0, 10)}.csv`,
-        [
-          'N.º de compra',
-          'Fecha',
-          'Proveedor',
-          'Caja / Sección',
-          'Monto',
-          'Estado de pago',
-          'Recepción',
-          'Llegada estimada',
-        ],
-        filas,
-      )
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo exportar',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    } finally {
-      setExportando(false)
-    }
   }
 
   async function marcarEnCamino(compra) {
@@ -675,15 +592,6 @@ export default function Compras() {
                 </form>
 
                 <div className="comercial-acciones-barra">
-                  <button
-                    type="button"
-                    className="boton-comercial-secundario"
-                    onClick={exportar}
-                    disabled={exportando || rangoInvalido}
-                  >
-                    <IconDownload size={18} />
-                    {exportando ? 'Exportando…' : 'Exportar CSV'}
-                  </button>
                   {puedeCrear && (
                     <button
                       type="button"
@@ -1090,6 +998,41 @@ export default function Compras() {
                 onClick={() => setDetalle(null)}
               >
                 Cerrar
+              </button>
+              <button
+                type="button"
+                className="boton-comercial-secundario"
+                onClick={() =>
+                  imprimirComprobante({
+                    titulo: 'Orden de compra',
+                    numero: detalle.id,
+                    fecha: detalle.fecha_compra,
+                    entidadEtiqueta: 'Proveedor',
+                    entidad: detalle.proveedor_detalle || 'Sin proveedor',
+                    referencia:
+                      detalle.deposito_detalle ||
+                      detalle.movimiento_caja_detalle ||
+                      '—',
+                    estado: `${detalle.estado_detalle} · ${detalle.estado_entrega_detalle}`,
+                    items: detalle.detalles.map((item) => ({
+                      codigo: item.producto_codigo,
+                      nombre: item.producto_detalle,
+                      cantidad: item.cantidad_compra,
+                      precio: item.precio_compra,
+                      subtotal: item.subtotal,
+                    })),
+                    total: detalle.monto_compra,
+                    pagado: totalPagado(detalle),
+                    saldo: saldoCompra(detalle),
+                    pagos: (detalle.pagos || []).map((pago) => ({
+                      metodo: pago.metodo_pago_detalle,
+                      monto: pago.monto_pagado,
+                    })),
+                  })
+                }
+              >
+                <IconPrinter size={18} />
+                Imprimir orden
               </button>
               {puedeGestionar &&
                 !detalle.recibida &&

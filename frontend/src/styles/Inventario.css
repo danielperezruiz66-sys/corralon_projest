@@ -293,6 +293,13 @@
   font-size: 0.88rem;
 }
 
+.inventario-catalogo-medida {
+  margin-left: 0.4rem;
+  color: rgba(15, 42, 48, 0.55);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
 @media (max-width: 900px) {
   .inventario-catalogos {
     grid-template-columns: minmax(0, 1fr);

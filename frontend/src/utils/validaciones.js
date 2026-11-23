@@ -269,8 +269,25 @@ export function validarFuerzaPassword(password) {
   return ''
 }
 
-export function unidadPermiteDecimales(nombreUnidad) {
-  const texto = String(nombreUnidad ?? '')
+export function unidadPermiteDecimales(unidad) {
+  if (typeof unidad === 'boolean') {
+    return unidad
+  }
+  if (unidad && typeof unidad === 'object') {
+    if ('permite_decimales' in unidad) {
+      return Boolean(unidad.permite_decimales)
+    }
+    if ('unidad_permite_decimales' in unidad) {
+      return Boolean(unidad.unidad_permite_decimales)
+    }
+    if ('producto_unidad_permite_decimales' in unidad) {
+      return Boolean(unidad.producto_unidad_permite_decimales)
+    }
+  }
+  const nombre = typeof unidad === 'string'
+    ? unidad
+    : unidad?.unidad_detalle ?? unidad?.unidades ?? ''
+  const texto = String(nombre)
     .trim()
     .toLowerCase()
     .normalize('NFD')

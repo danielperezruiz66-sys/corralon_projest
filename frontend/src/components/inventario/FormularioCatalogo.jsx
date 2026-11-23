@@ -20,9 +20,16 @@ export default function FormularioCatalogo({
 }) {
   const config = CONFIG[tipo]
   const [valor, setValor] = useState(item?.[config.campo] || '')
+  const [medida, setMedida] = useState(() => {
+    if (tipo !== 'unidades' || !item) {
+      return ''
+    }
+    return item.permite_decimales ? 'decimales' : 'entero'
+  })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const esEdicion = Boolean(item?.id)
+  const faltaMedida = tipo === 'unidades' && !medida
 
   function calcularError(nuevoValor) {
     const texto = String(nuevoValor || '').trim()
@@ -60,6 +67,12 @@ export default function FormularioCatalogo({
       })
       return
     }
+    if (faltaMedida) {
+      requestAnimationFrame(() => {
+        document.querySelector('.select-medida')?.focus()
+      })
+      return
+    }
 
     setError('')
     setGuardando(true)
@@ -68,7 +81,12 @@ export default function FormularioCatalogo({
         esEdicion ? `${config.ruta}${item.id}/` : config.ruta,
         {
           method: esEdicion ? 'PATCH' : 'POST',
-          body: JSON.stringify({ [config.campo]: valor.trim() }),
+          body: JSON.stringify({
+            [config.campo]: valor.trim(),
+            ...(tipo === 'unidades'
+              ? { permite_decimales: medida === 'decimales' }
+              : {}),
+          }),
         },
       )
       onGuardado?.(guardado, esEdicion)
@@ -120,6 +138,28 @@ export default function FormularioCatalogo({
             <MensajeError>{error}</MensajeError>
           </label>
 
+          {tipo === 'unidades' && (
+            <label className="campo-comercial ancho-completo">
+              <span>Medida *</span>
+              <select
+                className={`select-medida ${
+                  faltaMedida ? 'input-error' : ''
+                }`}
+                value={medida}
+                onChange={(evento) => setMedida(evento.target.value)}
+              >
+                <option value="">Elegí una opción</option>
+                <option value="entero">Entero</option>
+                <option value="decimales">Con decimales</option>
+              </select>
+              <MensajeError>
+                {faltaMedida
+                  ? 'Elegí si la unidad es entera o admite decimales.'
+                  : ''}
+              </MensajeError>
+            </label>
+          )}
+
           <div className="comercial-modal-acciones">
             <button
               type="button"
@@ -131,7 +171,7 @@ export default function FormularioCatalogo({
             <button
               type="submit"
               className="boton-comercial-primario"
-              disabled={guardando || Boolean(error)}
+              disabled={guardando || Boolean(error) || faltaMedida}
             >
               {guardando ? (
                 <>

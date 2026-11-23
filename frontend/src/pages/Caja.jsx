@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
   IconCash,
-  IconDownload,
   IconEye,
   IconLoader2,
   IconPencil,
@@ -25,7 +24,6 @@ import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
 import useCacheModulo from '../hooks/useCacheModulo'
-import { descargarCsv, numeroCsv } from '../utils/csv'
 import {
   formatearFecha,
   formatearFechaHora,
@@ -98,7 +96,6 @@ export default function Caja() {
     Number(searchParams.get('page')) || 1,
   )
 
-  const [exportando, setExportando] = useState(false)
 
   const [aperturaAbierta, setAperturaAbierta] = useState(false)
   const [cierreSeccion, setCierreSeccion] = useState(null)
@@ -362,66 +359,6 @@ export default function Caja() {
     refrescar()
   }
 
-  async function exportar() {
-    setExportando(true)
-    try {
-      const parametros = new URLSearchParams()
-      if (busqueda) parametros.set('search', busqueda)
-      if (estado) parametros.set('estado', estado)
-      const todos = await pedirTodas(
-        `/movimientos-caja/?${parametros.toString()}`,
-      )
-
-      if (todos.length === 0) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin resultados',
-          text: 'No hay movimientos de caja para exportar.',
-          confirmButtonColor: '#4a9da8',
-        })
-        return
-      }
-
-      descargarCsv(
-        `movimientos-caja-${new Date().toISOString().slice(0, 10)}.csv`,
-        [
-          'Caja física',
-          'Sección',
-          'Empleado',
-          'Apertura',
-          'Cierre',
-          'Monto inicial',
-          'Monto teorico',
-          'Monto final',
-          'Diferencia',
-          'Estado',
-        ],
-        todos.map((item) => [
-          sinSucursal(item.caja_detalle, item.sucursal_detalle),
-          item.id,
-          item.empleado_detalle,
-          item.fecha_hora_apertura ?? '',
-          item.fecha_hora_cierre ?? '',
-          numeroCsv(item.monto_inicial),
-          item.monto_teorico === null ? '' : numeroCsv(item.monto_teorico),
-          item.monto_final === null ? '' : numeroCsv(item.monto_final),
-          item.monto_final === null || item.monto_teorico === null
-            ? ''
-            : numeroCsv(Number(item.monto_final) - Number(item.monto_teorico)),
-          item.estado_detalle,
-        ]),
-      )
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo exportar',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    } finally {
-      setExportando(false)
-    }
-  }
 
   const cajasDisponibles = sucursalActiva
     ? cajasSucursal.filter(
@@ -476,17 +413,6 @@ export default function Caja() {
               )}
             </form>
 
-            <div className="comercial-acciones-barra">
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                onClick={exportar}
-                disabled={exportando}
-              >
-                <IconDownload size={18} />
-                {exportando ? 'Exportando…' : 'Exportar CSV'}
-              </button>
-            </div>
           </section>
 
           <section className="filtros-tabs filtros-pills">

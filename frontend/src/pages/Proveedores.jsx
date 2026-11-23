@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
-  IconDownload,
   IconEye,
   IconLoader2,
   IconPackage,
@@ -20,7 +19,6 @@ import FormularioProveedor from '../components/proveedores/FormularioProveedor.j
 import { useAuth } from '../context/auth-context'
 import useDebounce from '../hooks/useDebounce'
 import useCacheModulo from '../hooks/useCacheModulo'
-import { descargarCsv, numeroCsv } from '../utils/csv'
 import { formatearMoneda } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
@@ -57,7 +55,6 @@ export default function Proveedores() {
   const [estado, setEstado] = useState(
     () => searchParams.get('estado') || '',
   )
-  const [exportando, setExportando] = useState(false)
 
   const [proveedorEditando, setProveedorEditando] = useState(null)
   const [costoEditando, setCostoEditando] = useState(null)
@@ -221,81 +218,6 @@ export default function Proveedores() {
     }
   }
 
-  async function exportar() {
-    setExportando(true)
-    try {
-      const parametros = new URLSearchParams()
-      if (busqueda) parametros.set('search', busqueda)
-      if (tab === 'proveedores' && estado) {
-        parametros.set('estado_prov', estado)
-      }
-      const ruta =
-        tab === 'proveedores' ? '/proveedores/' : '/productos-proveedores/'
-      const todos = await pedirTodas(`${ruta}?${parametros}`)
-
-      if (todos.length === 0) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin resultados',
-          text: 'No hay datos para exportar.',
-          confirmButtonColor: '#4a9da8',
-        })
-        return
-      }
-
-      let encabezados = []
-      let filas = []
-      if (tab === 'proveedores') {
-        encabezados = [
-          'Razón social',
-          'Nombre',
-          'CUIT proveedor',
-          'Teléfono',
-          'Email',
-          'Estado',
-        ]
-        filas = todos.map((item) => [
-          item.razon_social,
-          item.nombre,
-          item.cuit,
-          item.contacto || '',
-          item.email_prov || '',
-          item.estado_prov ? 'Activo' : 'Inactivo',
-        ])
-      } else {
-        encabezados = [
-          'Proveedor',
-          'Producto',
-          'Código proveedor',
-          'Precio costo',
-          'Estado',
-        ]
-        filas = todos.map((item) => [
-          item.proveedor_detalle,
-          item.producto_detalle,
-          item.codigo_producto_proveedor || '',
-          numeroCsv(item.precio_lista),
-          item.estado ? 'Activo' : 'Inactivo',
-        ])
-      }
-
-      descargarCsv(
-        `${tab}-${new Date().toISOString().slice(0, 10)}.csv`,
-        encabezados,
-        filas,
-      )
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo exportar',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    } finally {
-      setExportando(false)
-    }
-  }
-
   return (
     <>
       <Encabezado
@@ -342,15 +264,6 @@ export default function Proveedores() {
             </form>
 
             <div className="comercial-acciones-barra">
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                onClick={exportar}
-                disabled={exportando}
-              >
-                <IconDownload size={18} />
-                {exportando ? 'Exportando…' : 'Exportar CSV'}
-              </button>
               {puedeEditar && tab === 'proveedores' && (
                 <button
                   type="button"

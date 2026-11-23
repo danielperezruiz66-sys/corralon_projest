@@ -45,8 +45,12 @@ _UNIDADES_DECIMALES = {
 }
 
 
-def unidad_permite_decimales(nombre_unidad):
-    texto = limpiar_texto(nombre_unidad).lower()
+def unidad_permite_decimales(unidad):
+    if isinstance(unidad, bool):
+        return unidad
+    if hasattr(unidad, 'permite_decimales'):
+        return bool(unidad.permite_decimales)
+    texto = limpiar_texto(unidad).lower()
     if not texto:
         return False
     reemplazos = str.maketrans('áéíóúü', 'aeiouu')
@@ -65,7 +69,7 @@ def cantidad_es_entera(valor):
 
 def validar_cantidad_por_unidad(
     valor,
-    nombre_unidad,
+    unidad,
     etiqueta='La cantidad',
     permitir_no_positiva=False,
 ):
@@ -75,7 +79,7 @@ def validar_cantidad_por_unidad(
         return f'{etiqueta} debe ser un número válido.'
     if not permitir_no_positiva and numero <= 0:
         return f'{etiqueta} debe ser mayor a cero.'
-    if not unidad_permite_decimales(nombre_unidad):
+    if not unidad_permite_decimales(unidad):
         if not cantidad_es_entera(numero):
             return (
                 f'{etiqueta} debe ser un número entero para esta unidad.'

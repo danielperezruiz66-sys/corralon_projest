@@ -7,11 +7,11 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconCircleX,
-  IconDownload,
   IconEye,
   IconFileText,
   IconLoader2,
   IconPlus,
+  IconPrinter,
   IconSearch,
   IconShoppingCart,
   IconTrash,
@@ -31,7 +31,7 @@ import FormularioVenta from '../components/comercial/FormularioVenta.jsx'
 import { useAuth } from '../context/auth-context'
 import useCacheModulo from '../hooks/useCacheModulo'
 import useDebounce from '../hooks/useDebounce'
-import { descargarCsv, numeroCsv } from '../utils/csv'
+import { imprimirComprobante } from '../utils/comprobantes'
 import { isoAyer, isoHoy } from '../utils/fechas'
 import { nuevaClave } from '../utils/clave'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
@@ -128,7 +128,6 @@ export default function Ventas() {
   const [pagina, setPagina] = useState(
     () => Number(searchParams.get('page')) || 1,
   )
-  const [exportando, setExportando] = useState(false)
   const [detalle, setDetalle] = useState(null)
   const [cobro, setCobro] = useState(null)
   const [claveCobro, setClaveCobro] = useState('')
@@ -319,84 +318,6 @@ export default function Ventas() {
       return <IconChevronDown size={14} />
     }
     return null
-  }
-
-  async function exportar() {
-    if (rangoInvalido) {
-      return
-    }
-    setExportando(true)
-    try {
-      const parametros = new URLSearchParams()
-      if (busqueda) {
-        parametros.set('search', busqueda)
-      }
-      if (estado) {
-        parametros.set('estado', estado)
-      }
-      if (alerta) {
-        parametros.set('alerta', alerta)
-      }
-      if (fechas.fecha) {
-        parametros.set('fecha', fechas.fecha)
-      }
-      if (fechas.desde) {
-        parametros.set('fecha_desde', fechas.desde)
-      }
-      if (fechas.hasta) {
-        parametros.set('fecha_hasta', fechas.hasta)
-      }
-      if (orden) {
-        parametros.set('ordering', orden)
-      }
-
-      const ventas = await pedirTodas(
-        `/ventas/?${parametros.toString()}`,
-      )
-      if (ventas.length === 0) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin resultados',
-          text: 'No hay ventas para exportar con los filtros actuales.',
-          confirmButtonColor: '#4a9da8',
-        })
-        return
-      }
-
-      const filas = ventas.map((venta) => [
-        venta.id,
-        formatearFechaHora(venta.fecha_venta),
-        nombreCliente(venta),
-        venta.movimiento_caja_detalle || '',
-        numeroCsv(venta.monto_venta),
-        numeroCsv(totalPagado(venta)),
-        numeroCsv(saldoVenta(venta)),
-        venta.estado_detalle,
-      ])
-      descargarCsv(
-        `ventas-${new Date().toISOString().slice(0, 10)}.csv`,
-        [
-          'N.º de venta',
-          'Fecha',
-          'Cliente',
-          'Caja / Sección',
-          'Monto',
-          'Pagado',
-          'Saldo',
-          'Estado',
-        ],
-        filas,
-      )
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo exportar',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    } finally {
-      setExportando(false)
-    }
   }
 
   const saldoCobro = cobro ? saldoVenta(cobro) : 0
@@ -648,15 +569,6 @@ export default function Ventas() {
             </form>
 
             <div className="comercial-acciones-barra">
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                onClick={exportar}
-                disabled={exportando || rangoInvalido}
-              >
-                <IconDownload size={18} />
-                {exportando ? 'Exportando…' : 'Exportar CSV'}
-              </button>
               <button
                 type="button"
                 className="boton-comercial-secundario"
@@ -1017,6 +929,38 @@ export default function Ventas() {
                 onClick={() => setDetalle(null)}
               >
                 Cerrar
+              </button>
+              <button
+                type="button"
+                className="boton-comercial-secundario"
+                onClick={() =>
+                  imprimirComprobante({
+                    titulo: 'Comprobante de venta',
+                    numero: detalle.id,
+                    fecha: detalle.fecha_venta,
+                    entidadEtiqueta: 'Cliente',
+                    entidad: nombreCliente(detalle),
+                    referencia: detalle.movimiento_caja_detalle || '—',
+                    estado: detalle.estado_detalle,
+                    items: detalle.detalles.map((item) => ({
+                      codigo: item.producto_codigo,
+                      nombre: item.producto_detalle,
+                      cantidad: item.cantidad_venta,
+                      precio: item.precio_venta,
+                      subtotal: item.subtotal,
+                    })),
+                    total: detalle.monto_venta,
+                    pagado: totalPagado(detalle),
+                    saldo: saldoVenta(detalle),
+                    pagos: (detalle.pagos || []).map((pago) => ({
+                      metodo: pago.metodo_pago_detalle,
+                      monto: pago.monto_pagado,
+                    })),
+                  })
+                }
+              >
+                <IconPrinter size={18} />
+                Imprimir comprobante
               </button>
               {puedeCobrar &&
                 (detalle.estado === 'PE' || detalle.estado === 'PC') &&

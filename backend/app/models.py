@@ -565,6 +565,10 @@ class Marca(models.Model):
 
 class Unidad(models.Model):
     unidades = models.CharField(max_length=50)
+    permite_decimales = models.BooleanField(
+        default=False,
+        help_text='Indica si las cantidades de esta unidad admiten decimales.',
+    )
 
     class Meta:
         db_table = 'UNIDADES'

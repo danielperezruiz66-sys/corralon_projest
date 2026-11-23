@@ -104,10 +104,10 @@ def registrar_compra(
         if cantidad <= 0:
             raise ValueError('La cantidad comprada debe ser mayor que cero.')
 
-        nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+        unidad = producto.unidad
         error_cantidad = validar_cantidad_por_unidad(
             cantidad,
-            nombre_unidad,
+            unidad,
             etiqueta='La cantidad comprada',
         )
         if error_cantidad:

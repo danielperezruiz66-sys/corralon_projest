@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from app.utils import unidad_permite_decimales
 from app.models import (
     Caja,
     Categoria,
@@ -923,7 +924,12 @@ class Command(BaseCommand):
 
     def _unidades(self):
         return [
-            Unidad.objects.get_or_create(unidades=nombre)[0]
+            Unidad.objects.update_or_create(
+                unidades=nombre,
+                defaults={
+                    'permite_decimales': unidad_permite_decimales(nombre),
+                },
+            )[0]
             for nombre in UNIDADES
         ]
 

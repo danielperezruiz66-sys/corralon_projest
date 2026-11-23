@@ -79,7 +79,7 @@ function limiteVentaStock(stock) {
 function errorCantidadItem(cantidad, producto, stocks, validarStock) {
   const errorUnidad = validarCantidadPorUnidad(
     cantidad,
-    producto?.unidad_detalle,
+    producto?.unidad_permite_decimales ?? producto?.unidad_detalle,
   )
   if (errorUnidad) {
     return errorUnidad
@@ -669,8 +669,22 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
                               ? 'input-error'
                               : ''
                           }`}
-                          min={unidadPermiteDecimales(item.producto?.unidad_detalle) ? '0.001' : '1'}
-                          step={unidadPermiteDecimales(item.producto?.unidad_detalle) ? '0.001' : '1'}
+                          min={
+                            unidadPermiteDecimales(
+                              item.producto?.unidad_permite_decimales ??
+                                item.producto?.unidad_detalle,
+                            )
+                              ? '0.001'
+                              : '1'
+                          }
+                          step={
+                            unidadPermiteDecimales(
+                              item.producto?.unidad_permite_decimales ??
+                                item.producto?.unidad_detalle,
+                            )
+                              ? '0.001'
+                              : '1'
+                          }
                           value={item.cantidad}
                           onChange={(evento) =>
                             actualizarItem(

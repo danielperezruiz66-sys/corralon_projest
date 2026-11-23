@@ -209,7 +209,7 @@ def ajustar_stock_detallado(stock, reducciones, ingresos, motivo):
     if len(motivo) < 3:
         raise ValueError('El motivo del ajuste debe tener al menos 3 caracteres.')
 
-    nombre_unidad = str(getattr(stock.producto, 'unidad', '') or '')
+    unidad = stock.producto.unidad
     from ..utils import validar_cantidad_por_unidad
 
     cambios = Decimal('0.000')
@@ -238,7 +238,7 @@ def ajustar_stock_detallado(stock, reducciones, ingresos, motivo):
         cantidad_nueva = _decimal(item.get('cantidad_nueva'))
         error_cantidad = validar_cantidad_por_unidad(
             cantidad_nueva,
-            nombre_unidad,
+            unidad,
             etiqueta='La cantidad del lote',
             permitir_no_positiva=True,
         )
@@ -281,7 +281,7 @@ def ajustar_stock_detallado(stock, reducciones, ingresos, motivo):
         cantidad = _decimal(item.get('cantidad'))
         error_cantidad = validar_cantidad_por_unidad(
             cantidad,
-            nombre_unidad,
+            unidad,
             etiqueta='La cantidad a ingresar',
         )
         if error_cantidad:
@@ -343,11 +343,11 @@ def cargar_stock_sucursal(sucursal, deposito, items, motivo):
         if cantidad <= 0:
             raise ValueError('La cantidad debe ser mayor que cero.')
 
-        nombre_unidad = str(getattr(producto, 'unidad', '') or '')
+        unidad = producto.unidad
         from ..utils import validar_cantidad_por_unidad
         error_cantidad = validar_cantidad_por_unidad(
             cantidad,
-            nombre_unidad,
+            unidad,
             etiqueta='La cantidad',
         )
         if error_cantidad:

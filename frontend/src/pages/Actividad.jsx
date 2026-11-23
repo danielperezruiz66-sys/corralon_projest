@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import Swal from 'sweetalert2'
 import {
-  IconDownload,
   IconListDetails,
   IconLoader2,
   IconPencil,
@@ -17,8 +15,7 @@ import Encabezado from '../components/Encabezado.jsx'
 import { useAuth } from '../context/auth-context'
 import useDebounce from '../hooks/useDebounce'
 import useCacheModulo from '../hooks/useCacheModulo'
-import { descargarCsv } from '../utils/csv'
-import { formatearFecha, formatearFechaHora, formatearNumero } from '../utils/formato'
+import { formatearFechaHora, formatearNumero } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Filtros.css'
 import '../styles/Actividad.css'
@@ -67,7 +64,6 @@ export default function Actividad() {
     () => Number(searchParams.get('page')) || 1,
   )
 
-  const [exportando, setExportando] = useState(false)
 
   const busqueda = useDebounce(texto.trim(), 350)
 
@@ -141,44 +137,6 @@ export default function Actividad() {
     setPagina(1)
   }
 
-  async function exportar() {
-    setExportando(true)
-    try {
-      const todos = await pedirTodas(`/actividad/?${filtrosComunes().toString()}`)
-      if (todos.length === 0) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin resultados',
-          text: 'No hay registros de actividad para exportar con los filtros actuales.',
-          confirmButtonColor: '#4a9da8',
-        })
-        return
-      }
-
-      const filas = todos.map((item) => [
-        formatearFecha(item.fecha),
-        item.usuario_detalle ?? '—',
-        item.modelo_detalle ?? item.modelo ?? '—',
-        item.objeto ?? '—',
-        ETIQUETA_ACCION[item.accion] ?? item.accion ?? '—',
-        item.detalle ?? '—',
-      ])
-      descargarCsv(
-        `actividad-${new Date().toISOString().slice(0, 10)}.csv`,
-        ['Fecha', 'Usuario', 'Modelo', 'Objeto', 'Acción', 'Detalle'],
-        filas,
-      )
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo exportar',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    } finally {
-      setExportando(false)
-    }
-  }
 
   if (!puedeGestionar) {
     return null
@@ -231,17 +189,6 @@ export default function Actividad() {
               )}
             </form>
 
-            <div className="comercial-acciones-barra">
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                onClick={exportar}
-                disabled={exportando}
-              >
-                <IconDownload size={18} />
-                {exportando ? 'Exportando…' : 'Exportar CSV'}
-              </button>
-            </div>
           </section>
 
           <section className="filtros-tabs filtros-pills">

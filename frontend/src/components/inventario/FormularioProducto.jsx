@@ -441,6 +441,9 @@ export default function FormularioProducto({
             }}
             opciones={unidades}
             textoOpcion={(item) => item.unidades}
+            textoSecundario={(item) =>
+              item.permite_decimales ? 'Con decimales' : 'Entero'
+            }
             placeholder="Buscar unidad"
             onCrear={() => setCatalogoRapido('unidades')}
             tituloCrear="Nueva unidad"

@@ -1432,7 +1432,10 @@ class StockViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = Stock.objects.select_related('producto', 'sucursal')
+    queryset = Stock.objects.select_related(
+        'producto__unidad',
+        'sucursal',
+    )
     serializer_class = serializers.StockSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = (ADMIN, GERENTE, DEPOSITO)

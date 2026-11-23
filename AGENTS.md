@@ -85,6 +85,8 @@ Reglas fijas:
   viven en `ProductoXProveedor.precio_lista`.
 - `Empresa`: CUIT identificador de 3 a 13 dígitos, único.
 - `Categoria`, `Marca` y `Unidad`: nombres únicos sin distinguir mayúsculas.
+  `Unidad.permite_decimales` define si sus cantidades admiten decimales; al
+  crear una unidad el formulario obliga a elegir entero o decimal.
 
 ### Ventas
 
@@ -262,7 +264,8 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
   visibles en el select (sin tarjeta “Filtro del dashboard”).
 - Compras: el selector muestra solo productos del proveedor; recepción con
   depósito; pagar/anular solo `AD/GE`.
-- Convenciones UI: búsqueda con debounce, filtros en la URL, CSV, cobro
+- Convenciones UI: búsqueda con debounce, filtros en la URL, comprobante
+  interno imprimible (no fiscal) desde el detalle de venta/compra, cobro
   multi-método, validaciones en `utils/validaciones.js`, `CampoSelectorBuscable`
   con búsqueda remota y alta rápida.
 - **Validación en tiempo real (`onChange`) obligatoria en TODOS los formularios**:

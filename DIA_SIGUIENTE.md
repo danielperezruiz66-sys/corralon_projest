@@ -23,7 +23,10 @@
 - Inventario: validación en vivo en producto, catálogos, stock, depósitos,
   carga/ajuste de stock, lotes y movimientos; duplicados bloqueados en
   categorías, marcas, unidades, código y nombre+marca de producto y nombre de
-  depósito por sucursal; filtros de productos en la URL y CSV UTF-8 verificado.
+  depósito por sucursal; filtros de productos en la URL. Se quitaron los CSV y
+  se agregó comprobante interno imprimible en el detalle de venta/compra.
+- Unidades: `permite_decimales` en base, formulario que obliga a elegir entero o
+  decimales y validaciones de cantidades usando el flag de la unidad.
 - Backend: migraciones 0006 (CUIT 3–13) y 0007 (unicidad de catálogo/stock);
   suite completa 275 tests OK. Frontend: lint 0 warnings y build OK.
 

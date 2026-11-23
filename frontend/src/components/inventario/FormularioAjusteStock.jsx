@@ -57,7 +57,10 @@ export default function FormularioAjusteStock({
   const [errores, setErrores] = useState({})
   const hayErrores = Object.values(errores).some(Boolean)
 
-  const unidad = stock.producto_unidad_detalle || ''
+  const unidad =
+    stock.producto_unidad_permite_decimales ??
+    stock.producto_unidad_detalle ??
+    ''
   const permiteDecimales = unidadPermiteDecimales(unidad)
   const step = permiteDecimales ? '0.001' : '1'
 
