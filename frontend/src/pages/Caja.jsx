@@ -249,6 +249,14 @@ export default function Caja() {
     return esDueño(seccion) || puedeGestionar
   }
 
+  function sincronizarDetalle(actualizada) {
+    setDetalleSeccion((actual) =>
+      actual && Number(actual.id) === Number(actualizada.id)
+        ? actualizada
+        : actual,
+    )
+  }
+
   async function pausarSeccion(seccion) {
     const resultado = await Swal.fire({
       title: `¿Pausar el movimiento #${seccion.id}?`,
@@ -275,10 +283,14 @@ export default function Caja() {
     }
 
     try {
-      await pedir(`/movimientos-caja/${seccion.id}/pausar/`, {
-        method: 'POST',
-        body: JSON.stringify({ motivo: resultado.value }),
-      })
+      const actualizada = await pedir(
+        `/movimientos-caja/${seccion.id}/pausar/`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ motivo: resultado.value }),
+        },
+      )
+      sincronizarDetalle(actualizada)
       Swal.fire({
         icon: 'success',
         title: 'Movimiento en pausa',
@@ -322,10 +334,14 @@ export default function Caja() {
     }
 
     try {
-      await pedir(`/movimientos-caja/${seccion.id}/reanudar/`, {
-        method: 'POST',
-        body: JSON.stringify({ clave: resultado.value }),
-      })
+      const actualizada = await pedir(
+        `/movimientos-caja/${seccion.id}/reanudar/`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ clave: resultado.value }),
+        },
+      )
+      sincronizarDetalle(actualizada)
       Swal.fire({
         icon: 'success',
         title: 'Movimiento reanudado',
