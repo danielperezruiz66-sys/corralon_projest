@@ -6,6 +6,7 @@ import { pedir } from '../../api/client'
 import { formatearMoneda } from '../../utils/formato'
 import {
   validarCodigo,
+  validarCodigoProveedor,
   validarNumero,
   validarTexto,
 } from '../../utils/validaciones'
@@ -118,6 +119,10 @@ export default function FormularioProducto({
     }
     if (seleccionadas.length === 0) {
       nuevos.sucursales = 'Seleccioná al menos una sucursal.'
+    }
+    const errorCodigoProveedor = validarCodigoProveedor(codigoProveedor)
+    if (errorCodigoProveedor) {
+      nuevos.codigoProveedor = errorCodigoProveedor
     }
     return nuevos
   }
@@ -283,6 +288,7 @@ export default function FormularioProducto({
       precio: true,
       proveedor: true,
       precioCosto: true,
+      codigoProveedor: true,
       sucursales: true,
     })
     if (!formularioValido) {
@@ -321,6 +327,7 @@ export default function FormularioProducto({
         const mapa = {
           precio_unidad: 'precio',
           precio_lista: 'precioCosto',
+          codigo_producto_proveedor: 'codigoProveedor',
         }
         const nuevos = {}
         Object.entries(e.campos).forEach(([campo, mensaje]) => {
@@ -522,9 +529,14 @@ export default function FormularioProducto({
             <input
               type="text"
               maxLength={30}
+              className={mensaje('codigoProveedor') ? 'input-error' : ''}
               value={codigoProveedor}
-              onChange={(evento) => setCodigoProveedor(evento.target.value)}
+              onChange={(evento) => {
+                marcarTocado('codigoProveedor')
+                setCodigoProveedor(evento.target.value)
+              }}
             />
+            <MensajeError>{mensaje('codigoProveedor')}</MensajeError>
           </label>
 
           {esEdicion && (

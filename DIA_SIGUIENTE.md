@@ -27,6 +27,10 @@
   se agregó comprobante interno imprimible en el detalle de venta/compra.
 - Unidades: `permite_decimales` en base, formulario que obliga a elegir entero o
   decimales y validaciones de cantidades usando el flag de la unidad.
+- Proveedores · Productos y costos: búsqueda, paginación, asociación, alta
+  rápida, regla de margen, duplicados y edición verificados; corregida la
+  validación del código de proveedor (máximo 30, caracteres permitidos) en
+  frontend y backend. Sin errores 500; solo 400 controlados en duplicados.
 - Backend: migraciones 0006 (CUIT 3–13) y 0007 (unicidad de catálogo/stock);
   suite completa 275 tests OK. Frontend: lint 0 warnings y build OK.
 
@@ -54,6 +58,11 @@
 - [ ] Definir si un producto debe poder desactivarse desde la UI. Hoy no hay
       acción de baja y el `DELETE` de la API se bloquea si tiene stock o
       historial (`protegido`).
+
+## Proveedores
+
+- [ ] Definir si “Productos y costos” necesita una vista de detalle separada.
+      Hoy la ficha completa se ve en el mismo modal de “Editar costo”.
 
 ## Revisión módulo por módulo
 

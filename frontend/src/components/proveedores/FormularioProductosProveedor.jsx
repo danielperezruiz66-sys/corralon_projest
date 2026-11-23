@@ -14,7 +14,10 @@ import {
   ofrecerActualizarDuplicado,
 } from '../../utils/asociaciones'
 import { formatearMoneda } from '../../utils/formato'
-import { validarNumero } from '../../utils/validaciones'
+import {
+  validarCodigoProveedor,
+  validarNumero,
+} from '../../utils/validaciones'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 import MensajeError from '../common/MensajeError.jsx'
 import '../../styles/components/proveedores/FormularioProductosProveedor.css'
@@ -65,6 +68,10 @@ function calcularErroresFilas(filas) {
       deFila.precio = `El costo debe ser menor al precio de venta (${formatearMoneda(
         fila.productoObjeto.precio_unidad,
       )}).`
+    }
+    const errorCodigo = validarCodigoProveedor(fila.codigo)
+    if (errorCodigo) {
+      deFila.codigo = errorCodigo
     }
     if (Object.keys(deFila).length > 0) {
       errores[fila.id] = deFila
@@ -450,6 +457,7 @@ export default function FormularioProductosProveedor({
                       <span>Código del proveedor</span>
                       <input
                         type="text"
+                        maxLength={30}
                         className={`input-tabla ${
                           erroresFila.codigo ? 'input-error' : ''
                         }`}

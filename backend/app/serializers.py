@@ -1008,6 +1008,9 @@ class ProductoSerializer(serializers.ModelSerializer):
         required=False,
         allow_blank=True,
         allow_null=True,
+        error_messages={
+            'max_length': 'El código del proveedor no puede superar 30 caracteres.',
+        },
     )
 
     class Meta:
@@ -1085,6 +1088,17 @@ class ProductoSerializer(serializers.ModelSerializer):
                 'El nombre debe tener al menos 2 caracteres.'
             )
         return nombre
+
+    def validate_codigo_producto_proveedor(self, value):
+        codigo = (value or '').strip()
+        if not codigo:
+            return None
+        if not re.fullmatch(r'[A-Za-z0-9._/-]+', codigo):
+            raise serializers.ValidationError(
+                'El código del proveedor solo admite letras, números, punto, '
+                'guion, guion bajo y barra.'
+            )
+        return codigo
 
     def validate_precio_unidad(self, value):
         if value <= 0:
@@ -2041,6 +2055,15 @@ class ProveedorXSucursalSerializer(serializers.ModelSerializer):
 
 
 class ProductoXProveedorSerializer(serializers.ModelSerializer):
+    codigo_producto_proveedor = serializers.CharField(
+        max_length=30,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        error_messages={
+            'max_length': 'El código del proveedor no puede superar 30 caracteres.',
+        },
+    )
     producto_detalle = serializers.StringRelatedField(source='producto', read_only=True)
     producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
     producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
@@ -2101,6 +2124,17 @@ class ProductoXProveedorSerializer(serializers.ModelSerializer):
         ]
         validators = []
 
+    def validate_codigo_producto_proveedor(self, value):
+        codigo = (value or '').strip()
+        if not codigo:
+            return None
+        if not re.fullmatch(r'[A-Za-z0-9._/-]+', codigo):
+            raise serializers.ValidationError(
+                'El código del proveedor solo admite letras, números, punto, '
+                'guion, guion bajo y barra.'
+            )
+        return codigo
+
     def validate(self, attrs):
         producto = attrs.get(
             'producto',
@@ -2159,7 +2193,21 @@ class ProductoXProveedorBulkItemSerializer(serializers.Serializer):
         required=False,
         allow_blank=True,
         allow_null=True,
+        error_messages={
+            'max_length': 'El código del proveedor no puede superar 30 caracteres.',
+        },
     )
+
+    def validate_codigo_producto_proveedor(self, value):
+        codigo = (value or '').strip()
+        if not codigo:
+            return None
+        if not re.fullmatch(r'[A-Za-z0-9._/-]+', codigo):
+            raise serializers.ValidationError(
+                'El código del proveedor solo admite letras, números, punto, '
+                'guion, guion bajo y barra.'
+            )
+        return codigo
 
     def validate(self, attrs):
         producto = attrs['producto']

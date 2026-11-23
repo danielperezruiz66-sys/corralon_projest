@@ -4,7 +4,10 @@ import { IconLoader2, IconPackage, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
 import { esAsociacionDuplicada, ofrecerActualizarDuplicado } from '../../utils/asociaciones'
 import { formatearMoneda } from '../../utils/formato'
-import { validarNumero } from '../../utils/validaciones'
+import {
+  validarCodigoProveedor,
+  validarNumero,
+} from '../../utils/validaciones'
 import CampoSelectorBuscable from '../common/CampoSelectorBuscable.jsx'
 import MensajeError from '../common/MensajeError.jsx'
 import FormularioProveedor from './FormularioProveedor.jsx'
@@ -89,8 +92,10 @@ export default function FormularioProductoProveedor({
 
   const errorProveedor = validarProveedor(proveedor, proveedorSeleccionado)
   const errorProducto = validarProducto(producto, productoSeleccionado)
+  const errorCodigo = validarCodigoProveedor(codigo)
   const errorPrecio = validarPrecioCosto(precio, productoSeleccionado)
-  const formularioValido = !errorProveedor && !errorProducto && !errorPrecio
+  const formularioValido =
+    !errorProveedor && !errorProducto && !errorCodigo && !errorPrecio
 
   function marcarTocado(campo) {
     setTocados((previos) => ({ ...previos, [campo]: true }))
@@ -121,7 +126,12 @@ export default function FormularioProductoProveedor({
 
   async function guardar(evento) {
     evento.preventDefault()
-    setTocados({ proveedor: true, producto: true, precio: true })
+    setTocados({
+      proveedor: true,
+      producto: true,
+      codigo: true,
+      precio: true,
+    })
     if (!formularioValido) {
       setErrores({})
       requestAnimationFrame(() => {
@@ -186,7 +196,15 @@ export default function FormularioProductoProveedor({
         return
       }
       if (e.campos) {
-        setErrores(e.campos)
+        const mapa = {
+          codigo_producto_proveedor: 'codigo',
+          precio_lista: 'precio',
+        }
+        const nuevos = {}
+        Object.entries(e.campos).forEach(([campo, mensaje]) => {
+          nuevos[mapa[campo] || campo] = mensaje
+        })
+        setErrores(nuevos)
         requestAnimationFrame(() => {
           document.querySelector('.input-error')?.focus()
         })
@@ -273,9 +291,21 @@ export default function FormularioProductoProveedor({
             <span>Código del proveedor</span>
             <input
               type="text"
+              maxLength={30}
+              className={
+                errores.codigo || (tocados.codigo && errorCodigo)
+                  ? 'input-error'
+                  : ''
+              }
               value={codigo}
-              onChange={(evento) => setCodigo(evento.target.value)}
+              onChange={(evento) => {
+                marcarTocado('codigo')
+                setCodigo(evento.target.value)
+              }}
             />
+            <MensajeError>
+              {errores.codigo || (tocados.codigo ? errorCodigo : '')}
+            </MensajeError>
           </label>
 
           <label className="campo-comercial">

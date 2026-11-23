@@ -82,7 +82,8 @@ Reglas fijas:
   mayúsculas).
 - `Proveedor`: CUIT, nombre, razón social y al menos una sucursal activa. El
   CUIT es un identificador de empresa de 3 a 13 dígitos, no un DNI. Los costos
-  viven en `ProductoXProveedor.precio_lista`.
+  viven en `ProductoXProveedor.precio_lista`; el código de proveedor admite
+  hasta 30 caracteres (letras, números, punto, guion, guion bajo y barra).
 - `Empresa`: CUIT identificador de 3 a 13 dígitos, único.
 - `Categoria`, `Marca` y `Unidad`: nombres únicos sin distinguir mayúsculas.
   `Unidad.permite_decimales` define si sus cantidades admiten decimales; al

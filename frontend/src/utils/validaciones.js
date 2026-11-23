@@ -117,6 +117,19 @@ export function validarRazonSocial(valor) {
     : 'La razón social debe tener al menos 2 caracteres.'
 }
 
+export function validarCodigoProveedor(valor) {
+  const texto = limpiar(valor)
+  if (!texto) {
+    return ''
+  }
+  if (texto.length > 30) {
+    return 'El código del proveedor no puede superar 30 caracteres.'
+  }
+  return /^[A-Za-z0-9._/-]+$/.test(texto)
+    ? ''
+    : 'El código del proveedor solo admite letras, números, punto, guion, guion bajo y barra.'
+}
+
 export function validarNombreCatalogo(valor, etiqueta = 'El nombre') {
   const texto = limpiar(valor)
   if (!texto) {

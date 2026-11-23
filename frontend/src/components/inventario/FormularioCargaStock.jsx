@@ -362,7 +362,7 @@ export default function FormularioCargaStock({
         <div className="comercial-modal-cabecera">
           <h2>
             <IconBox size={24} />
-            Carga de stock por sucursal
+            Cargar stock
           </h2>
           <button
             type="button"
