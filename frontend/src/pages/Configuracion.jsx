@@ -20,7 +20,7 @@ import { useAuth } from '../context/auth-context'
 import {
   limpiar,
   normalizarDocumento,
-  validarDocumento,
+  validarCuitIdentificador,
   validarEmail,
   validarFecha,
   validarIngresosBrutos,
@@ -41,12 +41,12 @@ const CONDICIONES_IVA = [
 const CAMPOS = [
   {
     id: 'cuit',
-    etiqueta: 'CUIT',
+    etiqueta: 'CUIT empresa',
     tipo: 'text',
     Icono: IconHash,
     placeholder: '30-12345678-9',
     requerido: true,
-    validar: (valor) => validarDocumento('CUIT', valor),
+    validar: (valor) => validarCuitIdentificador(valor),
   },
   {
     id: 'nombre',

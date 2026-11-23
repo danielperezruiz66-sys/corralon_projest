@@ -66,7 +66,8 @@ Reglas fijas:
   vive en un solo depósito y se mueve completo con `mover`.
 - Piso negativo por `Stock.cant_negativa_max` (default `-10`).
 - `Deposito.es_predeterminado`: uno por sucursal; la compra sin depósito usa
-  el central.
+  el central. El nombre del depósito es único por sucursal (sin distinguir
+  mayúsculas).
 - `GET /api/stocks/` sin `?sucursal=` muestra todas las sucursales (lectura
   estratégica). Operar (vender, ajustar, recibir) sigue atado a la sucursal.
 - Ajuste detallado por lote: `POST /api/stocks/{id}/ajustar/`.
@@ -76,9 +77,14 @@ Reglas fijas:
 - `Cliente`: activo/inactivo; al crear exige documento y al menos un contacto.
   Un cliente inactivo no se ofrece ni se acepta en ventas.
 - `Producto`: precio > 0 y al menos una sucursal activa; al crear por API exige
-  proveedor y costo. El precio debe superar el costo activo más alto.
-- `Proveedor`: CUIT, nombre, razón social y al menos una sucursal activa. Los
-  costos viven en `ProductoXProveedor.precio_lista`.
+  proveedor y costo. El precio debe superar el costo activo más alto. Código
+  único sin distinguir mayúsculas; nombre único por marca (sin distinguir
+  mayúsculas).
+- `Proveedor`: CUIT, nombre, razón social y al menos una sucursal activa. El
+  CUIT es un identificador de empresa de 3 a 13 dígitos, no un DNI. Los costos
+  viven en `ProductoXProveedor.precio_lista`.
+- `Empresa`: CUIT identificador de 3 a 13 dígitos, único.
+- `Categoria`, `Marca` y `Unidad`: nombres únicos sin distinguir mayúsculas.
 
 ### Ventas
 

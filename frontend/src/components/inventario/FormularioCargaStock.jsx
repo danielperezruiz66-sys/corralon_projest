@@ -62,6 +62,12 @@ export default function FormularioCargaStock({
   const [errores, setErrores] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [errorGeneral, setErrorGeneral] = useState('')
+  const hayErrores = Boolean(
+    errores.sucursal ||
+      errores.deposito ||
+      errores.motivo ||
+      (errores.filas && Object.keys(errores.filas).length > 0),
+  )
 
   const depositosSucursal = depositos.filter(
     (item) => String(item.sucursal) === String(sucursal),
@@ -94,7 +100,62 @@ export default function FormularioCargaStock({
     setErrorGeneral('')
   }
 
+  function errorFila(fila, campo, valor, objeto = null) {
+    if (campo === 'producto') {
+      if (!valor) {
+        return 'Seleccioná un producto.'
+      }
+      const repetido = filas.some(
+        (otra) =>
+          otra.id !== fila.id && String(otra.producto) === String(valor),
+      )
+      return repetido ? 'No repitas el mismo producto.' : ''
+    }
+    if (campo === 'cantidad') {
+      return validarCantidadPorUnidad(
+        valor,
+        objeto?.unidad_detalle || fila.productoObjeto?.unidad_detalle,
+        'La cantidad',
+      )
+    }
+    if (campo === 'fechaVenc') {
+      if (!valor) {
+        return ''
+      }
+      return Number.isNaN(new Date(`${valor}T00:00:00`).getTime())
+        ? 'La fecha de vencimiento no es válida.'
+        : ''
+    }
+    return ''
+  }
+
+  function cambiarDeposito(valor) {
+    setDeposito(valor)
+    let error = ''
+    if (!valor) {
+      error = 'Seleccioná el depósito.'
+    } else if (
+      !depositosSucursal.some((item) => String(item.id) === String(valor))
+    ) {
+      error = 'El depósito debe pertenecer a la sucursal.'
+    }
+    setErrores((previos) => ({ ...previos, deposito: error }))
+  }
+
+  function cambiarMotivo(valor) {
+    setMotivo(valor)
+    setErrores((previos) => ({
+      ...previos,
+      motivo: validarTexto(valor, 'El motivo', { min: 3, max: 90 }),
+    }))
+  }
+
   function actualizarFila(id, campo, valor, objeto = null) {
+    const filaActual = filas.find((fila) => fila.id === id)
+    if (!filaActual) {
+      return
+    }
+    const error = errorFila(filaActual, campo, valor, objeto)
     setFilas((previas) =>
       previas.map((fila) => {
         if (fila.id !== id) {
@@ -107,6 +168,21 @@ export default function FormularioCargaStock({
         return { ...fila, ...cambios }
       }),
     )
+    setErrores((previos) => {
+      const filasErrores = { ...(previos.filas || {}) }
+      const deFila = { ...(filasErrores[id] || {}) }
+      if (error) {
+        deFila[campo] = error
+      } else {
+        delete deFila[campo]
+      }
+      if (Object.keys(deFila).length > 0) {
+        filasErrores[id] = deFila
+      } else {
+        delete filasErrores[id]
+      }
+      return { ...previos, filas: filasErrores }
+    })
   }
 
   function agregarFila() {
@@ -119,6 +195,14 @@ export default function FormularioCargaStock({
         ? previas
         : previas.filter((fila) => fila.id !== id),
     )
+    setErrores((previos) => {
+      if (!previos.filas?.[id]) {
+        return previos
+      }
+      const filas = { ...previos.filas }
+      delete filas[id]
+      return { ...previos, filas }
+    })
   }
 
   function validar() {
@@ -304,7 +388,7 @@ export default function FormularioCargaStock({
             <CampoSelectorBuscable
               etiqueta="Depósito *"
               valor={deposito}
-              onCambiar={setDeposito}
+              onCambiar={cambiarDeposito}
               opciones={depositosSucursal}
               textoOpcion={(item) => item.nombre}
               placeholder={
@@ -322,7 +406,7 @@ export default function FormularioCargaStock({
                 className={errores.motivo ? 'input-error' : ''}
                 value={motivo}
                 maxLength={90}
-                onChange={(evento) => setMotivo(evento.target.value)}
+                onChange={(evento) => cambiarMotivo(evento.target.value)}
                 placeholder="Ej. Carga inicial, reposición, conteo"
               />
               <MensajeError>{errores.motivo}</MensajeError>
@@ -455,7 +539,7 @@ export default function FormularioCargaStock({
             <button
               type="submit"
               className="boton-comercial-primario"
-              disabled={guardando}
+              disabled={guardando || hayErrores}
             >
               {guardando ? (
                 <>

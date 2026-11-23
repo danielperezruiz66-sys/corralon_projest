@@ -79,10 +79,18 @@ export default function Inventario() {
   const [pagina, setPagina] = useState(
     () => Number(searchParams.get('page')) || 1,
   )
-  const [categoria, setCategoria] = useState('')
-  const [marca, setMarca] = useState('')
-  const [unidad, setUnidad] = useState('')
-  const [orden, setOrden] = useState('')
+  const [categoria, setCategoria] = useState(
+    () => searchParams.get('categoria') || '',
+  )
+  const [marca, setMarca] = useState(
+    () => searchParams.get('marca') || '',
+  )
+  const [unidad, setUnidad] = useState(
+    () => searchParams.get('unidad') || '',
+  )
+  const [orden, setOrden] = useState(
+    () => searchParams.get('ordering') || '',
+  )
   const [alerta, setAlerta] = useState(
     () => searchParams.get('alerta') || '',
   )
@@ -145,6 +153,20 @@ export default function Inventario() {
     if (busqueda) {
       parametros.set('search', busqueda)
     }
+    if (tab === 'productos') {
+      if (categoria) {
+        parametros.set('categoria', categoria)
+      }
+      if (marca) {
+        parametros.set('marca', marca)
+      }
+      if (unidad) {
+        parametros.set('unidad', unidad)
+      }
+      if (orden) {
+        parametros.set('ordering', orden)
+      }
+    }
     if (tab === 'stock') {
       if (alerta) {
         parametros.set('alerta', alerta)
@@ -154,7 +176,17 @@ export default function Inventario() {
       parametros.set('page', String(pagina))
     }
     setSearchParams(parametros, { replace: true })
-  }, [tab, busqueda, pagina, alerta, setSearchParams])
+  }, [
+    tab,
+    busqueda,
+    pagina,
+    alerta,
+    categoria,
+    marca,
+    unidad,
+    orden,
+    setSearchParams,
+  ])
 
   const consulta = useMemo(() => {
     const parametros = new URLSearchParams({ page: String(pagina) })
@@ -1090,6 +1122,7 @@ export default function Inventario() {
           key={sucursalActiva || 'todas'}
           deposito={depositoEditando}
           sucursales={sucursales}
+          depositos={depositos}
           sucursalActiva={sucursalActiva}
           onCerrar={() => setDepositoEditando(null)}
           onGuardado={guardadoDeposito}
@@ -1100,6 +1133,13 @@ export default function Inventario() {
         <FormularioCatalogo
           tipo={catalogoEditando.tipo}
           item={catalogoEditando.item}
+          existentes={
+            catalogoEditando.tipo === 'categorias'
+              ? categorias
+              : catalogoEditando.tipo === 'marcas'
+                ? marcas
+                : unidades
+          }
           onCerrar={() => setCatalogoEditando(null)}
           onGuardado={guardadoCatalogo}
         />

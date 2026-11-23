@@ -2,7 +2,7 @@ import { useState } from 'react'
 import Swal from 'sweetalert2'
 import { IconLoader2, IconTag, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
-import { validarTexto } from '../../utils/validaciones'
+import { validarNombreCatalogo } from '../../utils/validaciones'
 import MensajeError from '../common/MensajeError.jsx'
 
 const CONFIG = {
@@ -14,6 +14,7 @@ const CONFIG = {
 export default function FormularioCatalogo({
   tipo,
   item = null,
+  existentes = [],
   onCerrar,
   onGuardado,
 }) {
@@ -23,12 +24,35 @@ export default function FormularioCatalogo({
   const [error, setError] = useState('')
   const esEdicion = Boolean(item?.id)
 
+  function calcularError(nuevoValor) {
+    const texto = String(nuevoValor || '').trim()
+    const errorNombre = validarNombreCatalogo(
+      texto,
+      `El nombre de la ${config.singular}`,
+    )
+    if (errorNombre) {
+      return errorNombre
+    }
+    const normalizado = texto.toLowerCase()
+    const duplicado = existentes.some(
+      (existente) =>
+        (!item || Number(existente.id) !== Number(item.id)) &&
+        String(existente[config.campo] || '').trim().toLowerCase() ===
+          normalizado,
+    )
+    return duplicado
+      ? `Ya existe una ${config.singular} con ese nombre.`
+      : ''
+  }
+
+  function cambiarValor(nuevoValor) {
+    setValor(nuevoValor)
+    setError(calcularError(nuevoValor))
+  }
+
   async function guardar(evento) {
     evento.preventDefault()
-    const mensaje = validarTexto(valor, `El nombre de la ${config.singular}`, {
-      min: 2,
-      max: 60,
-    })
+    const mensaje = calcularError(valor)
     if (mensaje) {
       setError(mensaje)
       requestAnimationFrame(() => {
@@ -87,9 +111,10 @@ export default function FormularioCatalogo({
             <span>Nombre</span>
             <input
               type="text"
+              maxLength={50}
               className={error ? 'input-error' : ''}
               value={valor}
-              onChange={(evento) => setValor(evento.target.value)}
+              onChange={(evento) => cambiarValor(evento.target.value)}
               autoFocus
             />
             <MensajeError>{error}</MensajeError>
@@ -106,7 +131,7 @@ export default function FormularioCatalogo({
             <button
               type="submit"
               className="boton-comercial-primario"
-              disabled={guardando}
+              disabled={guardando || Boolean(error)}
             >
               {guardando ? (
                 <>

@@ -56,6 +56,7 @@ export default function FormularioProducto({
   })
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
+  const [duplicados, setDuplicados] = useState({})
   const [tocados, setTocados] = useState({})
 
   function calcularErrores() {
@@ -63,6 +64,8 @@ export default function FormularioProducto({
     const errorCodigo = validarCodigo(codigo)
     if (errorCodigo) {
       nuevos.codigo = `${errorCodigo} Ejemplo: CEM-50.`
+    } else if (duplicados.codigo) {
+      nuevos.codigo = duplicados.codigo
     }
     const errorNombre = validarTexto(nombre, 'El nombre', {
       min: 2,
@@ -70,6 +73,8 @@ export default function FormularioProducto({
     })
     if (errorNombre) {
       nuevos.nombre = errorNombre
+    } else if (duplicados.nombre) {
+      nuevos.nombre = duplicados.nombre
     }
     if (!categoria) {
       nuevos.categoria = 'Seleccioná una categoría.'
@@ -175,6 +180,88 @@ export default function FormularioProducto({
       vigente = false
     }
   }, [esEdicion, producto?.id])
+
+  useEffect(() => {
+    let vigente = true
+    const codigoLimpio = codigo.trim()
+    const nombreLimpio = nombre.trim()
+
+    const temporizador = window.setTimeout(async () => {
+      if (!codigoLimpio && !nombreLimpio) {
+        if (vigente) {
+          setDuplicados({})
+        }
+        return
+      }
+      const tareas = []
+      if (codigoLimpio) {
+        tareas.push(
+          pedir(
+            `/productos/?search=${encodeURIComponent(
+              codigoLimpio,
+            )}&page=1`,
+          )
+            .then((datos) => ({ tipo: 'codigo', datos }))
+            .catch(() => null),
+        )
+      }
+      if (nombreLimpio && marca) {
+        tareas.push(
+          pedir(
+            `/productos/?search=${encodeURIComponent(
+              nombreLimpio,
+            )}&marca=${marca}&page=1`,
+          )
+            .then((datos) => ({ tipo: 'nombre', datos }))
+            .catch(() => null),
+        )
+      }
+
+      const resultados = (await Promise.all(tareas)).filter(Boolean)
+      if (!vigente) {
+        return
+      }
+      const otros = (datos) =>
+        (datos?.results || []).filter(
+          (item) => !producto?.id || Number(item.id) !== Number(producto.id),
+        )
+      const codigoResultado = resultados.find(
+        (item) => item.tipo === 'codigo',
+      )
+      const nombreResultado = resultados.find(
+        (item) => item.tipo === 'nombre',
+      )
+      const codigoDuplicado = codigoResultado
+        ? otros(codigoResultado.datos).some(
+            (item) =>
+              String(item.codigo || '').trim().toLowerCase() ===
+              codigoLimpio.toLowerCase(),
+          )
+        : false
+      const nombreDuplicado = nombreResultado
+        ? otros(nombreResultado.datos).some(
+            (item) =>
+              Number(item.marca) === Number(marca) &&
+              String(item.nombre || '').trim().toLowerCase() ===
+                nombreLimpio.toLowerCase(),
+          )
+        : false
+
+      setDuplicados({
+        codigo: codigoDuplicado
+          ? 'Ya existe un producto con ese código.'
+          : '',
+        nombre: nombreDuplicado
+          ? 'Ya existe un producto con ese nombre para la marca seleccionada.'
+          : '',
+      })
+    }, 450)
+
+    return () => {
+      vigente = false
+      window.clearTimeout(temporizador)
+    }
+  }, [codigo, nombre, marca, producto?.id])
 
   function alternarSucursal(id) {
     marcarTocado('sucursales')
@@ -287,6 +374,7 @@ export default function FormularioProducto({
             <span>Código *</span>
             <input
               type="text"
+              maxLength={20}
               className={mensaje('codigo') ? 'input-error' : ''}
               value={codigo}
               onChange={(evento) => {
@@ -301,6 +389,7 @@ export default function FormularioProducto({
             <span>Nombre *</span>
             <input
               type="text"
+              maxLength={80}
               className={mensaje('nombre') ? 'input-error' : ''}
               value={nombre}
               onChange={(evento) => {
@@ -429,6 +518,7 @@ export default function FormularioProducto({
             <span>Código del proveedor</span>
             <input
               type="text"
+              maxLength={30}
               value={codigoProveedor}
               onChange={(evento) => setCodigoProveedor(evento.target.value)}
             />
@@ -445,6 +535,7 @@ export default function FormularioProducto({
             <span>Descripción</span>
             <input
               type="text"
+              maxLength={150}
               value={descripcion}
               onChange={(evento) => setDescripcion(evento.target.value)}
             />
@@ -500,6 +591,13 @@ export default function FormularioProducto({
       {catalogoRapido && (
         <FormularioCatalogo
           tipo={catalogoRapido}
+          existentes={
+            catalogoRapido === 'categorias'
+              ? categorias
+              : catalogoRapido === 'marcas'
+                ? marcas
+                : unidades
+          }
           onCerrar={() => setCatalogoRapido(null)}
           onGuardado={(nuevo) => {
             onCatalogoCreado?.(catalogoRapido, nuevo)

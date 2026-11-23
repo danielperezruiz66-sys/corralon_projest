@@ -249,7 +249,7 @@ export default function Proveedores() {
         encabezados = [
           'Razón social',
           'Nombre',
-          'CUIT',
+          'CUIT proveedor',
           'Teléfono',
           'Email',
           'Estado',
@@ -417,7 +417,7 @@ export default function Proveedores() {
                   <tr>
                     <th>Razón social</th>
                     <th>Nombre</th>
-                    <th>CUIT</th>
+                    <th>CUIT proveedor</th>
                     <th>Teléfono</th>
                     <th>Email</th>
                     <th>Estado</th>
@@ -623,7 +623,7 @@ export default function Proveedores() {
                 <strong>{detalleProveedor.nombre}</strong>
               </div>
               <div>
-                <span>CUIT</span>
+                <span>CUIT proveedor</span>
                 <strong>{detalleProveedor.cuit}</strong>
               </div>
               <div>

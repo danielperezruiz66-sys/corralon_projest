@@ -6,6 +6,7 @@ import { useSucursal } from '../../context/sucursal-context'
 import MensajeError from '../common/MensajeError.jsx'
 import {
   normalizarDocumento,
+  validarCuitIdentificador,
   validarEmail,
   validarNombreProveedor,
   validarRazonSocialProveedor,
@@ -31,13 +32,7 @@ export default function FormularioProveedor({
 
   function validarCampo(campo, valor) {
     if (campo === 'cuit') {
-      const numero = normalizarDocumento(valor)
-      if (!numero) {
-        return 'Ingresá el CUIT.'
-      }
-      return /^\d{11}$/.test(numero)
-        ? ''
-        : 'El CUIT debe tener 11 números, sin letras ni símbolos.'
+      return validarCuitIdentificador(valor)
     }
     if (campo === 'nombre') {
       return validarNombreProveedor(valor)
@@ -162,7 +157,7 @@ export default function FormularioProveedor({
 
         <form onSubmit={guardar} className="comercial-grid" noValidate>
           <label className="campo-comercial">
-            <span>CUIT *</span>
+            <span>CUIT proveedor *</span>
             <input
               type="text"
               inputMode="numeric"

@@ -25,20 +25,52 @@ export default function FormularioDetalleStock({
   )
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
+  const hayErrores = Object.values(errores).some(Boolean)
+
+  function validarObservaciones(valor) {
+    if (
+      automatica &&
+      !String(valor || '').trim().startsWith(automatica)
+    ) {
+      return 'La nota automática de origen no se puede modificar ni eliminar.'
+    }
+    return ''
+  }
+
+  function validarFechaVenc(valor) {
+    if (!valor) {
+      return ''
+    }
+    return validarFecha(valor, 'La fecha de vencimiento')
+  }
+
+  function cambiarFecha(valor) {
+    setFechaVenc(valor)
+    setErrores((previos) => ({
+      ...previos,
+      fecha_venc: validarFechaVenc(valor),
+    }))
+  }
+
+  function cambiarObservaciones(valor) {
+    setObservaciones(valor)
+    setErrores((previos) => ({
+      ...previos,
+      observaciones: validarObservaciones(valor),
+    }))
+  }
 
   async function guardar(evento) {
     evento.preventDefault()
-    const nuevos = {}
-    if (automatica && !String(observaciones || '').trim().startsWith(automatica)) {
-      nuevos.observaciones =
-        'La nota automática de origen no se puede modificar ni eliminar.'
+    const nuevos = {
+      fecha_venc: validarFechaVenc(fechaVenc),
+      observaciones: validarObservaciones(observaciones),
     }
-    if (fechaVenc) {
-      const fechaError = validarFecha(fechaVenc, 'La fecha de vencimiento')
-      if (fechaError) {
-        nuevos.fecha_venc = fechaError
+    Object.keys(nuevos).forEach((campo) => {
+      if (!nuevos[campo]) {
+        delete nuevos[campo]
       }
-    }
+    })
     if (Object.keys(nuevos).length > 0) {
       setErrores(nuevos)
       requestAnimationFrame(() => {
@@ -106,7 +138,7 @@ export default function FormularioDetalleStock({
               type="date"
               className={errores.fecha_venc ? 'input-error' : ''}
               value={fechaVenc || ''}
-              onChange={(evento) => setFechaVenc(evento.target.value)}
+              onChange={(evento) => cambiarFecha(evento.target.value)}
             />
             <MensajeError>{errores.fecha_venc}</MensajeError>
           </label>
@@ -116,7 +148,9 @@ export default function FormularioDetalleStock({
             <textarea
               rows={4}
               value={observaciones}
-              onChange={(evento) => setObservaciones(evento.target.value)}
+              onChange={(evento) =>
+                cambiarObservaciones(evento.target.value)
+              }
               placeholder={
                 automatica
                   ? 'Podés agregar observaciones debajo de la nota automática.'
@@ -142,7 +176,7 @@ export default function FormularioDetalleStock({
             <button
               type="submit"
               className="boton-comercial-primario"
-              disabled={guardando}
+              disabled={guardando || hayErrores}
             >
               {guardando ? (
                 <>

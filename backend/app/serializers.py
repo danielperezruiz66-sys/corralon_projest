@@ -111,10 +111,29 @@ class UbicacionSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 class EmpresaSerializer(serializers.ModelSerializer):
+    cuit = serializers.CharField(
+        max_length=13,
+        min_length=3,
+        error_messages={
+            'min_length': 'El CUIT debe tener entre 3 y 13 números.',
+            'max_length': 'El CUIT debe tener entre 3 y 13 números.',
+            'blank': 'Ingresá el CUIT.',
+            'required': 'Ingresá el CUIT.',
+        },
+    )
+
+    def to_internal_value(self, data):
+        datos = data.copy()
+        if datos.get('cuit'):
+            datos['cuit'] = re.sub(r'[.\-\s]', '', str(datos['cuit']))
+        return super().to_internal_value(datos)
+
     def validate_cuit(self, value):
-        limpio = ''.join(caracter for caracter in value if caracter.isdigit())
-        if len(limpio) != 11:
-            raise serializers.ValidationError('El CUIT debe tener 11 números.')
+        limpio = re.sub(r'[.\-\s]', '', value or '')
+        if not re.fullmatch(r'\d{3,13}', limpio):
+            raise serializers.ValidationError(
+                'El CUIT debe tener entre 3 y 13 números.'
+            )
         existentes = Empresa.objects.filter(cuit=limpio)
         if self.instance is not None:
             existentes = existentes.exclude(pk=self.instance.pk)
@@ -829,21 +848,129 @@ class CategoriaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Categoria
         fields = ['id', 'categorias']
+        extra_kwargs = {
+            'categorias': {
+                'error_messages': {
+                    'blank': 'Ingresá el nombre de la categoría.',
+                    'required': 'Ingresá el nombre de la categoría.',
+                    'max_length': 'El nombre no puede superar 50 caracteres.',
+                },
+            },
+        }
+
+    def validate_categorias(self, value):
+        nombre = (value or '').strip()
+        if len(nombre) < 2:
+            raise serializers.ValidationError(
+                'El nombre de la categoría debe tener al menos 2 caracteres.'
+            )
+        if not re.search(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]', nombre):
+            raise serializers.ValidationError(
+                'El nombre de la categoría debe contener al menos una letra.'
+            )
+        duplicados = Categoria.objects.filter(categorias__iexact=nombre)
+        if self.instance is not None:
+            duplicados = duplicados.exclude(pk=self.instance.pk)
+        if duplicados.exists():
+            raise serializers.ValidationError(
+                'Ya existe una categoría con ese nombre.'
+            )
+        return nombre
 
 
 class MarcaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Marca
         fields = ['id', 'marcas']
+        extra_kwargs = {
+            'marcas': {
+                'error_messages': {
+                    'blank': 'Ingresá el nombre de la marca.',
+                    'required': 'Ingresá el nombre de la marca.',
+                    'max_length': 'El nombre no puede superar 50 caracteres.',
+                },
+            },
+        }
+
+    def validate_marcas(self, value):
+        nombre = (value or '').strip()
+        if len(nombre) < 2:
+            raise serializers.ValidationError(
+                'El nombre de la marca debe tener al menos 2 caracteres.'
+            )
+        if not re.search(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]', nombre):
+            raise serializers.ValidationError(
+                'El nombre de la marca debe contener al menos una letra.'
+            )
+        duplicados = Marca.objects.filter(marcas__iexact=nombre)
+        if self.instance is not None:
+            duplicados = duplicados.exclude(pk=self.instance.pk)
+        if duplicados.exists():
+            raise serializers.ValidationError('Ya existe una marca con ese nombre.')
+        return nombre
 
 
 class UnidadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Unidad
         fields = ['id', 'unidades']
+        extra_kwargs = {
+            'unidades': {
+                'error_messages': {
+                    'blank': 'Ingresá el nombre de la unidad.',
+                    'required': 'Ingresá el nombre de la unidad.',
+                    'max_length': 'El nombre no puede superar 50 caracteres.',
+                },
+            },
+        }
+
+    def validate_unidades(self, value):
+        nombre = (value or '').strip()
+        if len(nombre) < 2:
+            raise serializers.ValidationError(
+                'El nombre de la unidad debe tener al menos 2 caracteres.'
+            )
+        if not re.search(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]', nombre):
+            raise serializers.ValidationError(
+                'El nombre de la unidad debe contener al menos una letra.'
+            )
+        duplicados = Unidad.objects.filter(unidades__iexact=nombre)
+        if self.instance is not None:
+            duplicados = duplicados.exclude(pk=self.instance.pk)
+        if duplicados.exists():
+            raise serializers.ValidationError(
+                'Ya existe una unidad con ese nombre.'
+            )
+        return nombre
 
 
 class ProductoSerializer(serializers.ModelSerializer):
+    codigo = serializers.CharField(
+        max_length=30,
+        min_length=2,
+        error_messages={
+            'blank': 'Ingresá el código del producto.',
+            'required': 'Ingresá el código del producto.',
+            'max_length': 'El código no puede superar 30 caracteres.',
+            'min_length': 'El código debe tener al menos 2 caracteres.',
+        },
+        validators=[
+            UniqueValidator(
+                queryset=Producto.objects.all(),
+                message='Ya existe un producto con ese código.',
+            )
+        ],
+    )
+    nombre = serializers.CharField(
+        max_length=80,
+        min_length=2,
+        error_messages={
+            'blank': 'Ingresá el nombre del producto.',
+            'required': 'Ingresá el nombre del producto.',
+            'max_length': 'El nombre no puede superar 80 caracteres.',
+            'min_length': 'El nombre debe tener al menos 2 caracteres.',
+        },
+    )
     categoria_detalle = serializers.StringRelatedField(source='categoria', read_only=True)
     marca_detalle = serializers.StringRelatedField(source='marca', read_only=True)
     unidad_detalle = serializers.StringRelatedField(source='unidad', read_only=True)
@@ -935,6 +1062,25 @@ class ProductoSerializer(serializers.ModelSerializer):
             return None
         return str(obj.precio_unidad - max(costos))
 
+    def validate_codigo(self, value):
+        codigo = (value or '').strip()
+        duplicados = Producto.objects.filter(codigo__iexact=codigo)
+        if self.instance is not None:
+            duplicados = duplicados.exclude(pk=self.instance.pk)
+        if duplicados.exists():
+            raise serializers.ValidationError(
+                'Ya existe un producto con ese código.'
+            )
+        return codigo
+
+    def validate_nombre(self, value):
+        nombre = (value or '').strip()
+        if len(nombre) < 2:
+            raise serializers.ValidationError(
+                'El nombre debe tener al menos 2 caracteres.'
+            )
+        return nombre
+
     def validate_precio_unidad(self, value):
         if value <= 0:
             raise serializers.ValidationError(
@@ -943,6 +1089,25 @@ class ProductoSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        nombre = attrs.get('nombre', getattr(self.instance, 'nombre', None))
+        marca = attrs.get('marca', getattr(self.instance, 'marca', None))
+        if nombre and marca:
+            duplicados = Producto.objects.filter(
+                nombre__iexact=nombre.strip(),
+                marca=marca,
+            )
+            if self.instance is not None:
+                duplicados = duplicados.exclude(pk=self.instance.pk)
+            if duplicados.exists():
+                raise serializers.ValidationError(
+                    {
+                        'nombre': (
+                            'Ya existe un producto con ese nombre para la '
+                            'marca seleccionada.'
+                        )
+                    }
+                )
+
         sucursales = attrs.get('sucursales')
         if self.instance is None and not sucursales:
             raise serializers.ValidationError(
@@ -1240,19 +1405,49 @@ class DepositoSerializer(serializers.ModelSerializer):
             'descripcion',
             'es_predeterminado',
         ]
+        extra_kwargs = {
+            'nombre': {
+                'error_messages': {
+                    'blank': 'Ingresá el nombre del depósito.',
+                    'required': 'Ingresá el nombre del depósito.',
+                    'max_length': 'El nombre no puede superar 50 caracteres.',
+                },
+            },
+        }
 
     def validate(self, attrs):
+        errores = {}
         es_predeterminado = attrs.get(
             'es_predeterminado',
             getattr(self.instance, 'es_predeterminado', False),
         )
         sucursal = attrs.get('sucursal', getattr(self.instance, 'sucursal', None))
+        nombre = attrs.get('nombre', getattr(self.instance, 'nombre', ''))
         if sucursal is None:
-            raise serializers.ValidationError(
-                {'sucursal': 'El depósito debe pertenecer a una sucursal.'}
-            )
+            errores['sucursal'] = 'El depósito debe pertenecer a una sucursal.'
 
-        if es_predeterminado:
+        nombre = (nombre or '').strip()
+        if len(nombre) < 2:
+            errores['nombre'] = (
+                'El nombre del depósito debe tener al menos 2 caracteres.'
+            )
+        elif not re.search(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]', nombre):
+            errores['nombre'] = (
+                'El nombre del depósito debe contener al menos una letra.'
+            )
+        elif sucursal is not None:
+            duplicados = Deposito.objects.filter(
+                sucursal=sucursal,
+                nombre__iexact=nombre,
+            )
+            if self.instance is not None:
+                duplicados = duplicados.exclude(pk=self.instance.pk)
+            if duplicados.exists():
+                errores['nombre'] = (
+                    'Ya existe un depósito con ese nombre en la sucursal.'
+                )
+
+        if es_predeterminado and sucursal is not None:
             existentes = Deposito.objects.filter(
                 sucursal=sucursal,
                 es_predeterminado=True,
@@ -1260,13 +1455,12 @@ class DepositoSerializer(serializers.ModelSerializer):
             if self.instance:
                 existentes = existentes.exclude(pk=self.instance.pk)
             if existentes.exists():
-                raise serializers.ValidationError(
-                    {
-                        'es_predeterminado': (
-                            'Ya existe un deposito predeterminado para esta sucursal.'
-                        )
-                    }
+                errores['es_predeterminado'] = (
+                    'Ya existe un deposito predeterminado para esta sucursal.'
                 )
+
+        if errores:
+            raise serializers.ValidationError(errores)
         return attrs
 
 
@@ -1586,7 +1780,14 @@ class MoverLoteSerializer(serializers.Serializer):
 
 class ProveedorSerializer(serializers.ModelSerializer):
     cuit = serializers.CharField(
-        max_length=30,
+        max_length=13,
+        min_length=3,
+        error_messages={
+            'min_length': 'El CUIT debe tener entre 3 y 13 números.',
+            'max_length': 'El CUIT debe tener entre 3 y 13 números.',
+            'blank': 'Ingresá el CUIT.',
+            'required': 'Ingresá el CUIT.',
+        },
         validators=[
             UniqueValidator(
                 queryset=Proveedor.objects.all(),
@@ -1640,9 +1841,9 @@ class ProveedorSerializer(serializers.ModelSerializer):
 
     def validate_cuit(self, value):
         cuit = re.sub(r'[.\-\s]', '', value or '')
-        if not re.fullmatch(r'\d{11}', cuit):
+        if not re.fullmatch(r'\d{3,13}', cuit):
             raise serializers.ValidationError(
-                'El CUIT debe tener 11 números, sin letras ni símbolos.'
+                'El CUIT debe tener entre 3 y 13 números, sin letras ni símbolos.'
             )
         return cuit
 

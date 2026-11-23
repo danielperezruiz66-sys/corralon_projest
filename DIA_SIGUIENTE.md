@@ -20,6 +20,12 @@
   duplicados; compra con validación de cantidades/costos, pagos idempotentes,
   recepción, anulación y permisos por rol verificados contra stock, lotes y
   Actividad. Backend de proveedores: 19 tests OK.
+- Inventario: validación en vivo en producto, catálogos, stock, depósitos,
+  carga/ajuste de stock, lotes y movimientos; duplicados bloqueados en
+  categorías, marcas, unidades, código y nombre+marca de producto y nombre de
+  depósito por sucursal; filtros de productos en la URL y CSV UTF-8 verificado.
+- Backend: migraciones 0006 (CUIT 3–13) y 0007 (unicidad de catálogo/stock);
+  suite completa 275 tests OK. Frontend: lint 0 warnings y build OK.
 
 ## Próximo módulo: Caja
 
@@ -40,10 +46,15 @@
       actualiza el catálogo).
 - [ ] Definir si la compra necesita un campo de observaciones (hoy no existe).
 
+## Inventario
+
+- [ ] Definir si un producto debe poder desactivarse desde la UI. Hoy no hay
+      acción de baja y el `DELETE` de la API se bloquea si tiene stock o
+      historial (`protegido`).
+
 ## Revisión módulo por módulo
 
 - [ ] Clientes.
-- [ ] Inventario.
 - [ ] Proveedores.
 - [ ] Empleados.
 - [ ] Perfil y Actividad.

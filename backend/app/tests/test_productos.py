@@ -175,6 +175,76 @@ class ProductoApiTests(BaseCorralonTestCase):
             1,
         )
 
+    def test_no_crea_categoria_duplicada_sin_importar_mayusculas(self):
+        self.autenticar(self.user_gerente)
+
+        respuesta = self.client.post(
+            '/api/categorias/',
+            {'categorias': self.categoria.categorias.upper()},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('categorias', respuesta.data)
+
+    def test_no_crea_marca_duplicada_sin_importar_mayusculas(self):
+        self.autenticar(self.user_gerente)
+
+        respuesta = self.client.post(
+            '/api/marcas/',
+            {'marcas': self.marca.marcas.upper()},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('marcas', respuesta.data)
+
+    def test_no_crea_unidad_duplicada_sin_importar_mayusculas(self):
+        self.autenticar(self.user_gerente)
+
+        respuesta = self.client.post(
+            '/api/unidades/',
+            {'unidades': self.unidad.unidades.upper()},
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('unidades', respuesta.data)
+
+    def test_no_crea_producto_con_codigo_duplicado_case_insensitive(self):
+        self.autenticar(self.user_gerente)
+        primero = self.client.post(
+            '/api/productos/',
+            self._payload(codigo='P100'),
+            format='json',
+        )
+        segundo = self.client.post(
+            '/api/productos/',
+            self._payload(codigo='p100', nombre='Producto dos'),
+            format='json',
+        )
+
+        self.assertEqual(primero.status_code, 201)
+        self.assertEqual(segundo.status_code, 400)
+        self.assertIn('codigo', segundo.data)
+
+    def test_no_crea_producto_con_nombre_duplicado_en_la_misma_marca(self):
+        self.autenticar(self.user_gerente)
+        primero = self.client.post(
+            '/api/productos/',
+            self._payload(codigo='P101', nombre='Producto repetido'),
+            format='json',
+        )
+        segundo = self.client.post(
+            '/api/productos/',
+            self._payload(codigo='P102', nombre='producto repetido'),
+            format='json',
+        )
+
+        self.assertEqual(primero.status_code, 201)
+        self.assertEqual(segundo.status_code, 400)
+        self.assertIn('nombre', segundo.data)
+
     def test_modelo_valida_precio_unidad_positivo(self):
         producto = Producto.objects.get(pk=self.producto.pk)
         producto.precio_unidad = Decimal('0.00')

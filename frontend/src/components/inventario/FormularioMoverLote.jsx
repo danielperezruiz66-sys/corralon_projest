@@ -25,16 +25,45 @@ export default function FormularioMoverLote({
   const [motivo, setMotivo] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
+  const hayErrores = Object.values(errores).some(Boolean)
+
+  function validarDestino(valor) {
+    return valor ? '' : 'Elegí un depósito destino distinto del actual.'
+  }
+
+  function validarMotivo(valor) {
+    return String(valor || '').trim().length >= 3
+      ? ''
+      : 'Indicá el motivo del movimiento (mínimo 3 caracteres).'
+  }
+
+  function cambiarDestino(valor) {
+    setDestino(valor)
+    setErrores((previos) => ({
+      ...previos,
+      deposito: validarDestino(valor),
+    }))
+  }
+
+  function cambiarMotivo(valor) {
+    setMotivo(valor)
+    setErrores((previos) => ({
+      ...previos,
+      motivo: validarMotivo(valor),
+    }))
+  }
 
   async function guardar(evento) {
     evento.preventDefault()
-    const nuevos = {}
-    if (!destino) {
-      nuevos.deposito = 'Elegí un depósito destino distinto del actual.'
+    const nuevos = {
+      deposito: validarDestino(destino),
+      motivo: validarMotivo(motivo),
     }
-    if (motivo.trim().length < 3) {
-      nuevos.motivo = 'Indicá el motivo del movimiento (mínimo 3 caracteres).'
-    }
+    Object.keys(nuevos).forEach((campo) => {
+      if (!nuevos[campo]) {
+        delete nuevos[campo]
+      }
+    })
     if (Object.keys(nuevos).length > 0) {
       setErrores(nuevos)
       requestAnimationFrame(() => {
@@ -116,7 +145,7 @@ export default function FormularioMoverLote({
             <select
               className={errores.deposito ? 'input-error' : ''}
               value={destino}
-              onChange={(evento) => setDestino(evento.target.value)}
+              onChange={(evento) => cambiarDestino(evento.target.value)}
               disabled={destinos.length === 0}
             >
               {destinos.length === 0 && (
@@ -138,9 +167,10 @@ export default function FormularioMoverLote({
             <span>Motivo *</span>
             <textarea
               rows={3}
+              maxLength={500}
               className={errores.motivo ? 'input-error' : ''}
               value={motivo}
-              onChange={(evento) => setMotivo(evento.target.value)}
+              onChange={(evento) => cambiarMotivo(evento.target.value)}
               placeholder="Por qué se mueve el lote (mínimo 3 caracteres)"
             />
             <MensajeError>{errores.motivo}</MensajeError>
@@ -157,7 +187,7 @@ export default function FormularioMoverLote({
             <button
               type="submit"
               className="boton-comercial-primario"
-              disabled={guardando || destinos.length === 0}
+              disabled={guardando || destinos.length === 0 || hayErrores}
             >
               {guardando ? (
                 <>

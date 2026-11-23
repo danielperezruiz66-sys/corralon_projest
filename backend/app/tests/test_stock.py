@@ -11,6 +11,23 @@ from .base import BaseCorralonTestCase
 
 
 class StockApiTests(BaseCorralonTestCase):
+    def test_no_crea_deposito_duplicado_en_la_sucursal(self):
+        self.autenticar(self.user_gerente)
+        payload = {
+            'sucursal': self.sucursal.id,
+            'nombre': 'Depósito QA',
+        }
+        primero = self.client.post('/api/depositos/', payload, format='json')
+        segundo = self.client.post(
+            '/api/depositos/',
+            {**payload, 'nombre': 'depósito qa'},
+            format='json',
+        )
+
+        self.assertEqual(primero.status_code, 201)
+        self.assertEqual(segundo.status_code, 400)
+        self.assertIn('nombre', segundo.data)
+
     def test_edita_minimos_del_stock(self):
         self.autenticar(self.user_deposito)
 

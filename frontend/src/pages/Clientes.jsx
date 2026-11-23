@@ -6,7 +6,6 @@ import {
   IconDownload,
   IconEye,
   IconLoader2,
-  IconMail,
   IconPencil,
   IconPlus,
   IconSearch,
@@ -674,15 +673,6 @@ export default function Clientes() {
                 >
                   <IconBrandWhatsapp size={18} />
                   WhatsApp
-                </a>
-              )}
-              {clienteDetalle.email && (
-                <a
-                  className="boton-secundario"
-                  href={`mailto:${clienteDetalle.email}`}
-                >
-                  <IconMail size={18} />
-                  Email
                 </a>
               )}
               {clienteDetalle.estado && (

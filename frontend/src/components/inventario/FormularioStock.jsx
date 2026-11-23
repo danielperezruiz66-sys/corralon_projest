@@ -3,6 +3,7 @@ import Swal from 'sweetalert2'
 import { IconAdjustments, IconLoader2, IconX } from '@tabler/icons-react'
 import { pedir } from '../../api/client'
 import { formatearNumero } from '../../utils/formato'
+import { validarNumero } from '../../utils/validaciones'
 import MensajeError from '../common/MensajeError.jsx'
 
 export default function FormularioStock({
@@ -16,21 +17,61 @@ export default function FormularioStock({
   )
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
+  const hayErrores = Object.values(errores).some(Boolean)
+
+  function validarCantMin(valor) {
+    return validarNumero(valor, {
+      etiqueta: 'El stock mínimo',
+      mayorQueCero: false,
+      decimales: 3,
+    })
+  }
+
+  function validarCantNegativa(valor) {
+    const texto = String(valor ?? '').trim()
+    if (!texto) {
+      return 'Ingresá el límite negativo.'
+    }
+    const numero = Number(texto)
+    if (!Number.isFinite(numero)) {
+      return 'El límite negativo debe ser un número.'
+    }
+    const decimales = texto.replace(',', '.').split('.')[1]
+    if (decimales && decimales.length > 3) {
+      return 'El límite negativo admite hasta 3 decimales.'
+    }
+    return numero > 0
+      ? 'El límite negativo no puede ser mayor a cero.'
+      : ''
+  }
+
+  function cambiarCantMin(valor) {
+    setCantMin(valor)
+    setErrores((previos) => ({
+      ...previos,
+      cantMin: validarCantMin(valor),
+    }))
+  }
+
+  function cambiarCantNegativa(valor) {
+    setCantNegativa(valor)
+    setErrores((previos) => ({
+      ...previos,
+      cantNegativa: validarCantNegativa(valor),
+    }))
+  }
 
   async function guardar(evento) {
     evento.preventDefault()
-    const nuevos = {}
-    if (!Number.isFinite(Number(cantMin))) {
-      nuevos.cantMin = 'Ingresá un número válido.'
-    } else if (Number(cantMin) < 0) {
-      nuevos.cantMin = 'El stock mínimo no puede ser negativo.'
+    const nuevos = {
+      cantMin: validarCantMin(cantMin),
+      cantNegativa: validarCantNegativa(cantNegativa),
     }
-    if (!Number.isFinite(Number(cantNegativa))) {
-      nuevos.cantNegativa = 'Ingresá un número válido.'
-    } else if (Number(cantNegativa) > 0) {
-      nuevos.cantNegativa =
-        'El límite negativo no puede ser mayor a cero.'
-    }
+    Object.keys(nuevos).forEach((campo) => {
+      if (!nuevos[campo]) {
+        delete nuevos[campo]
+      }
+    })
     if (Object.keys(nuevos).length > 0) {
       setErrores(nuevos)
       requestAnimationFrame(() => {
@@ -110,7 +151,7 @@ export default function FormularioStock({
               min="0"
               step="0.001"
               value={cantMin}
-              onChange={(evento) => setCantMin(evento.target.value)}
+              onChange={(evento) => cambiarCantMin(evento.target.value)}
             />
             <MensajeError>{errores.cantMin}</MensajeError>
           </label>
@@ -123,7 +164,7 @@ export default function FormularioStock({
               max="0"
               step="0.001"
               value={cantNegativa}
-              onChange={(evento) => setCantNegativa(evento.target.value)}
+              onChange={(evento) => cambiarCantNegativa(evento.target.value)}
             />
             <MensajeError>{errores.cantNegativa}</MensajeError>
           </label>
@@ -139,7 +180,7 @@ export default function FormularioStock({
             <button
               type="submit"
               className="boton-comercial-primario"
-              disabled={guardando}
+              disabled={guardando || hayErrores}
             >
               {guardando ? (
                 <>

@@ -55,6 +55,7 @@ export default function FormularioAjusteStock({
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState({})
+  const hayErrores = Object.values(errores).some(Boolean)
 
   const unidad = stock.producto_unidad_detalle || ''
   const permiteDecimales = unidadPermiteDecimales(unidad)
@@ -91,8 +92,36 @@ export default function FormularioAjusteStock({
     }
   }, [stock.id])
 
+  function aplicarError(campo, mensaje) {
+    setErrores((prev) => {
+      const copia = { ...prev }
+      delete copia.general
+      if (mensaje) {
+        copia[campo] = mensaje
+      } else {
+        delete copia[campo]
+      }
+      return copia
+    })
+  }
+
   function cambiarCantidadLote(id, valor) {
     setCantidades((prev) => ({ ...prev, [id]: valor }))
+    const lote = lotes.find((item) => item.id === id)
+    let error = ''
+    if (valor === '' || valor === undefined || valor === null) {
+      error = 'Ingresá la cantidad resultante.'
+    } else {
+      const nueva = aNumero(valor)
+      if (!Number.isFinite(nueva) || nueva < 0) {
+        error = 'La cantidad no puede ser negativa.'
+      } else if (lote && nueva > aNumero(lote.cantidad)) {
+        error = 'No puede ser mayor al stock actual del lote.'
+      } else if (!permiteDecimales && !Number.isInteger(nueva)) {
+        error = 'La cantidad debe ser un número entero para esta unidad.'
+      }
+    }
+    aplicarError(`lote-${id}`, error)
   }
 
   function agregarIngreso() {
@@ -103,10 +132,46 @@ export default function FormularioAjusteStock({
     setIngresos((prev) =>
       prev.map((item) => (item.key === key ? { ...item, [campo]: valor } : item)),
     )
+    if (campo === 'deposito') {
+      aplicarError(`ing-dep-${key}`, valor ? '' : 'Seleccioná un depósito.')
+    } else if (campo === 'cantidad') {
+      aplicarError(
+        `ing-cant-${key}`,
+        validarCantidadPorUnidad(
+          valor,
+          unidad,
+          'La cantidad a ingresar',
+        ),
+      )
+    } else if (campo === 'fecha_venc') {
+      let error = ''
+      if (valor) {
+        const fecha = new Date(`${valor}T00:00:00`)
+        if (Number.isNaN(fecha.getTime())) {
+          error = 'La fecha de vencimiento no es válida.'
+        }
+      }
+      aplicarError(`ing-fecha-${key}`, error)
+    }
   }
 
   function quitarIngreso(key) {
     setIngresos((prev) => prev.filter((item) => item.key !== key))
+    setErrores((prev) => {
+      const copia = { ...prev }
+      delete copia[`ing-dep-${key}`]
+      delete copia[`ing-cant-${key}`]
+      delete copia[`ing-fecha-${key}`]
+      return copia
+    })
+  }
+
+  function cambiarMotivo(valor) {
+    setMotivo(valor)
+    aplicarError(
+      'motivo',
+      validarTexto(valor, 'El motivo', { min: 3, max: 90 }),
+    )
   }
 
   const totalResultanteLotes = lotes.reduce(
@@ -393,6 +458,11 @@ export default function FormularioAjusteStock({
                     <span>Vencimiento (opcional)</span>
                     <input
                       type="date"
+                      className={
+                        errores[`ing-fecha-${ingreso.key}`]
+                          ? 'input-error'
+                          : ''
+                      }
                       value={ingreso.fecha_venc || ''}
                       onChange={(evento) =>
                         cambiarIngreso(
@@ -402,6 +472,9 @@ export default function FormularioAjusteStock({
                         )
                       }
                     />
+                    <MensajeError>
+                      {errores[`ing-fecha-${ingreso.key}`]}
+                    </MensajeError>
                   </label>
                   <div className="campo-comercial campo-accion-ingreso">
                     <span>&nbsp;</span>
@@ -424,7 +497,7 @@ export default function FormularioAjusteStock({
                 type="text"
                 className={errores.motivo ? 'input-error' : ''}
                 value={motivo}
-                onChange={(evento) => setMotivo(evento.target.value)}
+                onChange={(evento) => cambiarMotivo(evento.target.value)}
                 placeholder="Ej. Conteo físico, merma, rotura"
                 maxLength={90}
               />
@@ -453,7 +526,7 @@ export default function FormularioAjusteStock({
               <button
                 type="submit"
                 className="boton-comercial-primario"
-                disabled={guardando || cargando}
+                disabled={guardando || cargando || hayErrores}
               >
                 {guardando ? (
                   <>

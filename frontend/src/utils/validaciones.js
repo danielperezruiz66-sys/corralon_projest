@@ -53,6 +53,20 @@ export function validarDocumento(tipo, valor) {
   return ''
 }
 
+export function validarCuitIdentificador(valor) {
+  const texto = limpiar(valor)
+  if (!texto) {
+    return 'Ingresá el CUIT.'
+  }
+  const numero = normalizarDocumento(texto)
+  if (!/^\d+$/.test(numero)) {
+    return 'El CUIT solo puede tener números (se permiten puntos o guiones).'
+  }
+  return numero.length >= 3 && numero.length <= 13
+    ? ''
+    : 'El CUIT debe tener entre 3 y 13 números.'
+}
+
 export function validarEmail(valor) {
   const texto = limpiar(valor)
   if (!texto) {
@@ -101,6 +115,23 @@ export function validarRazonSocial(valor) {
   return texto.length >= 2
     ? ''
     : 'La razón social debe tener al menos 2 caracteres.'
+}
+
+export function validarNombreCatalogo(valor, etiqueta = 'El nombre') {
+  const texto = limpiar(valor)
+  if (!texto) {
+    return `Ingresá ${etiqueta.toLowerCase()}.`
+  }
+  if (texto.length < 2) {
+    return `${etiqueta} debe tener al menos 2 caracteres.`
+  }
+  if (texto.length > 50) {
+    return `${etiqueta} no puede superar 50 caracteres.`
+  }
+  if (!/[A-Za-zÁÉÍÓÚáéíóúÑñÜü]/.test(texto)) {
+    return `${etiqueta} debe contener al menos una letra.`
+  }
+  return ''
 }
 
 export function validarNombreProveedor(valor) {

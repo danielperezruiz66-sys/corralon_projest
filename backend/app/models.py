@@ -3,8 +3,9 @@ from decimal import Decimal
 
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MinLengthValidator, MinValueValidator
 from django.db import models
+from django.db.models.functions import Lower
 from django.dispatch import receiver
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
@@ -90,7 +91,11 @@ class Ubicacion(models.Model):
 # =============================================================================
 
 class Empresa(models.Model):
-    cuit = models.CharField(max_length=30, unique=True)
+    cuit = models.CharField(
+        max_length=13,
+        unique=True,
+        validators=[MinLengthValidator(3)],
+    )
     nombre = models.CharField(max_length=80)
     razon_social = models.CharField(max_length=100)
     email = models.EmailField(max_length=80, null=True, blank=True)
@@ -105,6 +110,12 @@ class Empresa(models.Model):
         ordering = ['razon_social']
         verbose_name = 'Empresa'
         verbose_name_plural = 'Empresas'
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(cuit__regex=r'^[0-9]{3,13}$'),
+                name='cuit_empresa_valido',
+            ),
+        ]
 
     def __str__(self):
         return self.razon_social
@@ -522,6 +533,12 @@ class Categoria(models.Model):
         ordering = ['categorias']
         verbose_name = 'Categoria'
         verbose_name_plural = 'Categorias'
+        constraints = [
+            models.UniqueConstraint(
+                Lower('categorias'),
+                name='categoria_unica',
+            ),
+        ]
 
     def __str__(self):
         return self.categorias
@@ -535,6 +552,12 @@ class Marca(models.Model):
         ordering = ['marcas']
         verbose_name = 'Marca'
         verbose_name_plural = 'Marcas'
+        constraints = [
+            models.UniqueConstraint(
+                Lower('marcas'),
+                name='marca_unica',
+            ),
+        ]
 
     def __str__(self):
         return self.marcas
@@ -548,6 +571,12 @@ class Unidad(models.Model):
         ordering = ['unidades']
         verbose_name = 'Unidad'
         verbose_name_plural = 'Unidades'
+        constraints = [
+            models.UniqueConstraint(
+                Lower('unidades'),
+                name='unidad_unica',
+            ),
+        ]
 
     def __str__(self):
         return self.unidades
@@ -590,6 +619,17 @@ class Producto(models.Model):
         ordering = ['nombre']
         verbose_name = 'Producto'
         verbose_name_plural = 'Productos'
+        constraints = [
+            models.UniqueConstraint(
+                Lower('codigo'),
+                name='producto_codigo_unico',
+            ),
+            models.UniqueConstraint(
+                Lower('nombre'),
+                models.F('marca'),
+                name='producto_nombre_marca_unico',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.codigo} - {self.nombre}'
@@ -651,6 +691,11 @@ class Deposito(models.Model):
                 fields=['sucursal'],
                 condition=models.Q(es_predeterminado=True),
                 name='un_deposito_predeterminado_por_sucursal',
+            ),
+            models.UniqueConstraint(
+                Lower('nombre'),
+                models.F('sucursal'),
+                name='deposito_nombre_sucursal_unico',
             ),
         ]
 
@@ -751,7 +796,11 @@ class DetalleStock(models.Model):
 # =============================================================================
 
 class Proveedor(models.Model):
-    cuit = models.CharField(max_length=30, unique=True)
+    cuit = models.CharField(
+        max_length=13,
+        unique=True,
+        validators=[MinLengthValidator(3)],
+    )
     nombre = models.CharField(max_length=80)
     razon_social = models.CharField(max_length=100)
     contacto = models.CharField(max_length=30, null=True, blank=True)
@@ -765,6 +814,12 @@ class Proveedor(models.Model):
         ordering = ['razon_social']
         verbose_name = 'Proveedor'
         verbose_name_plural = 'Proveedores'
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(cuit__regex=r'^[0-9]{3,13}$'),
+                name='cuit_proveedor_valido',
+            ),
+        ]
 
     def __str__(self):
         return self.razon_social
