@@ -10,6 +10,9 @@ ESTILOS DE LOGIN - FER-CONS
   overflow: hidden;
   background-color: var(--color-login);
   box-sizing: border-box;
+  /* Celeste del campo: un punto más oscuro que --color-campo para que el
+     texto y los íconos blancos tengan contraste suficiente. */
+  --color-campo-login: #3f8b95;
 }
 
 .circulo {
@@ -76,10 +79,10 @@ ESTILOS DE LOGIN - FER-CONS
 .subtitulo-logo {
   display: block;
   font-size: 0.8rem;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .caja-icono-logo {
@@ -116,11 +119,18 @@ ESTILOS DE LOGIN - FER-CONS
 .input-personalizado {
   width: 100%;
   border-radius: 9999px;
-  background-color: var(--color-campo);
+  background-color: var(--color-campo-login);
   padding: 1rem 1.5rem 1rem 3.5rem;
-  color: #ffffff;
   border: none;
   box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 700;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+  caret-color: #ffffff;
 }
 
 .input-password-ojo {
@@ -139,7 +149,7 @@ ESTILOS DE LOGIN - FER-CONS
   display: grid;
   place-items: center;
   padding: 0.25rem;
-  opacity: 0.8;
+  opacity: 0.95;
   transition: opacity 0.2s ease;
 }
 
@@ -148,11 +158,46 @@ ESTILOS DE LOGIN - FER-CONS
 }
 
 .input-personalizado::placeholder {
-  color: rgba(255, 255, 255, 0.9);
+  color: #ffffff;
+  font-weight: 700;
+  opacity: 1;
+}
+
+.input-personalizado::selection {
+  background-color: rgba(255, 255, 255, 0.35);
+  color: #ffffff;
 }
 
 .input-personalizado:focus-visible {
   outline: 2px solid #ffffff;
+  -webkit-text-fill-color: #ffffff;
+}
+
+.input-personalizado:focus {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+  background-color: var(--color-campo-login) !important;
+}
+
+.input-personalizado:-webkit-autofill,
+.input-personalizado:-webkit-autofill:hover,
+.input-personalizado:-webkit-autofill:focus,
+.input-personalizado:-webkit-autofill:active {
+  background-color: var(--color-campo-login) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+  font-family: var(--font-sans) !important;
+  font-weight: 700 !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--color-campo-login) inset !important;
+  box-shadow: 0 0 0 1000px var(--color-campo-login) inset !important;
+  transition: background-color 9999s ease-out 0s;
+}
+
+.input-personalizado:-webkit-autofill::first-line {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
 }
 
 .mensaje-error-input {
@@ -200,6 +245,7 @@ ESTILOS DE LOGIN - FER-CONS
 .texto-demo {
   text-align: center;
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.7);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
   margin: 0;
 }
