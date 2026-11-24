@@ -246,9 +246,17 @@ def _movimiento_de_cobro(request, documento, movimiento_id=None):
     Prioridad: la caja indicada, la caja original del documento si sigue
     abierta, la caja abierta del usuario y la unica caja abierta de la
     sucursal del documento. Asi el saldo de un documento parcial se puede
-    cobrar aunque su caja original ya se haya cerrado.
+    cobrar aunque su caja original ya se haya cerrado. Una caja en pausa,
+    en cambio, bloquea el cobro/pago: la pausa se reanuda sobre esa misma
+    sesion, asi que no corresponde imputarlo a otra caja.
     """
     abierta = MovimientoCaja.EstadoMovimiento.ABIERTA
+    original = documento.movimiento_caja
+
+    if original.estado == MovimientoCaja.EstadoMovimiento.PAUSADA:
+        raise ValueError(
+            'El movimiento de caja está en pausa: primero hay que reanudarlo.'
+        )
 
     if movimiento_id:
         if isinstance(movimiento_id, MovimientoCaja):
@@ -269,7 +277,6 @@ def _movimiento_de_cobro(request, documento, movimiento_id=None):
             )
         return movimiento
 
-    original = documento.movimiento_caja
     if original.estado == abierta:
         return original
 

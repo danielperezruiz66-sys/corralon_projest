@@ -303,6 +303,64 @@ class CajaPausadaTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('pausa', respuesta.data['detail'])
 
+    def _abrir_caja_extra(self):
+        caja = Caja.objects.create(sucursal=self.sucursal, numero_caja=2)
+        return MovimientoCaja.objects.create(
+            caja=caja,
+            empleado=self.emp_deposito,
+            fecha_hora_apertura=timezone.now(),
+            monto_inicial=Decimal('500.00'),
+        )
+
+    def test_una_caja_en_pausa_no_cobra_aunque_haya_otra_abierta(self):
+        venta = self.crear_venta(user=self.user_cajero)
+        self.seccion.estado = MovimientoCaja.EstadoMovimiento.PAUSADA
+        self.seccion.save(update_fields=['estado'])
+        self._abrir_caja_extra()
+
+        self.autenticar(self.user_cajero)
+        respuesta = self.client.post(
+            f'/api/ventas/{venta.data["id"]}/cobrar/',
+            {
+                'pagos': [
+                    {
+                        'metodo_pago': self.efectivo.id,
+                        'monto_pagado': '200.00',
+                    }
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('pausa', respuesta.data['detail'])
+        cobrada = Venta.objects.get(pk=venta.data['id'])
+        self.assertEqual(cobrada.estado, Venta.EstadoVenta.PENDIENTE)
+        self.assertFalse(cobrada.pagos.exists())
+
+    def test_una_caja_en_pausa_no_paga_aunque_haya_otra_abierta(self):
+        compra = self.crear_compra(user=self.user_gerente)
+        self.seccion.estado = MovimientoCaja.EstadoMovimiento.PAUSADA
+        self.seccion.save(update_fields=['estado'])
+        self._abrir_caja_extra()
+
+        self.autenticar(self.user_gerente)
+        respuesta = self.client.post(
+            f'/api/compras/{compra.data["id"]}/pagar/',
+            {
+                'pagos': [
+                    {
+                        'metodo_pago': self.efectivo.id,
+                        'monto_pagado': '100.00',
+                    }
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('pausa', respuesta.data['detail'])
+
 
 class AlcanceSucursalTests(BaseCorralonTestCase):
     def _sucursal_y_movimiento_ajenos(self):

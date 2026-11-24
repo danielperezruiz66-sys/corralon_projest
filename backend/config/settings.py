@@ -63,8 +63,18 @@ MIDDLEWARE = [
     # Registra el usuario autenticado en el historial de cambios
     'simple_history.middleware.HistoryRequestMiddleware',
 ]
-# Permitir peticiones desde el frontend (React)
-CORS_ALLOW_ALL_ORIGINS = True
+# Origenes permitidos para el frontend (React). En desarrollo Vite usa el
+# proxy `/api`, asi que el navegador no hace CORS; se declaran igual para
+# cuando el frontend apunte directo a Django con VITE_API_URL.
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default=(
+        'http://localhost:5175,http://127.0.0.1:5175,'
+        'http://localhost:5173,http://127.0.0.1:5173,'
+        'http://localhost:4173,http://127.0.0.1:4173'
+    ),
+    cast=Csv(),
+)
 
 
 # Django REST Framework

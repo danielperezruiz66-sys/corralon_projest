@@ -19,7 +19,7 @@
   WSL; OpenCode tiene activos los MCPs `context7`, `sequential-thinking` y
   `chrome-devtools` (conectado al Chrome de Windows) y la skill `django-react-base`.
 
-Estado: backend consolidado (35 modelos, 34 viewsets, 302 tests en `app.tests`),
+Estado: backend consolidado (35 modelos, 34 viewsets, 310 tests en `app.tests`),
 una sola sucursal operativa por empresa. Lectura y escritura limitadas por rol y
 sucursal; la caja es de la sucursal y los pagos parciales se imputan a la caja
 donde se cobran. Frontend con Dashboard, Ventas, Compras, Clientes, Inventario,
@@ -39,7 +39,7 @@ backend/
     ├── management/commands/# seed_data, cancelar_ventas_vencidas
     ├── migrations/         # 0001 esquema + 0002-0010 reglas de negocio
     │                       # + 0011 caja de los pagos
-    ├── tests/              # suite en app.tests (302 tests)
+    ├── tests/              # suite en app.tests (310 tests)
     ├── permissions.py  backends.py  exceptions.py
     └── serializers.py  views.py  urls.py
 frontend/src/
@@ -332,7 +332,7 @@ cd backend
 ../venv/Scripts/python.exe manage.py check
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 302 tests
+../venv/Scripts/python.exe manage.py test app              # 310 tests
 ../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 
