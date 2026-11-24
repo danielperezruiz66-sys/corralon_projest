@@ -50,6 +50,7 @@ function esErrorDeDuplicado(error) {
 export default function FormularioCaja({
   caja = null,
   cajas = [],
+  bloqueada = false,
   onCerrar,
   onGuardado,
 }) {
@@ -201,6 +202,7 @@ export default function FormularioCaja({
             <select
               value={estado}
               onChange={(evento) => setEstado(evento.target.value)}
+              disabled={bloqueada}
             >
               {ESTADOS.map((opcion) => (
                 <option key={opcion.id} value={opcion.id}>
@@ -208,6 +210,13 @@ export default function FormularioCaja({
                 </option>
               ))}
             </select>
+            {bloqueada && (
+              <p className="caja-nota-total">
+                No podés cambiar el estado mientras la caja tenga un
+                movimiento abierto o en pausa. Cerralo primero.
+              </p>
+            )}
+            <MensajeError>{errores.estado}</MensajeError>
           </label>
 
           <div className="comercial-modal-acciones ancho-completo">

@@ -602,6 +602,7 @@ class CajaSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     estado_detalle = serializers.CharField(source='get_estado_display', read_only=True)
+    movimiento_abierto = serializers.SerializerMethodField()
 
     class Meta:
         model = Caja
@@ -612,6 +613,7 @@ class CajaSerializer(serializers.ModelSerializer):
             'numero_caja',
             'estado',
             'estado_detalle',
+            'movimiento_abierto',
         ]
         # La unicidad (sucursal, numero_caja) se valida abajo con un mensaje
         # claro; el validador automático de DRF responde en inglés.
@@ -652,6 +654,20 @@ class CajaSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def _tiene_movimiento_abierto(self, caja):
+        if caja is None or caja.pk is None:
+            return False
+        return MovimientoCaja.objects.filter(
+            caja=caja,
+            estado__in=[
+                MovimientoCaja.EstadoMovimiento.ABIERTA,
+                MovimientoCaja.EstadoMovimiento.PAUSADA,
+            ],
+        ).exists()
+
+    def get_movimiento_abierto(self, obj):
+        return self._tiene_movimiento_abierto(obj)
+
     def validate(self, attrs):
         sucursal = attrs.get('sucursal')
         if sucursal is None:
@@ -671,6 +687,21 @@ class CajaSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'numero_caja': 'Ya existe una caja con ese número.'}
                 )
+        if (
+            self.instance is not None
+            and 'estado' in attrs
+            and attrs['estado'] != self.instance.estado
+            and self._tiene_movimiento_abierto(self.instance)
+        ):
+            raise serializers.ValidationError(
+                {
+                    'estado': (
+                        'No se puede cambiar el estado de la caja mientras '
+                        'tenga un movimiento abierto o en pausa. Cerralo '
+                        'primero.'
+                    )
+                }
+            )
         return attrs
 
 

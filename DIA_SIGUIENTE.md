@@ -38,6 +38,8 @@
   movimientos compacta sin scroll horizontal, “Limpiar filtros”, tildes
   visibles y etiquetas de Ventas/Compras/sidebar alineadas a “movimiento”.
   QA forzada de apertura/cierre, pausa, auditoría y cajas físicas.
+- Caja: el estado de una caja física no se puede cambiar mientras tenga un
+  movimiento abierto o en pausa; se valida en API y se bloquea en la UI.
 - Backend: migraciones 0006 (CUIT 3–13) y 0007 (unicidad de catálogo/stock);
   suite completa 277 tests OK. Frontend: lint 0 warnings y build OK.
 
@@ -47,8 +49,6 @@
       en pausa.
 - [ ] Verificar permisos finos de Caja con `CA`, `AD/GE` y roles de consulta en
       la UI y la API.
-- [ ] Definir si una caja con movimiento abierto puede pasar a `Inactiva` o
-      `En mantenimiento`; hoy el backend no lo bloquea.
 - [ ] Definir si una diferencia de cierre distinta de cero exige observación
       obligatoria; hoy genera la nota automática y la observación es opcional.
 

@@ -856,6 +856,7 @@ export default function Caja() {
         <FormularioCaja
           caja={cajaEditando}
           cajas={cajasFisicas}
+          bloqueada={Boolean(cajaEditando?.movimiento_abierto)}
           onCerrar={() => setCajaEditando(null)}
           onGuardado={guardadoCaja}
         />

@@ -117,8 +117,11 @@ Reglas fijas:
 - `Caja` tiene FK a `Sucursal` y `numero_caja` único por sucursal.
 - `MovimientoCaja` es la sesión: `AB` abierta, `PA` en pausa, `CE` cerrada,
   `AU` auditada. Máximo 1 `AB`/`PA` por caja y por empleado.
-- Pausar exige motivo; reanudar exige la contraseña del dueño. Cerrar exige la
-  contraseña del usuario autenticado. `AD/GE` pueden auditar.
+- Pausar exige motivo; reanudar exige la contraseña del usuario autenticado
+  (dueño, `AD/GE`). Cerrar exige la contraseña del usuario autenticado.
+  `AD/GE` pueden auditar.
+- El estado de una `Caja` (activa/inactiva/mantenimiento) solo se puede cambiar
+  cuando no tiene movimientos `AB`/`PA`.
 - Solo `CA` abre en sucursales asignadas; `AD/GE` en cualquiera y pueden abrir
   a nombre de otro empleado habilitado (queda auditado).
 - En pausa no se venden, cobran ni arquear; primero se reanuda.

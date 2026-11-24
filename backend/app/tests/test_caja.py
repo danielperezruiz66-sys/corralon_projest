@@ -384,6 +384,38 @@ class CajaApiTests(BaseCorralonTestCase):
         )
         self.assertEqual(permitida.status_code, 201)
 
+    def test_estado_de_caja_con_movimiento_abierto_o_pausado(self):
+        self.autenticar(self.user_gerente)
+        url = f'/api/cajas/{self.caja.id}/'
+
+        abierta = self.client.patch(url, {'estado': 'IN'}, format='json')
+        self.assertEqual(abierta.status_code, 400)
+        self.assertIn(
+            'movimiento abierto o en pausa',
+            abierta.data['estado'][0],
+        )
+
+        self.seccion.estado = 'PA'
+        self.seccion.save(update_fields=['estado'])
+        listado = self.client.get(
+            '/api/cajas/',
+            {'sucursal': self.sucursal.id},
+        )
+        self.assertTrue(listado.data['results'][0]['movimiento_abierto'])
+
+        pausada = self.client.patch(url, {'estado': 'MT'}, format='json')
+        self.assertEqual(pausada.status_code, 400)
+
+        mismo_estado = self.client.patch(url, {'estado': 'AC'}, format='json')
+        self.assertEqual(mismo_estado.status_code, 200)
+
+        self.seccion.estado = 'CE'
+        self.seccion.save(update_fields=['estado'])
+        cerrada = self.client.patch(url, {'estado': 'IN'}, format='json')
+        self.assertEqual(cerrada.status_code, 200)
+        self.assertEqual(cerrada.data['estado'], 'IN')
+        self.assertFalse(cerrada.data['movimiento_abierto'])
+
     def test_busqueda_encuentra_por_caja_y_empleado(self):
         self.autenticar(self.admin)
         caja2 = self._caja(numero=2)
