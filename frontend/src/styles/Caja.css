@@ -225,7 +225,9 @@ CAJA - APERTURA, CIERRE E HISTORIAL
   padding: 0.5rem 0.55rem;
 }
 
-.caja-cierre-tabla-desglose th[colspan] {
+/* El selector necesita mayor especificidad que th:not(:first-child),
+   que más abajo alinea a la derecha. */
+.caja-cierre-tabla-desglose thead th[colspan] {
   text-align: center;
   background-color: rgba(15, 42, 48, 0.04);
 }
