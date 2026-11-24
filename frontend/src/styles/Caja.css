@@ -210,6 +210,54 @@ CAJA - APERTURA, CIERRE E HISTORIAL
   outline: 2px solid var(--color-sidebar);
 }
 
+/* Desglose Cobrado / Pagado / Neto */
+.comercial-modal.comercial-modal-cierre {
+  max-width: 68rem;
+}
+
+.caja-cierre-tabla-desglose {
+  font-size: 0.84rem;
+  table-layout: auto;
+}
+
+.caja-cierre-tabla-desglose th,
+.caja-cierre-tabla-desglose td {
+  padding: 0.5rem 0.55rem;
+}
+
+.caja-cierre-tabla-desglose th[colspan] {
+  text-align: center;
+  background-color: rgba(15, 42, 48, 0.04);
+}
+
+.caja-cierre-tabla-desglose tbody tr:nth-child(even) {
+  background-color: rgba(15, 42, 48, 0.025);
+}
+
+.caja-cierre-tabla-desglose th:nth-child(1),
+.caja-cierre-tabla-desglose td:nth-child(1) {
+  width: auto;
+  white-space: normal;
+}
+
+.caja-cierre-tabla-desglose th:not(:first-child),
+.caja-cierre-tabla-desglose td:not(:first-child) {
+  width: auto;
+  text-align: right;
+}
+
+.caja-cierre-tabla-desglose .caja-cierre-input {
+  width: 7rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.84rem;
+}
+
+.caja-detalle-desglose {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: rgba(15, 42, 48, 0.6);
+}
+
 .caja-aviso-diferencia {
   margin: 0.5rem 0 1rem;
   padding: 0.6rem 0.75rem;

@@ -1545,6 +1545,9 @@ class MovimientoCajaViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewS
                     'metodo_pago': item['metodo_pago'].id,
                     'metodo_pago_detalle': str(item['metodo_pago']),
                     'monto_sistema': str(item['monto_sistema']),
+                    'cobrado_sistema': str(item['cobrado_sistema']),
+                    'pagado_sistema': str(item['pagado_sistema']),
+                    'neto_sistema': str(item['neto_sistema']),
                     'es_efectivo': item['metodo_pago'].es_efectivo,
                 }
                 for item in caja_service.calcular_teorico(seccion)

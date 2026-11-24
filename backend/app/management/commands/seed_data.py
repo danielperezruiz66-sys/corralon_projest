@@ -1483,18 +1483,27 @@ class Command(BaseCommand):
             detalles = []
             for item in caja_service.calcular_teorico(seccion):
                 sistema = item['monto_sistema']
-                real = sistema
+                cobrado_sistema = item['cobrado_sistema']
+                pagado_sistema = item['pagado_sistema']
+                cobrado_real = cobrado_sistema
+                pagado_real = pagado_sistema
                 if item['metodo_pago'].es_efectivo:
                     diferencia = Decimal(
                         random.choice([0, 0, 0, 500, -300, 1200, -800])
                     )
                     real = max(Decimal('0.00'), sistema + diferencia)
+                    cobrado_real = real
+                    pagado_real = Decimal('0.00')
                 detalles.append(
                     DetalleCierreCaja.objects.create(
                         movimiento_caja=seccion,
                         metodo_pago=item['metodo_pago'],
                         monto_sistema=sistema,
-                        monto_real=real,
+                        monto_real=cobrado_real - pagado_real,
+                        cobrado_sistema=cobrado_sistema,
+                        pagado_sistema=pagado_sistema,
+                        cobrado_real=cobrado_real,
+                        pagado_real=pagado_real,
                     )
                 )
             seccion.monto_teorico = sum(

@@ -67,7 +67,10 @@ export default function DetalleSeccionCaja({
       .map(
         (detalle) => `
           <tr>
-            <td>${escaparHtml(detalle.metodo_pago_detalle)}</td>
+            <td>
+              ${escaparHtml(detalle.metodo_pago_detalle)}<br />
+              <small>Cobrado ${escaparHtml(formatearMoneda(detalle.cobrado_sistema))} · Pagado ${escaparHtml(formatearMoneda(detalle.pagado_sistema))}</small>
+            </td>
             <td class="numero">${escaparHtml(formatearMoneda(detalle.monto_sistema))}</td>
             <td class="numero">${escaparHtml(formatearMoneda(detalle.monto_real))}</td>
             <td class="numero">${escaparHtml(formatearMoneda(detalle.diferencia))}</td>
@@ -128,7 +131,7 @@ export default function DetalleSeccionCaja({
       <tr>
         <th>Método</th>
         <th class="numero">Teórico</th>
-        <th class="numero">Contado</th>
+        <th class="numero">Real</th>
         <th class="numero">Diferencia</th>
       </tr>
     </thead>
@@ -142,6 +145,7 @@ export default function DetalleSeccionCaja({
       </tr>
     </tfoot>
   </table>
+  <p class="datos"><strong>Nota:</strong> el neto teórico de efectivo incluye el monto inicial.</p>
   ${observaciones}
   <footer>
     Documento generado por el sistema para control interno.
@@ -278,14 +282,20 @@ export default function DetalleSeccionCaja({
                 <tr>
                   <th>Método</th>
                   <th>Teórico</th>
-                  <th>Contado</th>
+                  <th>Real</th>
                   <th>Diferencia</th>
                 </tr>
               </thead>
               <tbody>
                 {seccion.detalles_cierre.map((detalle) => (
                   <tr key={detalle.id}>
-                    <td>{detalle.metodo_pago_detalle}</td>
+                    <td>
+                      {detalle.metodo_pago_detalle}
+                      <div className="caja-detalle-desglose">
+                        Cobrado {formatearMoneda(detalle.cobrado_sistema)} ·
+                        Pagado {formatearMoneda(detalle.pagado_sistema)}
+                      </div>
+                    </td>
                     <td className="mono">
                       {formatearMoneda(detalle.monto_sistema)}
                     </td>

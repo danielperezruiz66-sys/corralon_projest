@@ -9,7 +9,7 @@ relacion, para que el frontend no tenga que resolver cada FK por separado.
 """
 
 import re
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -823,6 +823,10 @@ class DetalleCierreCajaSerializer(serializers.ModelSerializer):
         decimal_places=2,
         read_only=True,
     )
+    cobrado_sistema = serializers.SerializerMethodField()
+    pagado_sistema = serializers.SerializerMethodField()
+    cobrado_real = serializers.SerializerMethodField()
+    pagado_real = serializers.SerializerMethodField()
 
     class Meta:
         model = DetalleCierreCaja
@@ -834,7 +838,38 @@ class DetalleCierreCajaSerializer(serializers.ModelSerializer):
             'monto_sistema',
             'monto_real',
             'diferencia',
+            'cobrado_sistema',
+            'pagado_sistema',
+            'cobrado_real',
+            'pagado_real',
         ]
+
+    def _valor(self, valor):
+        return str(Decimal(valor or 0).quantize(Decimal('0.01')))
+
+    def get_cobrado_sistema(self, obj):
+        if obj.cobrado_sistema or obj.pagado_sistema:
+            return self._valor(obj.cobrado_sistema)
+        if obj.metodo_pago.es_efectivo:
+            return self._valor(0)
+        return self._valor(max(obj.monto_sistema, Decimal('0.00')))
+
+    def get_pagado_sistema(self, obj):
+        if obj.cobrado_sistema or obj.pagado_sistema:
+            return self._valor(obj.pagado_sistema)
+        if obj.metodo_pago.es_efectivo:
+            return self._valor(0)
+        return self._valor(max(-obj.monto_sistema, Decimal('0.00')))
+
+    def get_cobrado_real(self, obj):
+        if obj.cobrado_real or obj.pagado_real:
+            return self._valor(obj.cobrado_real)
+        return self._valor(max(obj.monto_real, Decimal('0.00')))
+
+    def get_pagado_real(self, obj):
+        if obj.cobrado_real or obj.pagado_real:
+            return self._valor(obj.pagado_real)
+        return self._valor(max(-obj.monto_real, Decimal('0.00')))
 
 
 class MovimientoCajaSerializer(serializers.ModelSerializer):
@@ -990,20 +1025,6 @@ class AperturaCajaSerializer(serializers.Serializer):
 
 class CierreCajaSerializer(serializers.Serializer):
     montos_reales = serializers.DictField(
-        child=serializers.DecimalField(
-            max_digits=12,
-            decimal_places=2,
-            min_value=Decimal('0.00'),
-            error_messages={
-                'required': 'Ingresá el monto contado.',
-                'null': 'Ingresá el monto contado.',
-                'invalid': 'El monto contado debe ser un número.',
-                'min_value': 'El monto contado no puede ser negativo.',
-                'max_digits': 'El monto contado no puede tener más de 12 dígitos.',
-                'max_decimal_places': 'El monto contado admite hasta 2 decimales.',
-                'max_value': 'El monto contado es demasiado grande.',
-            },
-        ),
         allow_empty=False,
         error_messages={
             'required': 'Ingresá los montos contados.',
@@ -1035,14 +1056,64 @@ class CierreCajaSerializer(serializers.Serializer):
         help_text='Contraseña del usuario autenticado.',
     )
 
+    def _decimal_monto(self, valor, etiqueta):
+        try:
+            numero = Decimal(str(valor).replace(',', '.'))
+        except (InvalidOperation, TypeError, ValueError):
+            raise serializers.ValidationError(
+                f'{etiqueta} debe ser un número.'
+            ) from None
+        if not numero.is_finite():
+            raise serializers.ValidationError(
+                f'{etiqueta} debe ser un número.'
+            )
+        if numero < 0:
+            raise serializers.ValidationError(
+                f'{etiqueta} no puede ser negativo.'
+            )
+        if numero.as_tuple().exponent < -2:
+            raise serializers.ValidationError(
+                f'{etiqueta} admite hasta 2 decimales.'
+            )
+        if len(numero.as_tuple().digits) > 12:
+            raise serializers.ValidationError(
+                f'{etiqueta} es demasiado grande.'
+            )
+        return numero
+
     def validate_montos_reales(self, value):
+        normalizado = {}
         ids = []
-        for clave in value:
+        for clave, monto in value.items():
             try:
-                ids.append(int(clave))
+                metodo_id = int(clave)
             except (TypeError, ValueError):
                 raise serializers.ValidationError(
                     f'El método de pago "{clave}" no es válido.'
+                )
+            ids.append(metodo_id)
+            if isinstance(monto, dict):
+                claves = set(monto) - {'cobrado', 'pagado'}
+                if claves:
+                    raise serializers.ValidationError(
+                        f'El método de pago {metodo_id} tiene montos inválidos.'
+                    )
+                cobrado = self._decimal_monto(
+                    monto.get('cobrado', 0),
+                    'El monto cobrado',
+                )
+                pagado = self._decimal_monto(
+                    monto.get('pagado', 0),
+                    'El monto pagado',
+                )
+                normalizado[str(metodo_id)] = {
+                    'cobrado': cobrado,
+                    'pagado': pagado,
+                }
+            else:
+                normalizado[str(metodo_id)] = self._decimal_monto(
+                    monto,
+                    'El monto contado',
                 )
 
         existentes = set(
@@ -1053,7 +1124,7 @@ class CierreCajaSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 f'No existe el método de pago {sorted(faltantes)[0]}.'
             )
-        return value
+        return normalizado
 
 
 # =============================================================================

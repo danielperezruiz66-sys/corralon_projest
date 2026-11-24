@@ -10,11 +10,15 @@ from django.utils import timezone
 
 from app.models import (
     Caja,
+    Compra,
     DetalleCierreCaja,
     HistoricalMovimientoCaja,
+    MetodoPagoXCompra,
+    MetodoPagoXVenta,
     MovimientoCaja,
     Sucursal,
     SucursalXEmpleado,
+    Venta,
 )
 
 from .base import BaseCorralonTestCase
@@ -335,6 +339,9 @@ class CajaApiTests(BaseCorralonTestCase):
             item for item in respuesta.data if item['metodo_pago'] == self.efectivo.id
         )
         self.assertEqual(Decimal(efectivo['monto_sistema']), Decimal('1200.00'))
+        ids = {item['metodo_pago'] for item in respuesta.data}
+        self.assertIn(self.efectivo.id, ids)
+        self.assertNotIn(self.tarjeta.id, ids)
 
     def test_teorico_rechaza_movimiento_cerrado(self):
         self._cerrar(self.seccion)
@@ -515,9 +522,136 @@ class CajaApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.data['estado'], 'CE')
         self.assertEqual(Decimal(respuesta.data['monto_teorico']), Decimal('1000.00'))
         self.assertEqual(Decimal(respuesta.data['monto_final']), Decimal('1000.00'))
-        detalle = DetalleCierreCaja.objects.get(movimiento_caja=self.seccion)
+        detalle = DetalleCierreCaja.objects.get(
+            movimiento_caja=self.seccion,
+            metodo_pago=self.efectivo,
+        )
         self.assertEqual(detalle.monto_sistema, Decimal('1000.00'))
         self.assertEqual(detalle.monto_real, Decimal('1000.00'))
+        self.assertEqual(detalle.cobrado_sistema, Decimal('0.00'))
+        self.assertEqual(detalle.pagado_sistema, Decimal('0.00'))
+        self.assertEqual(detalle.cobrado_real, Decimal('1000.00'))
+        self.assertEqual(detalle.pagado_real, Decimal('0.00'))
+
+    def test_teorico_separa_cobrado_y_pagado(self):
+        venta = Venta.objects.create(
+            movimiento_caja=self.seccion,
+            cliente_venta='QA teorico',
+            monto_venta=Decimal('200.00'),
+        )
+        MetodoPagoXVenta.objects.create(
+            venta=venta,
+            metodo_pago=self.tarjeta,
+            monto_pagado=Decimal('103.09'),
+        )
+        compra = Compra.objects.create(
+            movimiento_caja=self.seccion,
+            proveedor=self.proveedor,
+            deposito=self.deposito,
+            monto_compra=Decimal('100.00'),
+        )
+        MetodoPagoXCompra.objects.create(
+            compra=compra,
+            metodo_pago=self.tarjeta,
+            monto_pagado=Decimal('100.00'),
+        )
+
+        self.autenticar(self.user_cajero2)
+        respuesta = self.client.get(
+            f'/api/movimientos-caja/{self.seccion.id}/teorico/'
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        tarjeta = next(
+            fila
+            for fila in respuesta.data
+            if fila['metodo_pago'] == self.tarjeta.id
+        )
+        self.assertEqual(Decimal(tarjeta['cobrado_sistema']), Decimal('103.09'))
+        self.assertEqual(Decimal(tarjeta['pagado_sistema']), Decimal('100.00'))
+        self.assertEqual(Decimal(tarjeta['neto_sistema']), Decimal('3.09'))
+        self.assertEqual(Decimal(tarjeta['monto_sistema']), Decimal('3.09'))
+
+    def test_cierre_con_compra_pagada_por_tarjeta_no_bloquea(self):
+        compra = Compra.objects.create(
+            movimiento_caja=self.seccion,
+            proveedor=self.proveedor,
+            deposito=self.deposito,
+            monto_compra=Decimal('100.00'),
+        )
+        MetodoPagoXCompra.objects.create(
+            compra=compra,
+            metodo_pago=self.tarjeta,
+            monto_pagado=Decimal('100.00'),
+        )
+
+        respuesta = self._cerrar(
+            self.seccion,
+            montos={
+                str(self.efectivo.id): '1000.00',
+                str(self.tarjeta.id): {
+                    'cobrado': '0.00',
+                    'pagado': '100.00',
+                },
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['estado'], 'CE')
+        detalle = DetalleCierreCaja.objects.get(
+            movimiento_caja=self.seccion,
+            metodo_pago=self.tarjeta,
+        )
+        self.assertEqual(detalle.cobrado_sistema, Decimal('0.00'))
+        self.assertEqual(detalle.pagado_sistema, Decimal('100.00'))
+        self.assertEqual(detalle.cobrado_real, Decimal('0.00'))
+        self.assertEqual(detalle.pagado_real, Decimal('100.00'))
+        self.assertEqual(detalle.monto_sistema, Decimal('-100.00'))
+        self.assertEqual(detalle.monto_real, Decimal('-100.00'))
+        self.assertEqual(detalle.diferencia, Decimal('0.00'))
+        self.assertEqual(
+            Decimal(respuesta.data['monto_teorico']),
+            Decimal('900.00'),
+        )
+        self.assertEqual(
+            Decimal(respuesta.data['monto_final']),
+            Decimal('900.00'),
+        )
+
+    def test_cierre_registra_la_comision_de_tarjeta(self):
+        venta = Venta.objects.create(
+            movimiento_caja=self.seccion,
+            cliente_venta='QA comision',
+            monto_venta=Decimal('200.00'),
+        )
+        MetodoPagoXVenta.objects.create(
+            venta=venta,
+            metodo_pago=self.tarjeta,
+            monto_pagado=Decimal('103.09'),
+        )
+
+        respuesta = self._cerrar(
+            self.seccion,
+            montos={
+                str(self.efectivo.id): '1000.00',
+                str(self.tarjeta.id): {
+                    'cobrado': '100.00',
+                    'pagado': '0.00',
+                },
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        detalle = DetalleCierreCaja.objects.get(
+            movimiento_caja=self.seccion,
+            metodo_pago=self.tarjeta,
+        )
+        self.assertEqual(detalle.cobrado_sistema, Decimal('103.09'))
+        self.assertEqual(detalle.cobrado_real, Decimal('100.00'))
+        self.assertEqual(detalle.monto_sistema, Decimal('103.09'))
+        self.assertEqual(detalle.monto_real, Decimal('100.00'))
+        self.assertEqual(detalle.diferencia, Decimal('-3.09'))
+        self.assertIn('Diferencia de arqueo', respuesta.data['observaciones'])
 
     def test_cerrar_exige_la_contrasena_del_usuario(self):
         sin_password = self.client.post(

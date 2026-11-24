@@ -6,26 +6,26 @@ import { nuevaClave } from '../../utils/clave'
 import { formatearMoneda, sinSucursal } from '../../utils/formato'
 import MensajeError from '../common/MensajeError.jsx'
 
-const MAXIMO_CONTADO = 9999999999.99
+const MAXIMO_MONTO = 9999999999.99
 
-function validarContado(valor, metodo) {
+function validarMonto(valor, etiqueta) {
   const texto = String(valor ?? '').trim()
   if (!texto) {
-    return `Ingresá el monto contado en ${metodo}.`
+    return `Ingresá el ${etiqueta}.`
   }
   const numero = Number(texto.replace(',', '.'))
   if (!Number.isFinite(numero)) {
-    return `El monto contado en ${metodo} debe ser un número.`
+    return `El ${etiqueta} debe ser un número.`
   }
   if (numero < 0) {
-    return `El monto contado en ${metodo} no puede ser negativo.`
+    return `El ${etiqueta} no puede ser negativo.`
   }
-  if (numero > MAXIMO_CONTADO) {
-    return `El monto contado en ${metodo} es demasiado grande.`
+  if (numero > MAXIMO_MONTO) {
+    return `El ${etiqueta} es demasiado grande.`
   }
   const partes = texto.replace(',', '.').split('.')
   if (partes[1] && partes[1].length > 2) {
-    return `El monto contado en ${metodo} admite hasta 2 decimales.`
+    return `El ${etiqueta} admite hasta 2 decimales.`
   }
   return ''
 }
@@ -36,7 +36,7 @@ function numeroValido(valor) {
     return null
   }
   const numero = Number(texto.replace(',', '.'))
-  if (!Number.isFinite(numero) || numero < 0 || numero > MAXIMO_CONTADO) {
+  if (!Number.isFinite(numero) || numero < 0 || numero > MAXIMO_MONTO) {
     return null
   }
   const partes = texto.replace(',', '.').split('.')
@@ -46,12 +46,45 @@ function numeroValido(valor) {
   return numero
 }
 
-function diferenciaDe(montos, fila) {
-  const contado = numeroValido(montos[fila.metodo_pago])
-  if (contado === null) {
+function netoRealDe(fila, reales) {
+  if (fila.es_efectivo) {
     return null
   }
-  return contado - Number(fila.monto_sistema)
+  const real = reales[fila.metodo_pago] || {}
+  const cobrado = numeroValido(real.cobrado)
+  const pagado = numeroValido(real.pagado)
+  if (cobrado === null || pagado === null) {
+    return null
+  }
+  return cobrado - pagado
+}
+
+function diferenciaDe(fila, montos, reales) {
+  if (fila.es_efectivo) {
+    const contado = numeroValido(montos[fila.metodo_pago])
+    if (contado === null) {
+      return null
+    }
+    return contado - Number(fila.monto_sistema)
+  }
+  const neto = netoRealDe(fila, reales)
+  if (neto === null) {
+    return null
+  }
+  return neto - Number(fila.neto_sistema ?? fila.monto_sistema)
+}
+
+function claseDiferencia(valor) {
+  if (valor === null) {
+    return 'caja-diferencia-cero'
+  }
+  if (valor > 0) {
+    return 'caja-diferencia-positiva'
+  }
+  if (valor < 0) {
+    return 'caja-diferencia-negativa'
+  }
+  return 'caja-diferencia-cero'
 }
 
 export default function FormularioCierreSeccion({
@@ -61,6 +94,7 @@ export default function FormularioCierreSeccion({
 }) {
   const [teorico, setTeorico] = useState([])
   const [montos, setMontos] = useState({})
+  const [reales, setReales] = useState({})
   const [observaciones, setObservaciones] = useState('')
   // Contraseña del usuario autenticado: obligatoria para cerrar.
   const [password, setPassword] = useState('')
@@ -80,11 +114,21 @@ export default function FormularioCierreSeccion({
           return
         }
         setTeorico(datos)
-        setMontos(
-          Object.fromEntries(
-            datos.map((fila) => [fila.metodo_pago, fila.monto_sistema]),
-          ),
-        )
+        const caja = {}
+        const noEfectivo = {}
+        datos.forEach((fila) => {
+          if (fila.es_efectivo) {
+            caja[fila.metodo_pago] =
+              Number(fila.monto_sistema) >= 0 ? fila.monto_sistema : ''
+          } else {
+            noEfectivo[fila.metodo_pago] = {
+              cobrado: fila.cobrado_sistema,
+              pagado: fila.pagado_sistema,
+            }
+          }
+        })
+        setMontos(caja)
+        setReales(noEfectivo)
         setCargando(false)
       })
       .catch((e) => {
@@ -104,28 +148,125 @@ export default function FormularioCierreSeccion({
     (acumulado, fila) => acumulado + Number(fila.monto_sistema),
     0,
   )
-  const totalContado = teorico.reduce(
-    (acumulado, fila) =>
-      acumulado + (numeroValido(montos[fila.metodo_pago]) ?? 0),
-    0,
-  )
-  const totalDiferencia = totalContado - totalSistema
-  const hayErrorMontos = teorico.some((fila) =>
-    Boolean(validarContado(montos[fila.metodo_pago], fila.metodo_pago_detalle)),
-  )
+  const totalReal = teorico.reduce((acumulado, fila) => {
+    if (fila.es_efectivo) {
+      return acumulado + (numeroValido(montos[fila.metodo_pago]) ?? 0)
+    }
+    const neto = netoRealDe(fila, reales)
+    return acumulado + (neto ?? 0)
+  }, 0)
+  const totalDiferencia = totalReal - totalSistema
+
+  const hayErrorMontos = teorico.some((fila) => {
+    if (fila.es_efectivo) {
+      return Boolean(
+        validarMonto(
+          montos[fila.metodo_pago],
+          `monto contado en ${fila.metodo_pago_detalle}`,
+        ),
+      )
+    }
+    const real = reales[fila.metodo_pago] || {}
+    return (
+      Boolean(
+        validarMonto(
+          real.cobrado,
+          `monto cobrado en ${fila.metodo_pago_detalle}`,
+        ),
+      ) ||
+      Boolean(
+        validarMonto(
+          real.pagado,
+          `monto pagado en ${fila.metodo_pago_detalle}`,
+        ),
+      )
+    )
+  })
+
   const formularioInvalido =
     guardando || teorico.length === 0 || hayErrorMontos || !password
+
+  function cambiarContado(fila, valor) {
+    setMontos((actuales) => ({
+      ...actuales,
+      [fila.metodo_pago]: valor,
+    }))
+    const mensaje = validarMonto(
+      valor,
+      `monto contado en ${fila.metodo_pago_detalle}`,
+    )
+    setErrores((previos) => {
+      const siguientes = { ...previos }
+      const clave = String(fila.metodo_pago)
+      if (mensaje) {
+        siguientes[clave] = mensaje
+      } else {
+        delete siguientes[clave]
+      }
+      return siguientes
+    })
+  }
+
+  function cambiarReal(fila, campo, valor) {
+    setReales((actuales) => ({
+      ...actuales,
+      [fila.metodo_pago]: {
+        ...(actuales[fila.metodo_pago] || {}),
+        [campo]: valor,
+      },
+    }))
+    const mensaje = validarMonto(
+      valor,
+      `el monto ${campo} en ${fila.metodo_pago_detalle}`,
+    )
+    setErrores((previos) => {
+      const siguientes = { ...previos }
+      const clave = `${fila.metodo_pago}-${campo}`
+      if (mensaje) {
+        siguientes[clave] = mensaje
+      } else {
+        delete siguientes[clave]
+      }
+      return siguientes
+    })
+  }
 
   async function cerrar() {
     const nuevos = {}
     const montosReales = {}
     teorico.forEach((fila) => {
-      const valor = montos[fila.metodo_pago]
-      const mensaje = validarContado(valor, fila.metodo_pago_detalle)
-      if (mensaje) {
-        nuevos[String(fila.metodo_pago)] = mensaje
+      if (fila.es_efectivo) {
+        const mensaje = validarMonto(
+          montos[fila.metodo_pago],
+          `monto contado en ${fila.metodo_pago_detalle}`,
+        )
+        if (mensaje) {
+          nuevos[String(fila.metodo_pago)] = mensaje
+        } else {
+          montosReales[String(fila.metodo_pago)] = montos[fila.metodo_pago]
+        }
       } else {
-        montosReales[String(fila.metodo_pago)] = valor
+        const real = reales[fila.metodo_pago] || {}
+        const errorCobrado = validarMonto(
+          real.cobrado,
+          `monto cobrado en ${fila.metodo_pago_detalle}`,
+        )
+        const errorPagado = validarMonto(
+          real.pagado,
+          `monto pagado en ${fila.metodo_pago_detalle}`,
+        )
+        if (errorCobrado) {
+          nuevos[`${fila.metodo_pago}-cobrado`] = errorCobrado
+        }
+        if (errorPagado) {
+          nuevos[`${fila.metodo_pago}-pagado`] = errorPagado
+        }
+        if (!errorCobrado && !errorPagado) {
+          montosReales[String(fila.metodo_pago)] = {
+            cobrado: real.cobrado,
+            pagado: real.pagado,
+          }
+        }
       }
     })
 
@@ -144,7 +285,7 @@ export default function FormularioCierreSeccion({
 
     const resultado = await Swal.fire({
       title: `¿Cerrar el movimiento #${seccion.id}?`,
-      text: 'Se guarda el arqueo por metodo de pago y ya no se puede cobrar ni modificar.',
+      text: 'Se guarda el arqueo por método de pago y ya no se puede cobrar ni modificar.',
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#4a9da8',
@@ -196,7 +337,7 @@ export default function FormularioCierreSeccion({
 
   return (
     <div className="comercial-modal-fondo" role="dialog" aria-modal="true">
-      <div className="comercial-modal comercial-modal-medio">
+      <div className="comercial-modal comercial-modal-cierre">
         <div className="comercial-modal-cabecera">
           <h2>
             <IconCash size={24} />
@@ -238,31 +379,35 @@ export default function FormularioCierreSeccion({
               </div>
             </div>
 
-            <table className="caja-cierre-tabla">
+            <table className="caja-cierre-tabla caja-cierre-tabla-desglose">
               <thead>
                 <tr>
-                  <th>Método</th>
+                  <th rowSpan="2">Método</th>
+                  <th colSpan="2">Cobrado</th>
+                  <th colSpan="2">Pagado</th>
+                  <th colSpan="3">Neto</th>
+                </tr>
+                <tr>
                   <th>Teórico</th>
-                  <th>Contado</th>
-                  <th>Diferencia</th>
+                  <th>Real</th>
+                  <th>Teórico</th>
+                  <th>Real</th>
+                  <th>Teórico</th>
+                  <th>Real</th>
+                  <th>Dif.</th>
                 </tr>
               </thead>
               <tbody>
                 {teorico.map((fila) => {
-                  const diferencia = diferenciaDe(montos, fila)
-                  let claseDiferencia = 'caja-diferencia-cero'
-                  if (diferencia !== null) {
-                    if (diferencia > 0) {
-                      claseDiferencia = 'caja-diferencia-positiva'
-                    } else if (diferencia < 0) {
-                      claseDiferencia = 'caja-diferencia-negativa'
-                    }
-                  }
+                  const esEfectivo = fila.es_efectivo
+                  const real = reales[fila.metodo_pago] || {}
+                  const netoReal = netoRealDe(fila, reales)
+                  const diferencia = diferenciaDe(fila, montos, reales)
                   return (
                     <tr key={fila.metodo_pago}>
                       <td>
                         {fila.metodo_pago_detalle}
-                        {fila.es_efectivo && (
+                        {esEfectivo && (
                           <>
                             {' '}
                             <span className="caja-chip-efectivo">efectivo</span>
@@ -270,47 +415,120 @@ export default function FormularioCierreSeccion({
                         )}
                       </td>
                       <td className="mono">
-                        {formatearMoneda(fila.monto_sistema)}
+                        {formatearMoneda(
+                          fila.cobrado_sistema ?? fila.monto_sistema,
+                        )}
                       </td>
                       <td>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="0.01"
-                          className={
-                            errores[String(fila.metodo_pago)]
-                              ? 'caja-cierre-input input-error'
-                              : 'caja-cierre-input'
-                          }
-                          value={montos[fila.metodo_pago] ?? ''}
-                          onChange={(evento) => {
-                            const valor = evento.target.value
-                            setMontos((actuales) => ({
-                              ...actuales,
-                              [fila.metodo_pago]: valor,
-                            }))
-                            const mensaje = validarContado(
-                              valor,
-                              fila.metodo_pago_detalle,
-                            )
-                            setErrores((previos) => {
-                              const siguientes = { ...previos }
-                              if (mensaje) {
-                                siguientes[String(fila.metodo_pago)] = mensaje
-                              } else {
-                                delete siguientes[String(fila.metodo_pago)]
+                        {esEfectivo ? (
+                          '—'
+                        ) : (
+                          <>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min="0"
+                              step="0.01"
+                              className={
+                                errores[`${fila.metodo_pago}-cobrado`]
+                                  ? 'caja-cierre-input input-error'
+                                  : 'caja-cierre-input'
                               }
-                              return siguientes
-                            })
-                          }}
-                          placeholder="0.00"
-                          aria-label={`Contado en ${fila.metodo_pago_detalle}`}
-                          aria-invalid={Boolean(errores[String(fila.metodo_pago)])}
-                        />
-                        <MensajeError>{errores[String(fila.metodo_pago)]}</MensajeError>
+                              value={real.cobrado ?? ''}
+                              onChange={(evento) =>
+                                cambiarReal(
+                                  fila,
+                                  'cobrado',
+                                  evento.target.value,
+                                )
+                              }
+                              placeholder="0.00"
+                              aria-label={`Real cobrado en ${fila.metodo_pago_detalle}`}
+                              aria-invalid={Boolean(
+                                errores[`${fila.metodo_pago}-cobrado`],
+                              )}
+                            />
+                            <MensajeError>
+                              {errores[`${fila.metodo_pago}-cobrado`]}
+                            </MensajeError>
+                          </>
+                        )}
                       </td>
-                      <td className={`mono ${claseDiferencia}`}>
+                      <td className="mono">
+                        {formatearMoneda(fila.pagado_sistema ?? 0)}
+                      </td>
+                      <td>
+                        {esEfectivo ? (
+                          '—'
+                        ) : (
+                          <>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min="0"
+                              step="0.01"
+                              className={
+                                errores[`${fila.metodo_pago}-pagado`]
+                                  ? 'caja-cierre-input input-error'
+                                  : 'caja-cierre-input'
+                              }
+                              value={real.pagado ?? ''}
+                              onChange={(evento) =>
+                                cambiarReal(
+                                  fila,
+                                  'pagado',
+                                  evento.target.value,
+                                )
+                              }
+                              placeholder="0.00"
+                              aria-label={`Real pagado en ${fila.metodo_pago_detalle}`}
+                              aria-invalid={Boolean(
+                                errores[`${fila.metodo_pago}-pagado`],
+                              )}
+                            />
+                            <MensajeError>
+                              {errores[`${fila.metodo_pago}-pagado`]}
+                            </MensajeError>
+                          </>
+                        )}
+                      </td>
+                      <td className="mono">
+                        {formatearMoneda(fila.monto_sistema)}
+                      </td>
+                      <td className="mono">
+                        {esEfectivo ? (
+                          <>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min="0"
+                              step="0.01"
+                              className={
+                                errores[String(fila.metodo_pago)]
+                                  ? 'caja-cierre-input input-error'
+                                  : 'caja-cierre-input'
+                              }
+                              value={montos[fila.metodo_pago] ?? ''}
+                              onChange={(evento) =>
+                                cambiarContado(fila, evento.target.value)
+                              }
+                              placeholder="0.00"
+                              aria-label={`Real contado en ${fila.metodo_pago_detalle}`}
+                              aria-invalid={Boolean(
+                                errores[String(fila.metodo_pago)],
+                              )}
+                            />
+                            <MensajeError>
+                              {errores[String(fila.metodo_pago)]}
+                            </MensajeError>
+                          </>
+                        ) : netoReal === null ? (
+                          '—'
+                        ) : (
+                          formatearMoneda(netoReal)
+                        )}
+                      </td>
+                      <td className={`mono ${claseDiferencia(diferencia)}`}>
                         {diferencia === null
                           ? '—'
                           : formatearMoneda(diferencia)}
@@ -321,20 +539,16 @@ export default function FormularioCierreSeccion({
               </tbody>
               <tfoot>
                 <tr>
-                  <td>Total</td>
+                  <td colSpan="5">Total</td>
                   <td className="mono">{formatearMoneda(totalSistema)}</td>
                   <td className="mono">
-                    {hayErrorMontos ? '—' : formatearMoneda(totalContado)}
+                    {hayErrorMontos ? '—' : formatearMoneda(totalReal)}
                   </td>
                   <td
                     className={`mono ${
                       hayErrorMontos
                         ? 'caja-diferencia-cero'
-                        : totalDiferencia > 0
-                          ? 'caja-diferencia-positiva'
-                          : totalDiferencia < 0
-                            ? 'caja-diferencia-negativa'
-                            : 'caja-diferencia-cero'
+                        : claseDiferencia(totalDiferencia)
                     }`}
                   >
                     {hayErrorMontos ? '—' : formatearMoneda(totalDiferencia)}
@@ -342,6 +556,11 @@ export default function FormularioCierreSeccion({
                 </tr>
               </tfoot>
             </table>
+
+            <p className="caja-nota-total">
+              El neto teórico de efectivo incluye el monto inicial. Para los
+              demás métodos, el neto es cobrado menos pagado.
+            </p>
 
             {!hayErrorMontos && totalDiferencia !== 0 && (
               <p className="caja-aviso-diferencia" role="status">
@@ -360,7 +579,7 @@ export default function FormularioCierreSeccion({
                 maxLength="500"
                 value={observaciones}
                 onChange={(evento) => setObservaciones(evento.target.value)}
-                placeholder="Faltante, sobrante, rotura de billete, etc."
+                placeholder="Faltante, sobrante, comisión bancaria, etc."
               />
             </label>
 

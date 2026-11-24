@@ -19,7 +19,7 @@
   WSL; OpenCode tiene activos los MCPs `context7`, `sequential-thinking` y
   `chrome-devtools` (conectado al Chrome de Windows) y la skill `django-react-base`.
 
-Estado: backend consolidado (35 modelos, 34 viewsets, 310 tests en `app.tests`),
+Estado: backend consolidado (35 modelos, 34 viewsets, 313 tests en `app.tests`),
 una sola sucursal operativa por empresa. Lectura y escritura limitadas por rol y
 sucursal; la caja es de la sucursal y los pagos parciales se imputan a la caja
 donde se cobran. Frontend con Dashboard, Ventas, Compras, Clientes, Inventario,
@@ -39,7 +39,7 @@ backend/
     ├── management/commands/# seed_data, cancelar_ventas_vencidas
     ├── migrations/         # 0001 esquema + 0002-0010 reglas de negocio
     │                       # + 0011 caja de los pagos
-    ├── tests/              # suite en app.tests (310 tests)
+    ├── tests/              # suite en app.tests (313 tests)
     ├── permissions.py  backends.py  exceptions.py
     └── serializers.py  views.py  urls.py
 frontend/src/
@@ -137,9 +137,11 @@ Reglas fijas:
   puede vender o comprar contra ellas. El movimiento conserva quién lo abrió.
 - En pausa no se venden, cobran, pagan ni arquear; primero se reanuda. El pago
   de compras también exige caja `AB`.
-- `DetalleCierreCaja` guarda sistema vs. real por método. Al cerrar, “Contado”
-  arranca en el teórico; una diferencia genera nota inborrable en
-  `observaciones`.
+- `DetalleCierreCaja` guarda por método lo cobrado, lo pagado y el neto, con
+  teórico y real (`cobrado_sistema`, `pagado_sistema`, `cobrado_real`,
+  `pagado_real`; `monto_sistema`/`monto_real` quedan como neto). El efectivo
+  usa un solo “real contado”; los métodos no efectivos usan “real cobrado” y
+  “real pagado”. Una diferencia genera nota inborrable en `observaciones`.
 - Monto inicial sugerido = efectivo del último cierre de esa caja; si difiere,
   `observaciones_apertura` es obligatoria.
 
@@ -332,7 +334,7 @@ cd backend
 ../venv/Scripts/python.exe manage.py check
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 310 tests
+../venv/Scripts/python.exe manage.py test app              # 313 tests
 ../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 

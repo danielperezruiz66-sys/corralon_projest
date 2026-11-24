@@ -92,4 +92,13 @@ class IdempotenciaPagosTests(BaseCorralonTestCase):
 
         seccion = self.client.get(f'/api/movimientos-caja/{seccion_id}/').data
         self.assertEqual(seccion['estado'], 'CE')
-        self.assertEqual(len(seccion['detalles_cierre']), 1)
+        self.assertEqual(
+            len(
+                [
+                    detalle
+                    for detalle in seccion['detalles_cierre']
+                    if detalle['metodo_pago'] == self.efectivo.id
+                ]
+            ),
+            1,
+        )

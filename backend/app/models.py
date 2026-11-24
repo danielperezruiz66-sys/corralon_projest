@@ -498,6 +498,18 @@ class DetalleCierreCaja(models.Model):
     )
     monto_sistema = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     monto_real = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    cobrado_sistema = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0
+    )
+    pagado_sistema = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0
+    )
+    cobrado_real = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0
+    )
+    pagado_real = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0
+    )
 
     history = HistoricalRecords()
 

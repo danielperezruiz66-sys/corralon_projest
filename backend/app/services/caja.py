@@ -151,12 +151,11 @@ def sugerir_apertura(caja):
 
 
 def calcular_teorico(movimiento):
-    """Devuelve una lista de `{metodo_pago, monto_sistema}`.
+    """Devuelve el desglose por metodo de pago.
 
-    Cada pago cuenta en la caja donde se cobro (`pago.movimiento_caja`), no
-    en la caja original del documento. Asi, el saldo de una venta o compra
-    parcial que se paga despues del cierre entra en la caja nueva. Los pagos
-    historicos sin movimiento se imputan a la caja del documento.
+    Cada fila trae lo cobrado, lo pagado y el neto del metodo en esta caja.
+    `monto_sistema` conserva el neto historico (con el monto inicial sumado
+    al efectivo) para no romper reportes ni cierres anteriores.
     """
     filtro_venta = Q(movimiento_caja=movimiento) | Q(
         movimiento_caja__isnull=True,
@@ -193,19 +192,23 @@ def calcular_teorico(movimiento):
 
     resultado = []
     for metodo in metodos:
-        sistema = (
-            pagos_venta.get(metodo.id, Decimal('0.00'))
-            - pagos_compra.get(metodo.id, Decimal('0.00'))
-        )
+        cobrado = pagos_venta.get(metodo.id, Decimal('0.00'))
+        pagado = pagos_compra.get(metodo.id, Decimal('0.00'))
+        neto = cobrado - pagado
+        sistema = neto
         if metodo == efectivo:
             sistema += movimiento.monto_inicial
-        if sistema != 0 or metodo == efectivo:
-            resultado.append(
-                {
-                    'metodo_pago': metodo,
-                    'monto_sistema': sistema.quantize(Decimal('0.01')),
-                }
-            )
+        if not metodo.es_efectivo and cobrado == 0 and pagado == 0:
+            continue
+        resultado.append(
+            {
+                'metodo_pago': metodo,
+                'cobrado_sistema': cobrado.quantize(Decimal('0.01')),
+                'pagado_sistema': pagado.quantize(Decimal('0.01')),
+                'neto_sistema': neto.quantize(Decimal('0.01')),
+                'monto_sistema': sistema.quantize(Decimal('0.01')),
+            }
+        )
     return resultado
 
 
@@ -304,6 +307,22 @@ def abrir_seccion(
         ) from exc
 
 
+def _reales_de_metodo(valor, es_efectivo):
+    """Normaliza el real de un metodo: escalar (neto) u objeto cobrado/pagado."""
+    if isinstance(valor, dict):
+        cobrado = _decimal(valor.get('cobrado', 0))
+        pagado = _decimal(valor.get('pagado', 0))
+        if cobrado < 0 or pagado < 0:
+            raise ValueError('Los montos reales no pueden ser negativos.')
+        return cobrado, pagado
+    neto = _decimal(valor)
+    if neto < 0:
+        raise ValueError('Los montos reales no pueden ser negativos.')
+    if es_efectivo:
+        return neto, Decimal('0.00')
+    return neto, Decimal('0.00')
+
+
 @transaction.atomic
 def cerrar_seccion(
     movimiento,
@@ -347,29 +366,53 @@ def cerrar_seccion(
         metodo_id = (
             metodo_clave.id if hasattr(metodo_clave, 'id') else int(metodo_clave)
         )
-        reales[metodo_id] = _decimal(valor)
+        reales[metodo_id] = valor
 
     detalles = []
     for item in calcular_teorico(movimiento):
         metodo = item['metodo_pago']
-        real = reales.pop(metodo.id, Decimal('0.00'))
+        valor = reales.pop(metodo.id, None)
+        if valor is None:
+            if metodo.es_efectivo:
+                cobrado_real = item['monto_sistema']
+                pagado_real = Decimal('0.00')
+            else:
+                cobrado_real = item['cobrado_sistema']
+                pagado_real = item['pagado_sistema']
+        else:
+            cobrado_real, pagado_real = _reales_de_metodo(
+                valor,
+                metodo.es_efectivo,
+            )
         detalles.append(
             DetalleCierreCaja.objects.create(
                 movimiento_caja=movimiento,
                 metodo_pago=metodo,
                 monto_sistema=item['monto_sistema'],
-                monto_real=real,
+                monto_real=cobrado_real - pagado_real,
+                cobrado_sistema=item['cobrado_sistema'],
+                pagado_sistema=item['pagado_sistema'],
+                cobrado_real=cobrado_real,
+                pagado_real=pagado_real,
             )
         )
 
-    for metodo_id, real in reales.items():
+    for metodo_id, valor in reales.items():
         metodo = MetodoPago.objects.get(pk=metodo_id)
+        cobrado_real, pagado_real = _reales_de_metodo(
+            valor,
+            metodo.es_efectivo,
+        )
         detalles.append(
             DetalleCierreCaja.objects.create(
                 movimiento_caja=movimiento,
                 metodo_pago=metodo,
                 monto_sistema=Decimal('0.00'),
-                monto_real=real,
+                monto_real=cobrado_real - pagado_real,
+                cobrado_sistema=Decimal('0.00'),
+                pagado_sistema=Decimal('0.00'),
+                cobrado_real=cobrado_real,
+                pagado_real=pagado_real,
             )
         )
 
