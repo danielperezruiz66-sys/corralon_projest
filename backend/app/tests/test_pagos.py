@@ -1,6 +1,17 @@
 from decimal import Decimal
 
-from app.models import Compra, MetodoPago, Venta
+from django.utils import timezone
+
+from app.models import (
+    Caja,
+    Compra,
+    MetodoPago,
+    MetodoPagoXCompra,
+    MetodoPagoXVenta,
+    MovimientoCaja,
+    Venta,
+)
+from app.services import caja as caja_service
 
 from .base import BaseCorralonTestCase
 
@@ -376,3 +387,167 @@ class PagoCompraTests(BaseCorralonTestCase):
 
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('ya está pagada', respuesta.data['detail'])
+
+
+class PagoDespuesDelCierreTests(BaseCorralonTestCase):
+    """Un saldo parcial se cobra/paga en la caja abierta actual.
+
+    Antes el pago quedaba atado a la caja original del documento: si esa caja
+    ya se habia cerrado, el arqueo recibia la plata en una caja cerrada.
+    """
+
+    def _cerrar_movimiento(self, movimiento):
+        movimiento.estado = MovimientoCaja.EstadoMovimiento.CERRADA
+        movimiento.save(update_fields=['estado'])
+
+    def _abrir_movimiento(self, empleado, monto='500.00'):
+        return MovimientoCaja.objects.create(
+            caja=self.caja,
+            empleado=empleado,
+            fecha_hora_apertura=timezone.now(),
+            monto_inicial=Decimal(monto),
+        )
+
+    def _teorico(self, movimiento, metodo):
+        filas = caja_service.calcular_teorico(movimiento)
+        return next(
+            (
+                fila['monto_sistema']
+                for fila in filas
+                if fila['metodo_pago'].id == metodo.id
+            ),
+            Decimal('0.00'),
+        )
+
+    def test_venta_parcial_se_cobra_en_la_caja_abierta_actual(self):
+        venta = self.crear_venta(cantidad='1.000')
+        venta_id = venta.data['id']
+        self.autenticar(self.user_cajero)
+        self.client.post(
+            f'/api/ventas/{venta_id}/cobrar/',
+            {
+                'pagos': [
+                    {'metodo_pago': self.efectivo.id, 'monto_pagado': '40.00'}
+                ]
+            },
+            format='json',
+        )
+        self._cerrar_movimiento(self.seccion)
+        nueva = self._abrir_movimiento(self.emp_cajero)
+
+        respuesta = self.client.post(
+            f'/api/ventas/{venta_id}/cobrar/',
+            {
+                'pagos': [
+                    {'metodo_pago': self.efectivo.id, 'monto_pagado': '60.00'}
+                ]
+            },
+            format='json',
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['estado'], 'CO')
+        ultimo = MetodoPagoXVenta.objects.filter(venta_id=venta_id).order_by('-id').first()
+        self.assertEqual(ultimo.movimiento_caja_id, nueva.id)
+        self.assertEqual(self._teorico(nueva, self.efectivo), Decimal('560.00'))
+        self.assertEqual(
+            self._teorico(self.seccion, self.efectivo),
+            Decimal('1040.00'),
+        )
+
+    def test_compra_parcial_se_paga_en_la_caja_abierta_actual(self):
+        compra = self.crear_compra(cantidad='10.000')
+        compra_id = compra.data['id']
+        self.autenticar(self.user_gerente)
+        self.client.post(
+            f'/api/compras/{compra_id}/pagar/',
+            {
+                'pagos': [
+                    {'metodo_pago': self.efectivo.id, 'monto_pagado': '300.00'}
+                ]
+            },
+            format='json',
+        )
+        self._cerrar_movimiento(self.seccion)
+        nueva = self._abrir_movimiento(self.emp_gerente)
+
+        respuesta = self.client.post(
+            f'/api/compras/{compra_id}/pagar/',
+            {
+                'pagos': [
+                    {'metodo_pago': self.efectivo.id, 'monto_pagado': '700.00'}
+                ]
+            },
+            format='json',
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        ultimo = MetodoPagoXCompra.objects.filter(compra_id=compra_id).order_by('-id').first()
+        self.assertEqual(ultimo.movimiento_caja_id, nueva.id)
+        # La compra resta del teorico: inicial 500 - 700 pagados.
+        self.assertEqual(self._teorico(nueva, self.efectivo), Decimal('-200.00'))
+        # La caja vieja conserva solo los 300 pagados antes del cierre.
+        self.assertEqual(self._teorico(self.seccion, self.efectivo), Decimal('700.00'))
+
+    def test_sin_caja_abierta_no_se_cobra(self):
+        venta = self.crear_venta(cantidad='1.000')
+        venta_id = venta.data['id']
+        self._cerrar_movimiento(self.seccion)
+
+        self.autenticar(self.user_cajero)
+        respuesta = self.client.post(
+            f'/api/ventas/{venta_id}/cobrar/',
+            {
+                'pagos': [
+                    {'metodo_pago': self.efectivo.id, 'monto_pagado': '100.00'}
+                ]
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('caja abierta', str(respuesta.data['movimiento_caja']))
+
+    def test_se_puede_indicar_otra_caja_de_la_misma_sucursal(self):
+        venta = self.crear_venta(cantidad='1.000')
+        venta_id = venta.data['id']
+        self._cerrar_movimiento(self.seccion)
+        otra_caja = Caja.objects.create(sucursal=self.sucursal, numero_caja=2)
+        otra = MovimientoCaja.objects.create(
+            caja=otra_caja,
+            empleado=self.emp_cajero2,
+            fecha_hora_apertura=timezone.now(),
+            monto_inicial=Decimal('200.00'),
+        )
+
+        self.autenticar(self.user_cajero)
+        respuesta = self.client.post(
+            f'/api/ventas/{venta_id}/cobrar/',
+            {
+                'movimiento_caja': otra.id,
+                'pagos': [
+                    {'metodo_pago': self.efectivo.id, 'monto_pagado': '100.00'}
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        ultimo = MetodoPagoXVenta.objects.filter(venta_id=venta_id).order_by('-id').first()
+        self.assertEqual(ultimo.movimiento_caja_id, otra.id)
+
+    def test_pago_historico_sin_movimiento_sigue_en_la_caja_del_documento(self):
+        venta = Venta.objects.create(
+            movimiento_caja=self.seccion,
+            cliente=self.cliente,
+            estado=Venta.EstadoVenta.PARCIAL,
+            monto_venta=Decimal('100.00'),
+        )
+        MetodoPagoXVenta.objects.create(
+            venta=venta,
+            metodo_pago=self.efectivo,
+            monto_pagado=Decimal('25.00'),
+        )
+
+        self.assertEqual(
+            self._teorico(self.seccion, self.efectivo),
+            Decimal('1025.00'),
+        )

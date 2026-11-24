@@ -86,6 +86,11 @@ REST_FRAMEWORK = {
     ),
     # Traduce las excepciones de negocio (ValueError, StockInsuficiente) a 400.
     'EXCEPTION_HANDLER': 'app.exceptions.corralon_exception_handler',
+    # Limite por IP de los endpoints de autenticacion (app/throttling.py).
+    'DEFAULT_THROTTLE_RATES': {
+        'token': '20/min',
+        'refresh': '60/min',
+    },
 }
 
 
@@ -176,7 +181,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es-ar'
 
 TIME_ZONE = 'America/Argentina/Buenos_Aires'
 

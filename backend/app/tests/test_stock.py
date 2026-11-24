@@ -305,8 +305,7 @@ class StockApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('items', respuesta.data)
 
-    def test_cualquier_rol_ve_el_stock_de_todas_las_sucursales(self):
-        """La disponibilidad es estratégica: se ve aunque no sea la sucursal."""
+    def test_el_stock_se_limita_a_las_sucursales_asignadas(self):
         otra = Sucursal.objects.create(
             empresa=self.empresa,
             ubicacion=self.ubicacion,
@@ -331,11 +330,19 @@ class StockApiTests(BaseCorralonTestCase):
                 respuesta = self.client.get('/api/stocks/')
 
                 self.assertEqual(respuesta.status_code, 200)
-                self.assertEqual(respuesta.data['count'], 3)
+                self.assertEqual(respuesta.data['count'], 2)
                 self.assertEqual(
                     {item['sucursal_detalle'] for item in respuesta.data['results']},
-                    {'Central', 'Sucursal Norte'},
+                    {'Central'},
                 )
+
+        self.autenticar(self.admin)
+        respuesta = self.client.get('/api/stocks/')
+        self.assertEqual(respuesta.data['count'], 3)
+        self.assertEqual(
+            {item['sucursal_detalle'] for item in respuesta.data['results']},
+            {'Central', 'Sucursal Norte'},
+        )
 
     def test_el_filtro_por_sucursal_sigue_acotando_el_stock(self):
         otra = Sucursal.objects.create(

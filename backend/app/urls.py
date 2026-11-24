@@ -9,6 +9,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from . import views
+from .throttling import RefreshRateThrottle, TokenRateThrottle
 
 router = DefaultRouter()
 
@@ -94,8 +95,16 @@ router.register(
 router.register('actividad', views.RegistroActividadViewSet, basename='actividad')
 
 urlpatterns = [
-    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path(
+        'token/',
+        TokenObtainPairView.as_view(throttle_classes=[TokenRateThrottle]),
+        name='token_obtain_pair',
+    ),
+    path(
+        'token/refresh/',
+        TokenRefreshView.as_view(throttle_classes=[RefreshRateThrottle]),
+        name='token_refresh',
+    ),
     path('perfil/', views.perfil, name='perfil'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('', include(router.urls)),

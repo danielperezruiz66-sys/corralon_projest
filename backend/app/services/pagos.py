@@ -27,6 +27,7 @@ from ..models import (
     MetodoPago,
     MetodoPagoXCompra,
     MetodoPagoXVenta,
+    MovimientoCaja,
     Venta,
 )
 
@@ -50,6 +51,19 @@ def _validar_monto(monto):
     return monto
 
 
+def _validar_caja_abierta(movimiento):
+    """No se cobra ni se paga con la caja en pausa o cerrada."""
+    if movimiento.estado == MovimientoCaja.EstadoMovimiento.PAUSADA:
+        raise ValueError(
+            'El movimiento de caja está en pausa: primero hay que reanudarlo.'
+        )
+    if movimiento.estado != MovimientoCaja.EstadoMovimiento.ABIERTA:
+        raise ValueError(
+            'El movimiento de caja no está abierto: no se pueden registrar '
+            'pagos.'
+        )
+
+
 def _pagado(objeto):
     total = objeto.pagos.aggregate(total=Sum('monto_pagado'))['total']
     return total if total is not None else Decimal('0.00')
@@ -64,7 +78,7 @@ def _estado_venta_segun_pago(venta, pagado):
 
 
 @transaction.atomic
-def registrar_pago_venta(venta, metodo_pago, monto, clave=''):
+def registrar_pago_venta(venta, metodo_pago, monto, clave='', movimiento_caja=None):
     venta = Venta.objects.select_for_update().get(pk=venta.pk)
     if venta.estado == Venta.EstadoVenta.ANULADA:
         raise ValueError('No se puede registrar un pago sobre una venta anulada.')
@@ -75,6 +89,9 @@ def registrar_pago_venta(venta, metodo_pago, monto, clave=''):
         existentes = list(MetodoPagoXVenta.objects.filter(venta=venta, clave=clave))
         if existentes:
             return existentes[0]
+
+    movimiento = movimiento_caja or venta.movimiento_caja
+    _validar_caja_abierta(movimiento)
 
     metodo_pago = _metodo(metodo_pago)
     monto = _validar_monto(monto)
@@ -88,6 +105,7 @@ def registrar_pago_venta(venta, metodo_pago, monto, clave=''):
 
     pago = MetodoPagoXVenta.objects.create(
         venta=venta,
+        movimiento_caja=movimiento,
         metodo_pago=metodo_pago,
         monto_pagado=monto,
         clave=clave,
@@ -100,7 +118,13 @@ def registrar_pago_venta(venta, metodo_pago, monto, clave=''):
 
 
 @transaction.atomic
-def registrar_pagos_venta(venta, pagos, confirmar=False, clave=''):
+def registrar_pagos_venta(
+    venta,
+    pagos,
+    confirmar=False,
+    clave='',
+    movimiento_caja=None,
+):
     """Registra varios metodos de pago para una venta en una sola transaccion.
 
     Si los pagos no cubren el total, la venta queda `PARCIAL`. Si lo cubren,
@@ -122,6 +146,9 @@ def registrar_pagos_venta(venta, pagos, confirmar=False, clave=''):
 
     if venta.estado == Venta.EstadoVenta.CONFIRMADA:
         raise ValueError('La venta ya está confirmada.')
+
+    movimiento = movimiento_caja or venta.movimiento_caja
+    _validar_caja_abierta(movimiento)
 
     if not pagos:
         raise ValueError('Registrá al menos un pago.')
@@ -150,6 +177,7 @@ def registrar_pagos_venta(venta, pagos, confirmar=False, clave=''):
     creados = [
         MetodoPagoXVenta.objects.create(
             venta=venta,
+            movimiento_caja=movimiento,
             metodo_pago=metodo_pago,
             monto_pagado=monto,
             clave=clave,
@@ -165,7 +193,7 @@ def registrar_pagos_venta(venta, pagos, confirmar=False, clave=''):
 
 
 @transaction.atomic
-def registrar_pagos_compra(compra, pagos, clave=''):
+def registrar_pagos_compra(compra, pagos, clave='', movimiento_caja=None):
     """Registra varios metodos de pago para una compra en una sola transaccion.
 
     La compra queda `PARCIAL` si los pagos no cubren el total y `PAGADA` cuando
@@ -184,6 +212,9 @@ def registrar_pagos_compra(compra, pagos, clave=''):
         )
         if existentes:
             return existentes, compra
+
+    movimiento = movimiento_caja or compra.movimiento_caja
+    _validar_caja_abierta(movimiento)
 
     if not pagos:
         raise ValueError('Registrá al menos un pago.')
@@ -210,6 +241,7 @@ def registrar_pagos_compra(compra, pagos, clave=''):
     creados = [
         MetodoPagoXCompra.objects.create(
             compra=compra,
+            movimiento_caja=movimiento,
             metodo_pago=metodo_pago,
             monto_pagado=monto,
             clave=clave,
@@ -226,10 +258,17 @@ def registrar_pagos_compra(compra, pagos, clave=''):
 
 
 @transaction.atomic
-def registrar_pago_compra(compra, metodo_pago, monto, clave=''):
+def registrar_pago_compra(
+    compra,
+    metodo_pago,
+    monto,
+    clave='',
+    movimiento_caja=None,
+):
     creados, _ = registrar_pagos_compra(
         compra,
         [{'metodo_pago': metodo_pago, 'monto_pagado': monto}],
         clave=clave,
+        movimiento_caja=movimiento_caja,
     )
     return creados[0]

@@ -151,19 +151,33 @@ def sugerir_apertura(caja):
 
 
 def calcular_teorico(movimiento):
-    """Devuelve una lista de `{metodo_pago, monto_sistema}`."""
-    ventas = movimiento.ventas.exclude(estado=Venta.EstadoVenta.ANULADA)
-    compras = movimiento.compras.exclude(estado=Compra.EstadoCompra.ANULADA)
+    """Devuelve una lista de `{metodo_pago, monto_sistema}`.
+
+    Cada pago cuenta en la caja donde se cobro (`pago.movimiento_caja`), no
+    en la caja original del documento. Asi, el saldo de una venta o compra
+    parcial que se paga despues del cierre entra en la caja nueva. Los pagos
+    historicos sin movimiento se imputan a la caja del documento.
+    """
+    filtro_venta = Q(movimiento_caja=movimiento) | Q(
+        movimiento_caja__isnull=True,
+        venta__movimiento_caja=movimiento,
+    )
+    filtro_compra = Q(movimiento_caja=movimiento) | Q(
+        movimiento_caja__isnull=True,
+        compra__movimiento_caja=movimiento,
+    )
 
     pagos_venta = {
         fila['metodo_pago']: fila['total']
-        for fila in MetodoPagoXVenta.objects.filter(venta__in=ventas)
+        for fila in MetodoPagoXVenta.objects.filter(filtro_venta)
+        .exclude(venta__estado=Venta.EstadoVenta.ANULADA)
         .values('metodo_pago')
         .annotate(total=Sum('monto_pagado'))
     }
     pagos_compra = {
         fila['metodo_pago']: fila['total']
-        for fila in MetodoPagoXCompra.objects.filter(compra__in=compras)
+        for fila in MetodoPagoXCompra.objects.filter(filtro_compra)
+        .exclude(compra__estado=Compra.EstadoCompra.ANULADA)
         .values('metodo_pago')
         .annotate(total=Sum('monto_pagado'))
     }

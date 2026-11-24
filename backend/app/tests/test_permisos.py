@@ -9,10 +9,20 @@ from .base import BaseCorralonTestCase
 
 
 class PermisoLecturaTests(BaseCorralonTestCase):
-    def test_cualquier_autenticado_puede_leer(self):
+    def test_la_lectura_depende_del_rol(self):
         self.autenticar(self.user_sin_rol)
+        sin_rol = self.client.get('/api/productos/')
+        self.assertEqual(sin_rol.status_code, 403)
 
-        respuesta = self.client.get('/api/productos/')
+        self.autenticar(self.user_cajero)
+        con_rol = self.client.get('/api/productos/')
+        self.assertEqual(con_rol.status_code, 200)
+
+    def test_el_superusuario_sin_rol_ve_todo(self):
+        # El superusuario del fixture no tiene empleado ni rol asignado.
+        self.autenticar(self.admin)
+
+        respuesta = self.client.get('/api/empleados/')
 
         self.assertEqual(respuesta.status_code, 200)
 

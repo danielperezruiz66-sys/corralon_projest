@@ -270,7 +270,7 @@ class Rol(models.Model):
 class EmpleadoXRol(models.Model):
     empleado = models.ForeignKey(
         Empleado,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name='roles_asignados',
     )
     rol = models.ForeignKey(
@@ -314,7 +314,7 @@ class SucursalXEmpleado(models.Model):
     )
     empleado = models.ForeignKey(
         Empleado,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name='sucursales_asignadas',
     )
     fecha_asociacion = models.DateField(null=True, blank=True)
@@ -642,7 +642,7 @@ class Producto(models.Model):
 class ProductoXSucursal(models.Model):
     producto = models.ForeignKey(
         Producto,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name='sucursales_asociadas',
     )
     sucursal = models.ForeignKey(
@@ -832,7 +832,7 @@ class Proveedor(models.Model):
 class ProveedorXSucursal(models.Model):
     proveedor = models.ForeignKey(
         Proveedor,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name='sucursales_asociadas',
     )
     sucursal = models.ForeignKey(
@@ -860,7 +860,7 @@ class ProveedorXSucursal(models.Model):
 class ProductoXProveedor(models.Model):
     producto = models.ForeignKey(
         Producto,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name='proveedores_asociados',
     )
     proveedor = models.ForeignKey(
@@ -1093,6 +1093,16 @@ class MetodoPagoXVenta(models.Model):
         on_delete=models.CASCADE,
         related_name='pagos',
     )
+    # Caja donde se cobro realmente. Puede no ser la caja original de la
+    # venta cuando el saldo de una venta PARCIAL se paga despues del cierre.
+    # Queda nulo en pagos historicos anteriores a este campo.
+    movimiento_caja = models.ForeignKey(
+        MovimientoCaja,
+        on_delete=models.PROTECT,
+        related_name='pagos_venta',
+        null=True,
+        blank=True,
+    )
     monto_pagado = models.DecimalField(max_digits=10, decimal_places=2)
     # Clave de idempotencia: si la misma operacion se reintenta, no se
     # registra el pago dos veces.
@@ -1243,6 +1253,14 @@ class MetodoPagoXCompra(models.Model):
         Compra,
         on_delete=models.CASCADE,
         related_name='pagos',
+    )
+    # Caja donde se pago realmente (mismo criterio que los pagos de venta).
+    movimiento_caja = models.ForeignKey(
+        MovimientoCaja,
+        on_delete=models.PROTECT,
+        related_name='pagos_compra',
+        null=True,
+        blank=True,
     )
     monto_pagado = models.DecimalField(max_digits=10, decimal_places=2)
     # Clave de idempotencia: si la misma operacion se reintenta, no se

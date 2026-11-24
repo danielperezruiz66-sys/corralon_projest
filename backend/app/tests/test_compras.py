@@ -90,8 +90,8 @@ class CompraApiTests(BaseCorralonTestCase):
             deposito=deposito_destino.id,
         )
 
-        self.assertEqual(respuesta.status_code, 400)
-        self.assertIn('sucursal de la caja', str(respuesta.data))
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertIn('sucursal', str(respuesta.data))
 
     def test_compra_en_camino_no_toca_stock(self):
         respuesta = self.crear_compra(

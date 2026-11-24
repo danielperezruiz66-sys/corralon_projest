@@ -56,12 +56,63 @@ from .models import (
     Usuario,
     Venta,
 )
+from .permissions import ADMIN, es_admin
+from .services import acceso as acceso_service
 from .services.proveedores import AsociacionDuplicada
 from .utils import (
     validar_cantidad_por_unidad,
     validar_ingresos_brutos,
     validar_nombre_consumidor,
 )
+
+
+def _usuario_de(serializer):
+    request = serializer.context.get('request')
+    return getattr(request, 'user', None)
+
+
+def _es_admin_actual(serializer):
+    return es_admin(_usuario_de(serializer))
+
+
+def _validar_roles_asignables(serializer, roles, campo='roles'):
+    """Solo un administrador puede asignar el rol `AD`."""
+    if not roles or _es_admin_actual(serializer):
+        return
+    if any(getattr(rol, 'codigo', None) == ADMIN for rol in roles):
+        raise serializers.ValidationError(
+            {
+                campo: (
+                    'Solo un administrador puede asignar el rol de '
+                    'administrador.'
+                )
+            }
+        )
+
+
+def _validar_sucursales_permitidas(serializer, sucursales, campo='sucursales'):
+    """Nadie asigna una sucursal que no tiene asignada."""
+    if not sucursales:
+        return
+    user = _usuario_de(serializer)
+    permitidas = acceso_service.sucursales_permitidas(user)
+    if permitidas is None:
+        return
+    ids = set(permitidas.values_list('id', flat=True))
+    ajenas = [
+        sucursal.nombre
+        for sucursal in sucursales
+        if sucursal.id not in ids
+    ]
+    if ajenas:
+        raise serializers.ValidationError(
+            {
+                campo: (
+                    'No tenés acceso a la sucursal indicada: '
+                    + ', '.join(ajenas)
+                )
+            }
+        )
 
 
 # =============================================================================
@@ -224,7 +275,9 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'last_login',
             'date_joined',
         ]
-        read_only_fields = ['last_login', 'date_joined']
+        # `is_staff` solo se otorga desde el admin de Django: la API no debe
+        # permitir que un usuario se auto-promueva.
+        read_only_fields = ['last_login', 'date_joined', 'is_staff']
 
     def get_legajo(self, obj):
         empleado = getattr(obj, 'empleado', None)
@@ -484,8 +537,22 @@ class EmpleadoSerializer(serializers.ModelSerializer):
                 errores['usuario_datos'] = (
                     'El empleado ya tiene un usuario asignado.'
                 )
+        if (
+            self.instance is not None
+            and not _es_admin_actual(self)
+            and self.instance.roles_asignados.filter(
+                estado='AC',
+                rol__codigo=ADMIN,
+            ).exists()
+        ):
+            errores['detail'] = (
+                'Solo un administrador puede modificar a otro administrador.'
+            )
         if errores:
             raise serializers.ValidationError(errores)
+
+        _validar_roles_asignables(self, attrs.get('roles'))
+        _validar_sucursales_permitidas(self, attrs.get('sucursales'))
         return attrs
 
     @transaction.atomic()
@@ -556,6 +623,23 @@ class RolSerializer(serializers.ModelSerializer):
         model = Rol
         fields = ['id', 'ocupacion', 'codigo', 'codigo_detalle', 'descripcion']
 
+    def validate(self, attrs):
+        codigo_nuevo = attrs.get('codigo', getattr(self.instance, 'codigo', None))
+        codigo_actual = getattr(self.instance, 'codigo', None)
+        if (
+            ADMIN in (codigo_nuevo, codigo_actual)
+            and not _es_admin_actual(self)
+        ):
+            raise serializers.ValidationError(
+                {
+                    'codigo': (
+                        'Solo un administrador puede crear o modificar el '
+                        'rol de administrador.'
+                    )
+                }
+            )
+        return attrs
+
 
 class EmpleadoXRolSerializer(serializers.ModelSerializer):
     empleado_detalle = serializers.StringRelatedField(source='empleado', read_only=True)
@@ -574,10 +658,34 @@ class EmpleadoXRolSerializer(serializers.ModelSerializer):
             'estado',
         ]
 
+    def validate_rol(self, value):
+        _validar_roles_asignables(self, [value], campo='rol')
+        return value
+
+    def validate(self, attrs):
+        if (
+            self.instance is not None
+            and not _es_admin_actual(self)
+            and self.instance.rol.codigo == ADMIN
+        ):
+            raise serializers.ValidationError(
+                {
+                    'rol': (
+                        'Solo un administrador puede modificar el rol de '
+                        'administrador.'
+                    )
+                }
+            )
+        return attrs
+
 
 class SucursalXEmpleadoSerializer(serializers.ModelSerializer):
     sucursal_detalle = serializers.StringRelatedField(source='sucursal', read_only=True)
     empleado_detalle = serializers.StringRelatedField(source='empleado', read_only=True)
+
+    def validate_sucursal(self, value):
+        _validar_sucursales_permitidas(self, [value], campo='sucursal')
+        return value
 
     class Meta:
         model = SucursalXEmpleado
@@ -2519,7 +2627,14 @@ class MetodoPagoXVentaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MetodoPagoXVenta
-        fields = ['id', 'metodo_pago', 'metodo_pago_detalle', 'venta', 'monto_pagado']
+        fields = [
+            'id',
+            'metodo_pago',
+            'metodo_pago_detalle',
+            'venta',
+            'movimiento_caja',
+            'monto_pagado',
+        ]
 
 
 class VentaSerializer(serializers.ModelSerializer):
@@ -2636,6 +2751,12 @@ class VentaCreateSerializer(serializers.Serializer):
 class PagoVentaCreateSerializer(serializers.Serializer):
     venta = serializers.PrimaryKeyRelatedField(queryset=Venta.objects.all())
     metodo_pago = serializers.PrimaryKeyRelatedField(queryset=MetodoPago.objects.all())
+    movimiento_caja = serializers.PrimaryKeyRelatedField(
+        queryset=MovimientoCaja.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text='Caja donde se cobra. Si se omite, se usa la caja abierta.',
+    )
     monto_pagado = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -2655,6 +2776,12 @@ class PagoVentaItemSerializer(serializers.Serializer):
 
 class CobroVentaSerializer(serializers.Serializer):
     pagos = PagoVentaItemSerializer(many=True, allow_empty=False)
+    movimiento_caja = serializers.PrimaryKeyRelatedField(
+        queryset=MovimientoCaja.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text='Caja donde se cobra. Si se omite, se usa la caja abierta.',
+    )
     confirmar = serializers.BooleanField(required=False, default=False)
     clave = serializers.CharField(
         required=False,
@@ -2704,7 +2831,14 @@ class MetodoPagoXCompraSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MetodoPagoXCompra
-        fields = ['id', 'metodo_pago', 'metodo_pago_detalle', 'compra', 'monto_pagado']
+        fields = [
+            'id',
+            'metodo_pago',
+            'metodo_pago_detalle',
+            'compra',
+            'movimiento_caja',
+            'monto_pagado',
+        ]
 
 
 class CompraSerializer(serializers.ModelSerializer):
@@ -2893,6 +3027,12 @@ class CompraEnCaminoSerializer(serializers.Serializer):
 class PagoCompraCreateSerializer(serializers.Serializer):
     compra = serializers.PrimaryKeyRelatedField(queryset=Compra.objects.all())
     metodo_pago = serializers.PrimaryKeyRelatedField(queryset=MetodoPago.objects.all())
+    movimiento_caja = serializers.PrimaryKeyRelatedField(
+        queryset=MovimientoCaja.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text='Caja donde se paga. Si se omite, se usa la caja abierta.',
+    )
     monto_pagado = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -2912,6 +3052,12 @@ class PagoCompraItemSerializer(serializers.Serializer):
 
 class PagoCompraMultipleSerializer(serializers.Serializer):
     pagos = PagoCompraItemSerializer(many=True, allow_empty=False)
+    movimiento_caja = serializers.PrimaryKeyRelatedField(
+        queryset=MovimientoCaja.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text='Caja donde se paga. Si se omite, se usa la caja abierta.',
+    )
     clave = serializers.CharField(
         required=False,
         allow_blank=True,

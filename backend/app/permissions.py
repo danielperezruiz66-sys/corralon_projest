@@ -2,13 +2,16 @@
 
 Reglas generales:
 
-- Cualquier usuario autenticado puede leer.
+- La lectura se declara por viewset con `roles_lectura`. Si el viewset no
+  declara el atributo, cualquier usuario autenticado puede leer (catalogos de
+  referencia que usan todos los formularios).
 - Para escribir hace falta un rol activo del empleado (`EmpleadoXRol.estado`).
-- `is_superuser` y el rol `Admin` pueden todo.
-- Un usuario sin empleado o sin rol queda en solo lectura.
+- `is_superuser` y el rol `Admin` pueden todo: el superusuario no necesita rol.
+- Un usuario sin empleado o sin rol queda sin acceso a los viewset que
+  declaran `roles_lectura`.
 
-Los viewsets declaran que roles pueden escribir en ellos con el atributo
-`roles_escritura`.
+Los viewsets declaran que roles pueden leer y escribir en ellos con los
+atributos `roles_lectura` y `roles_escritura`.
 """
 
 from rest_framework.permissions import SAFE_METHODS, BasePermission
@@ -61,15 +64,25 @@ class SoloAdministrador(BasePermission):
 
 
 class PermisoPorRol(BasePermission):
-    """Lectura libre para autenticados; escritura segun `roles_escritura`."""
+    """Lectura segun `roles_lectura`; escritura segun `roles_escritura`.
+
+    `roles_lectura = None` (o ausente) deja la lectura abierta a cualquier
+    usuario autenticado. `roles_escritura` vacio bloquea toda escritura.
+    """
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
+
+        codigos = codigos_activos(request.user)
+
         if request.method in SAFE_METHODS:
-            return True
+            roles_lectura = getattr(view, 'roles_lectura', None)
+            if roles_lectura is None:
+                return True
+            return bool(codigos & set(roles_lectura))
 
         roles = getattr(view, 'roles_escritura', ())
         if not roles:
             return False
-        return bool(codigos_activos(request.user) & set(roles))
+        return bool(codigos & set(roles))

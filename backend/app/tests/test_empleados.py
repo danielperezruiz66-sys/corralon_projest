@@ -130,6 +130,8 @@ class EmpleadosApiTests(BaseCorralonTestCase):
             ubicacion=self.ubicacion,
             nombre='Nueva',
         )
+        # Asignar el rol AD y una sucursal ajena es exclusivo del admin.
+        self.autenticar(self.admin)
         respuesta = self.client.patch(
             f'/api/empleados/{empleado_id}/',
             {
@@ -152,7 +154,10 @@ class EmpleadosApiTests(BaseCorralonTestCase):
         )
 
     def test_update_quita_los_roles_que_faltan(self):
-        respuesta = self._crear(roles=[self.roles['CA'].id, self.roles['VE'].id])
+        respuesta = self._crear(
+            roles=[self.roles['CA'].id, self.roles['VE'].id],
+            sucursales=[self.sucursal.id],
+        )
         empleado_id = respuesta.data['id']
 
         respuesta = self.client.patch(
@@ -171,6 +176,7 @@ class EmpleadosApiTests(BaseCorralonTestCase):
         )
 
     def test_listado_expone_los_campos_enriquecidos(self):
+        self.autenticar(self.user_gerente)
         respuesta = self.client.get('/api/empleados/')
 
         self.assertEqual(respuesta.status_code, 200)
@@ -326,6 +332,7 @@ class EmpleadosApiTests(BaseCorralonTestCase):
             defaults={'estado': 'IN'},
         )
 
+        self.autenticar(self.user_gerente)
         respuesta = self.client.get('/api/empleados/')
 
         self.assertEqual(respuesta.status_code, 200)
@@ -369,7 +376,7 @@ class EmpleadosApiTests(BaseCorralonTestCase):
         acceso = token.data['access']
         crudo.credentials(HTTP_AUTHORIZATION=f'Bearer {acceso}')
 
-        antes = crudo.get('/api/empleados/')
+        antes = crudo.get('/api/clientes/')
         self.assertEqual(antes.status_code, 200)
 
         self.autenticar(self.admin)
@@ -380,7 +387,7 @@ class EmpleadosApiTests(BaseCorralonTestCase):
         )
 
         # El mismo token, ya suspendido: el servidor lo rechaza (401).
-        despues = crudo.get('/api/empleados/')
+        despues = crudo.get('/api/clientes/')
         self.assertEqual(despues.status_code, 401)
 
     def test_suspension_invalida_los_refresh_tokens(self):
@@ -410,6 +417,7 @@ class EmpleadosApiTests(BaseCorralonTestCase):
         self.assertEqual(refresh.status_code, 401)
 
     def test_filtro_sucursal_devuelve_solo_los_asignados(self):
+        self.autenticar(self.user_gerente)
         sucursal_vacia = Sucursal.objects.create(
             empresa=self.empresa,
             ubicacion=self.ubicacion,
@@ -430,5 +438,6 @@ class EmpleadosApiTests(BaseCorralonTestCase):
         self.assertEqual(respuesta.data['results'], [])
 
     def test_filtro_sucursal_invalida_devuelve_400(self):
+        self.autenticar(self.user_gerente)
         respuesta = self.client.get('/api/empleados/?sucursal=xyz')
         self.assertEqual(respuesta.status_code, 400)

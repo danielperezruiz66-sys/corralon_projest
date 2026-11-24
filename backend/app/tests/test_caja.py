@@ -274,8 +274,8 @@ class CajaApiTests(BaseCorralonTestCase):
 
         respuesta = self._abrir(caja)
 
-        self.assertEqual(respuesta.status_code, 400)
-        self.assertIn('no esta asignado', respuesta.data['detail'])
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertIn('sucursal', respuesta.data['detail'])
 
     def test_gerente_opera_en_cualquier_sucursal(self):
         otra = self._sucursal_extra()
@@ -377,6 +377,8 @@ class CajaApiTests(BaseCorralonTestCase):
         )
 
         otra = self._sucursal_extra()
+        # Crear una caja en otra sucursal exige un usuario con alcance global.
+        self.autenticar(self.admin)
         permitida = self.client.post(
             '/api/cajas/',
             {'sucursal': otra.id, 'numero_caja': 1},
