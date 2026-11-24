@@ -97,10 +97,10 @@ export default function MenuDesplegable() {
     if (caja) {
       const cajaTexto = sinSucursal(caja.caja_detalle, caja.sucursal_detalle)
       Swal.fire({
-        title: 'Tenés una caja abierta',
-        html: `La sección <strong>#${caja.id}</strong> (${cajaTexto}) sigue ${
+        title: 'Tenés un movimiento abierto',
+        html: `El movimiento <strong>#${caja.id}</strong> (${cajaTexto}) sigue ${
           caja.estado === 'PA' ? 'en pausa' : 'abierta'
-        }.<br/>Cerrala o pausala antes de salir del sistema.`,
+        }.<br/>Cerralo o pausalo antes de salir del sistema.`,
         icon: 'warning',
         showCancelButton: false,
         confirmButtonColor: '#4a9da8',

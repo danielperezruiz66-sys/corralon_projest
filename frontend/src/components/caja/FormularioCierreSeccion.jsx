@@ -94,7 +94,7 @@ export default function FormularioCierreSeccion({
     }
 
     if (!password) {
-      nuevos.password = 'Ingresá tu contraseña para cerrar la seccion.'
+      nuevos.password = 'Ingresá tu contraseña para cerrar el movimiento.'
     }
 
     if (Object.keys(nuevos).length > 0) {
@@ -106,7 +106,7 @@ export default function FormularioCierreSeccion({
     }
 
     const resultado = await Swal.fire({
-      title: `¿Cerrar la seccion #${seccion.id}?`,
+      title: `¿Cerrar el movimiento #${seccion.id}?`,
       text: 'Se guarda el arqueo por metodo de pago y el motivo del cierre; ya no se puede cobrar ni modificar.',
       icon: 'question',
       showCancelButton: true,
@@ -148,7 +148,7 @@ export default function FormularioCierreSeccion({
       }
       Swal.fire({
         icon: 'error',
-        title: 'No se pudo cerrar la seccion',
+        title: 'No se pudo cerrar el movimiento',
         text: e.message,
         confirmButtonColor: '#4a9da8',
       })
@@ -163,7 +163,7 @@ export default function FormularioCierreSeccion({
         <div className="comercial-modal-cabecera">
           <h2>
             <IconCash size={24} />
-            Cerrar seccion #{seccion.id}
+            Cerrar movimiento #{seccion.id}
           </h2>
           <button
             type="button"
@@ -369,7 +369,7 @@ export default function FormularioCierreSeccion({
                     Cerrando…
                   </>
                 ) : (
-                  'Cerrar seccion'
+                  'Cerrar movimiento'
                 )}
               </button>
             </div>

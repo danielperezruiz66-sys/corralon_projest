@@ -397,7 +397,7 @@ export default function FormularioCompra({
   async function registrarCompra() {
     const nuevos = {}
     if (!seccion) {
-      nuevos.seccion = 'No hay una sección de caja abierta.'
+      nuevos.seccion = 'No hay un movimiento de caja abierto.'
     }
     if (!proveedor) {
       nuevos.proveedor = 'Seleccioná un proveedor activo.'
@@ -518,17 +518,17 @@ export default function FormularioCompra({
 
             <div className="comercial-grid">
               <CampoSelectorBuscable
-                etiqueta="Sección de caja"
+                etiqueta="Movimiento de caja"
                 valor={seccion}
                 onCambiar={setSeccion}
                 opciones={secciones}
                 textoOpcion={(item) =>
-                  `Sección #${item.id} · ${item.caja_detalle} · ${item.empleado_detalle}`
+                  `Movimiento #${item.id} · ${item.caja_detalle} · ${item.empleado_detalle}`
                 }
                 placeholder={
                   secciones.length === 0
-                    ? 'No hay cajas abiertas'
-                    : 'Buscar sección'
+                    ? 'No hay movimientos abiertos'
+                    : 'Buscar movimiento'
                 }
                 error={Boolean(errores.seccion)}
                 mensajeError={errores.seccion}

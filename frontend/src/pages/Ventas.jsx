@@ -690,7 +690,7 @@ export default function Ventas() {
                     </button>
                   </th>
                   <th>Cliente</th>
-                  <th>Caja / Sección</th>
+                  <th>Caja / Movimiento</th>
                   <th
                     className="numero"
                     aria-sort={
@@ -877,7 +877,7 @@ export default function Ventas() {
                 <strong>{formatearFechaHora(detalle.fecha_venta)}</strong>
               </div>
               <div>
-                <span>Caja / Sección</span>
+                <span>Caja / Movimiento</span>
                 <strong>{detalle.movimiento_caja_detalle || '—'}</strong>
               </div>
               <div>
