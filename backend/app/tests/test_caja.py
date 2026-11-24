@@ -60,6 +60,7 @@ class CajaApiTests(BaseCorralonTestCase):
                     else {str(self.efectivo.id): '1000.00'}
                 ),
                 'password': self.PASSWORD if password is None else password,
+                'observaciones': 'Cierre de prueba con arqueo',
             },
             format='json',
         )
@@ -82,6 +83,15 @@ class CajaApiTests(BaseCorralonTestCase):
 
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('ya tiene un movimiento', respuesta.data['detail'])
+
+    def test_no_se_puede_eliminar_una_caja(self):
+        caja = self._caja(numero=5)
+        self.autenticar(self.admin)
+
+        respuesta = self.client.delete(f'/api/cajas/{caja.id}/')
+
+        self.assertEqual(respuesta.status_code, 405)
+        self.assertTrue(Caja.objects.filter(pk=caja.id).exists())
 
     def test_rechaza_sucursal_que_no_coincide_con_la_caja(self):
         otra = self._sucursal_extra()
@@ -397,7 +407,10 @@ class CajaApiTests(BaseCorralonTestCase):
     def test_cerrar_exige_la_contrasena_del_usuario(self):
         sin_password = self.client.post(
             CIERRE.format(self.seccion.id),
-            {'montos_reales': {str(self.efectivo.id): '1000.00'}},
+            {
+                'montos_reales': {str(self.efectivo.id): '1000.00'},
+                'observaciones': 'Cierre de prueba con arqueo',
+            },
             format='json',
         )
         self.assertEqual(sin_password.status_code, 400)
@@ -407,6 +420,20 @@ class CajaApiTests(BaseCorralonTestCase):
         self.assertIn('contraseña', incorrecta.data['detail'])
         self.seccion.refresh_from_db()
         self.assertEqual(self.seccion.estado, 'AB')
+
+    def test_cerrar_exige_observaciones(self):
+        self.autenticar(self.user_cajero2)
+        respuesta = self.client.post(
+            CIERRE.format(self.seccion.id),
+            {
+                'montos_reales': {str(self.efectivo.id): '1000.00'},
+                'password': self.PASSWORD,
+            },
+            format='json',
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('observaciones', respuesta.data)
 
     def test_cerrar_guarda_la_diferencia(self):
         respuesta = self._cerrar(
@@ -452,6 +479,7 @@ class CajaApiTests(BaseCorralonTestCase):
             {
                 'montos_reales': {'no-es-id': '100.00'},
                 'password': self.PASSWORD,
+                'observaciones': 'Cierre de prueba con arqueo',
             },
             format='json',
         )

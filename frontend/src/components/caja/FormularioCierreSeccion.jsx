@@ -89,6 +89,10 @@ export default function FormularioCierreSeccion({
       }
     })
 
+    if (observaciones.trim().length < 10) {
+      nuevos.observaciones = 'Indicá el motivo del cierre (10 caracteres o más).'
+    }
+
     if (!password) {
       nuevos.password = 'Ingresá tu contraseña para cerrar la seccion.'
     }
@@ -103,7 +107,7 @@ export default function FormularioCierreSeccion({
 
     const resultado = await Swal.fire({
       title: `¿Cerrar la seccion #${seccion.id}?`,
-      text: 'Se guarda el arqueo por metodo de pago y ya no se puede cobrar ni modificar.',
+      text: 'Se guarda el arqueo por metodo de pago y el motivo del cierre; ya no se puede cobrar ni modificar.',
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#4a9da8',
@@ -292,20 +296,31 @@ export default function FormularioCierreSeccion({
                 Diferencia de{' '}
                 <strong>{formatearMoneda(Math.abs(totalDiferencia))}</strong>
                 {totalDiferencia < 0 ? ' faltante' : ' sobrante'}: se registrará
-                una nota automática del sistema con el detalle. Podés agregar
-                observaciones si querés.
+                una nota automática del sistema con el detalle. Indicá el motivo
+                del cierre; se agregará a esa nota.
               </p>
             )}
 
             <label className="campo-comercial ancho-completo">
-              <span>Observaciones del cierre</span>
+              <span>Observaciones del cierre *</span>
               <textarea
                 rows="2"
                 maxLength="500"
+                className={errores.observaciones ? 'input-error' : ''}
                 value={observaciones}
-                onChange={(evento) => setObservaciones(evento.target.value)}
-                placeholder="Faltante, sobrante, rotura de billete, etc."
+                onChange={(evento) => {
+                  setObservaciones(evento.target.value)
+                  if (errores.observaciones) {
+                    setErrores((previos) => {
+                      const siguientes = { ...previos }
+                      delete siguientes.observaciones
+                      return siguientes
+                    })
+                  }
+                }}
+                placeholder="Indicá el motivo del cierre: faltante, sobrante, rotura de billete, etc."
               />
+              <MensajeError>{errores.observaciones}</MensajeError>
             </label>
 
             <label className="campo-comercial ancho-completo">

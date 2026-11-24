@@ -779,9 +779,11 @@ class CierreCajaSerializer(serializers.Serializer):
         allow_empty=False,
     )
     observaciones = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        allow_null=True,
+        required=True,
+        allow_blank=False,
+        allow_null=False,
+        min_length=10,
+        help_text='Motivo del cierre: al menos 10 caracteres.',
     )
     clave = serializers.CharField(
         required=False,

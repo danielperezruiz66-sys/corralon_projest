@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
-  IconDownload,
   IconKey,
   IconLoader2,
   IconPencil,
@@ -10,14 +9,12 @@ import {
   IconSearch,
   IconX,
 } from '@tabler/icons-react'
-import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import FormularioContrasena from '../components/empleados/FormularioContrasena.jsx'
 import FormularioEmpleado from '../components/empleados/FormularioEmpleado.jsx'
 import { useAuth } from '../context/auth-context'
 import useDebounce from '../hooks/useDebounce'
-import { descargarCsv } from '../utils/csv'
 import '../styles/Comercial.css'
 import '../styles/Inventario.css'
 import '../styles/Filtros.css'
@@ -74,7 +71,6 @@ export default function Empleados() {
   const [actualizando, setActualizando] = useState(false)
   const [error, setError] = useState('')
   const [refresco, setRefresco] = useState(0)
-  const [exportando, setExportando] = useState(false)
 
   const [empleadoEditando, setEmpleadoEditando] = useState(null)
   const [contrasenaPara, setContrasenaPara] = useState(null)
@@ -162,59 +158,6 @@ export default function Empleados() {
     })
   }
 
-  async function exportar() {
-    setExportando(true)
-    try {
-      const parametros = new URLSearchParams()
-      if (busqueda) {
-        parametros.set('search', busqueda)
-      }
-      if (estado) {
-        parametros.set('estado', estado)
-      }
-      if (rol) {
-        parametros.set('rol', rol)
-      }
-
-      const todos = await pedirTodas(
-        `/empleados/?${parametros.toString()}`,
-      )
-      if (todos.length === 0) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin resultados',
-          text: 'No hay empleados para exportar con los filtros actuales.',
-          confirmButtonColor: '#4a9da8',
-        })
-        return
-      }
-
-      const filas = todos.map((empleado) => [
-        empleado.legajo,
-        `${empleado.apellido}, ${empleado.nombre}`,
-        empleado.dni,
-        empleado.telefono || '',
-        (empleado.roles_detalle || []).join(', '),
-        empleado.usuario_detalle || 'Sin acceso',
-        ETIQUETA_ESTADO[empleado.estado] ?? empleado.estado,
-      ])
-      descargarCsv(
-        `empleados-${new Date().toISOString().slice(0, 10)}.csv`,
-        ['Legajo', 'Empleado', 'DNI', 'Teléfono', 'Roles', 'Usuario', 'Estado'],
-        filas,
-      )
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo exportar',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    } finally {
-      setExportando(false)
-    }
-  }
-
   return (
     <>
       <Encabezado
@@ -258,15 +201,6 @@ export default function Empleados() {
             </form>
 
             <div className="comercial-acciones-barra">
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                onClick={exportar}
-                disabled={exportando}
-              >
-                <IconDownload size={18} />
-                {exportando ? 'Exportando…' : 'Exportar CSV'}
-              </button>
               {puedeGestionar && (
                 <button
                   type="button"

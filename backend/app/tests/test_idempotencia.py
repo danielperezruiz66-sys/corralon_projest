@@ -74,6 +74,7 @@ class IdempotenciaPagosTests(BaseCorralonTestCase):
                 'montos_reales': montos,
                 'clave': 'clave-cierre-1',
                 'password': self.PASSWORD,
+                'observaciones': 'Cierre de prueba con arqueo',
             },
             format='json',
         )
@@ -85,6 +86,7 @@ class IdempotenciaPagosTests(BaseCorralonTestCase):
                 'montos_reales': montos,
                 'clave': 'clave-cierre-1',
                 'password': self.PASSWORD,
+                'observaciones': 'Cierre de prueba con arqueo',
             },
             format='json',
         )

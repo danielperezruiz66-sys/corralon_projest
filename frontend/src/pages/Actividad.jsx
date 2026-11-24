@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import Swal from 'sweetalert2'
 import {
-  IconDownload,
   IconListDetails,
   IconLoader2,
   IconPencil,
@@ -16,8 +14,7 @@ import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import { useAuth } from '../context/auth-context'
 import useDebounce from '../hooks/useDebounce'
-import { descargarCsv } from '../utils/csv'
-import { formatearFecha, formatearFechaHora, formatearNumero } from '../utils/formato'
+import { formatearFechaHora, formatearNumero } from '../utils/formato'
 import '../styles/Comercial.css'
 import '../styles/Filtros.css'
 import '../styles/Actividad.css'
@@ -72,8 +69,10 @@ export default function Actividad() {
   const [cargando, setCargando] = useState(true)
   const [actualizando, setActualizando] = useState(false)
   const [error, setError] = useState('')
-  const [exportando, setExportando] = useState(false)
 
+  const hayFiltros = Boolean(
+    texto || accion || usuario || fechaDesde || fechaHasta,
+  )
   const busqueda = useDebounce(texto.trim(), 350)
   const buscando = texto.trim() !== busqueda || actualizando
 
@@ -86,6 +85,15 @@ export default function Actividad() {
     if (fechaHasta) p.set('fecha_hasta', fechaHasta)
     return p
   }, [busqueda, accion, usuario, fechaDesde, fechaHasta])
+
+  const filtrosResumen = useCallback(() => {
+    const p = new URLSearchParams()
+    if (busqueda) p.set('search', busqueda)
+    if (usuario) p.set('usuario', usuario)
+    if (fechaDesde) p.set('fecha_desde', fechaDesde)
+    if (fechaHasta) p.set('fecha_hasta', fechaHasta)
+    return p
+  }, [busqueda, usuario, fechaDesde, fechaHasta])
 
   const parametros = useCallback(() => {
     const p = filtrosComunes()
@@ -141,7 +149,7 @@ export default function Actividad() {
   // Resumen real del filtro (totales, no pagina).
   useEffect(() => {
     let vigente = true
-    pedir(`/actividad/resumen/?${filtrosComunes().toString()}`)
+    pedir(`/actividad/resumen/?${filtrosResumen().toString()}`)
       .then((datosResumen) => {
         if (vigente) setResumen(datosResumen)
       })
@@ -151,7 +159,7 @@ export default function Actividad() {
     return () => {
       vigente = false
     }
-  }, [filtrosComunes])
+  }, [filtrosResumen])
 
   function irAPagina(numero) {
     setPagina(numero)
@@ -164,43 +172,15 @@ export default function Actividad() {
     setActualizando(true)
   }
 
-  async function exportar() {
-    setExportando(true)
-    try {
-      const todos = await pedirTodas(`/actividad/?${filtrosComunes().toString()}`)
-      if (todos.length === 0) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin resultados',
-          text: 'No hay registros de actividad para exportar con los filtros actuales.',
-          confirmButtonColor: '#4a9da8',
-        })
-        return
-      }
-
-      const filas = todos.map((item) => [
-        formatearFecha(item.fecha),
-        item.usuario_detalle ?? '—',
-        item.modelo_detalle ?? item.modelo ?? '—',
-        item.objeto ?? '—',
-        ETIQUETA_ACCION[item.accion] ?? item.accion ?? '—',
-        item.detalle ?? '—',
-      ])
-      descargarCsv(
-        `actividad-${new Date().toISOString().slice(0, 10)}.csv`,
-        ['Fecha', 'Usuario', 'Modelo', 'Objeto', 'Acción', 'Detalle'],
-        filas,
-      )
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo exportar',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    } finally {
-      setExportando(false)
-    }
+  function limpiarTodo() {
+    setTexto('')
+    setAccion('')
+    setUsuario('')
+    setFechaDesde('')
+    setFechaHasta('')
+    setPagina(1)
+    setError('')
+    setActualizando(true)
   }
 
   if (!puedeGestionar) {
@@ -255,34 +235,65 @@ export default function Actividad() {
               )}
             </form>
 
-            <div className="comercial-acciones-barra">
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                onClick={exportar}
-                disabled={exportando}
-              >
-                <IconDownload size={18} />
-                {exportando ? 'Exportando…' : 'Exportar CSV'}
-              </button>
-            </div>
           </section>
 
-          <section className="filtros-tabs filtros-pills">
-            {ACCIONES.map((opcion) => (
-              <button
-                key={opcion.id || 'todas'}
-                type="button"
-                className={
-                  accion === opcion.id
-                    ? `activo ${opcion.color}`
-                    : opcion.color
-                }
-                onClick={() => cambiarAccion(opcion.id)}
-              >
-                {opcion.etiqueta}
-              </button>
-            ))}
+          <section className="dashboard-kpis actividad-kpis">
+            <button
+              type="button"
+              className="kpi-tarjeta"
+              onClick={() => cambiarAccion('')}
+              aria-pressed={accion === ''}
+            >
+              <span className="kpi-icono">
+                <IconListDetails size={26} stroke={1.75} />
+              </span>
+              <div className="kpi-contenido">
+                <p className="kpi-etiqueta">Total de registros</p>
+                <p className="kpi-valor">{formatearNumero(totalRegistros)}</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="kpi-tarjeta kpi-crear"
+              onClick={() => cambiarAccion('CREAR')}
+              aria-pressed={accion === 'CREAR'}
+            >
+              <span className="kpi-icono">
+                <IconPlus size={26} stroke={1.75} />
+              </span>
+              <div className="kpi-contenido">
+                <p className="kpi-etiqueta">Creaciones</p>
+                <p className="kpi-valor">{formatearNumero(porAccion.CREAR || 0)}</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="kpi-tarjeta kpi-editar"
+              onClick={() => cambiarAccion('EDITAR')}
+              aria-pressed={accion === 'EDITAR'}
+            >
+              <span className="kpi-icono">
+                <IconPencil size={26} stroke={1.75} />
+              </span>
+              <div className="kpi-contenido">
+                <p className="kpi-etiqueta">Ediciones</p>
+                <p className="kpi-valor">{formatearNumero(porAccion.EDITAR || 0)}</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="kpi-tarjeta kpi-eliminar"
+              onClick={() => cambiarAccion('ELIMINAR')}
+              aria-pressed={accion === 'ELIMINAR'}
+            >
+              <span className="kpi-icono">
+                <IconTrash size={26} stroke={1.75} />
+              </span>
+              <div className="kpi-contenido">
+                <p className="kpi-etiqueta">Eliminaciones</p>
+                <p className="kpi-valor">{formatearNumero(porAccion.ELIMINAR || 0)}</p>
+              </div>
+            </button>
           </section>
 
           <section className="filtros-campos filtros-campos-inline">
@@ -329,46 +340,20 @@ export default function Actividad() {
               />
             </label>
           </section>
+
+          {hayFiltros && (
+            <div className="filtros-pie">
+              <button
+                type="button"
+                className="boton-comercial-secundario"
+                onClick={limpiarTodo}
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          )}
         </section>
 
-        <section className="dashboard-kpis actividad-kpis">
-          <article className="kpi-tarjeta">
-            <span className="kpi-icono">
-              <IconListDetails size={26} stroke={1.75} />
-            </span>
-            <div className="kpi-contenido">
-              <p className="kpi-etiqueta">Total de registros</p>
-              <p className="kpi-valor">{formatearNumero(totalRegistros)}</p>
-            </div>
-          </article>
-          <article className="kpi-tarjeta kpi-crear">
-            <span className="kpi-icono">
-              <IconPlus size={26} stroke={1.75} />
-            </span>
-            <div className="kpi-contenido">
-              <p className="kpi-etiqueta">Creaciones</p>
-              <p className="kpi-valor">{formatearNumero(porAccion.CREAR || 0)}</p>
-            </div>
-          </article>
-          <article className="kpi-tarjeta kpi-editar">
-            <span className="kpi-icono">
-              <IconPencil size={26} stroke={1.75} />
-            </span>
-            <div className="kpi-contenido">
-              <p className="kpi-etiqueta">Ediciones</p>
-              <p className="kpi-valor">{formatearNumero(porAccion.EDITAR || 0)}</p>
-            </div>
-          </article>
-          <article className="kpi-tarjeta kpi-eliminar">
-            <span className="kpi-icono">
-              <IconTrash size={26} stroke={1.75} />
-            </span>
-            <div className="kpi-contenido">
-              <p className="kpi-etiqueta">Eliminaciones</p>
-              <p className="kpi-valor">{formatearNumero(porAccion.ELIMINAR || 0)}</p>
-            </div>
-          </article>
-        </section>
 
         {error && <p className="comercial-error">{error}</p>}
 

@@ -95,13 +95,35 @@ class PausaCajaTests(BaseCorralonTestCase):
 
         self.assertEqual(respuesta.status_code, 404)
 
-    def test_el_gerente_no_puede_reanudar_la_seccion_de_otro(self):
+    def test_el_gerente_reanuda_con_la_contrasena_del_dueno(self):
         self._pausar()
 
-        respuesta = self._reanudar(user=self.user_gerente)
+        incorrecta = self._reanudar(user=self.user_gerente, clave='incorrecta')
+        self.assertEqual(incorrecta.status_code, 400)
+        self.assertIn('contraseña', incorrecta.data['detail'])
 
-        self.assertEqual(respuesta.status_code, 400)
-        self.assertIn('abrió', respuesta.data['detail'])
+        respuesta = self._reanudar(user=self.user_gerente)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['estado'], 'AB')
+        self.assertEqual(respuesta.data['motivo_pausa'], '')
+
+    def test_el_gerente_reanuda_con_su_propia_contrasena(self):
+        self._pausar()
+        self.user_gerente.set_password('clave-gestion-distinta')
+        self.user_gerente.save(update_fields=['password'])
+        self.addCleanup(self._restablecer_password_gerente)
+
+        respuesta = self._reanudar(
+            user=self.user_gerente,
+            clave='clave-gestion-distinta',
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['estado'], 'AB')
+
+    def _restablecer_password_gerente(self):
+        self.user_gerente.set_password(self.PASSWORD)
+        self.user_gerente.save(update_fields=['password'])
 
     def test_no_se_puede_cerrar_una_seccion_pausada(self):
         self._pausar()
@@ -111,6 +133,7 @@ class PausaCajaTests(BaseCorralonTestCase):
             {
                 'montos_reales': {str(self.efectivo.id): '1000.00'},
                 'password': self.PASSWORD,
+                'observaciones': 'Cierre de prueba con arqueo',
             },
             format='json',
         )

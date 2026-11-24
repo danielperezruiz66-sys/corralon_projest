@@ -3,7 +3,7 @@
 > Contexto permanente y reglas del proyecto. Al empezar una sesión, leer
 > `DIA_SIGUIENTE.md`. Reglas de documentación en §10.
 
-**Última actualización:** 2026-11-19
+**Última actualización:** 2026-11-23
 
 ## 1. Stack
 
@@ -31,7 +31,7 @@ backend/
     │                       # proveedores, empleados
     ├── management/commands/# seed_data, cancelar_ventas_vencidas
     ├── migrations/         # 0001 esquema + 0002/0003 estado Parcial
-    ├── tests/              # suite en app.tests (252 tests)
+    ├── tests/              # suite en app.tests (255 tests)
     ├── permissions.py  backends.py  exceptions.py
     └── serializers.py  views.py  urls.py
 frontend/src/
@@ -100,11 +100,13 @@ Reglas fijas:
 
 ### Caja
 
-- `Caja` tiene FK a `Sucursal` y `numero_caja` único por sucursal.
+- `Caja` tiene FK a `Sucursal` y `numero_caja` único por sucursal. No se
+  elimina: solo cambia de estado (`AC`/`IN`/`MT`); la API no acepta `DELETE`.
 - `MovimientoCaja` es la sesión: `AB` abierta, `PA` en pausa, `CE` cerrada,
   `AU` auditada. Máximo 1 `AB`/`PA` por caja y por empleado.
-- Pausar exige motivo; reanudar exige la contraseña del dueño. Cerrar exige la
-  contraseña del usuario autenticado. `AD/GE` pueden auditar.
+- Pausar exige motivo; reanudar acepta la contraseña del dueño o la del gestor
+  (`AD/GE`). Cerrar exige la contraseña del usuario autenticado y observaciones
+  de al menos 10 caracteres. `AD/GE` pueden auditar.
 - Solo `CA` abre en sucursales asignadas; `AD/GE` en cualquiera y pueden abrir
   a nombre de otro empleado habilitado (queda auditado).
 - En pausa no se venden, cobran ni arquear; primero se reanuda.
@@ -227,7 +229,7 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
   visibles en el select (sin tarjeta “Filtro del dashboard”).
 - Compras: el selector muestra solo productos del proveedor; recepción con
   depósito; pagar/anular solo `AD/GE`.
-- Convenciones UI: búsqueda con debounce, filtros en la URL, CSV, cobro
+- Convenciones UI: búsqueda con debounce, filtros en la URL, cobro
   multi-método, validaciones en `utils/validaciones.js`, `CampoSelectorBuscable`
   con búsqueda remota y alta rápida.
 
@@ -245,7 +247,7 @@ cd backend
 ../venv/Scripts/python.exe manage.py check
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 252 tests
+../venv/Scripts/python.exe manage.py test app              # 255 tests
 ../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 

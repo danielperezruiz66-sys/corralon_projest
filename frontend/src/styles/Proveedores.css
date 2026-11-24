@@ -170,7 +170,11 @@
 
 /* Costos por proveedor */
 .proveedores .tabla-costos-proveedor {
+  width: 100%;
+  max-width: none;
   min-width: 1000px;
+  margin: 0;
+  table-layout: fixed;
 }
 
 .proveedores .tabla-costos-proveedor th:nth-child(1),
@@ -204,6 +208,10 @@
 .proveedores .tabla-costos-proveedor td:nth-child(6) {
   width: 12%;
   text-align: center;
+}
+
+.proveedores .tabla-costos-proveedor td:nth-child(6) .boton-icono {
+  margin-inline: auto;
 }
 
 .proveedores .tabla-costos-proveedor td:nth-child(1) strong {

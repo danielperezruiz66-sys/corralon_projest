@@ -130,7 +130,7 @@
 
 .grid-datos-perfil {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1.25rem;
 }
 
@@ -144,10 +144,6 @@
   background-color: #ffffff;
   padding: 1.15rem 1.25rem;
   box-shadow: 0 4px 16px rgba(15, 42, 48, 0.04);
-}
-
-.campo-perfil-ancho {
-  grid-column: 1 / -1;
 }
 
 .icono-campo-perfil {

@@ -112,7 +112,6 @@ const CAMPOS = [
     tipo: 'text',
     Icono: IconBuildingWarehouse,
     placeholder: 'Calle, número y localidad',
-    ancho: true,
     validar: (valor) =>
       valor
         ? validarTexto(valor, 'La dirección fiscal', { min: 2, max: 120 })
@@ -352,10 +351,7 @@ export default function Configuracion() {
     const opciones = campo.id === 'condicion_iva' ? opcionesIva : campo.opciones
     const Icono = campo.Icono
     return (
-      <div
-        className={`campo-perfil-item ${campo.ancho ? 'campo-perfil-ancho' : ''}`}
-        key={campo.id}
-      >
+      <div className="campo-perfil-item" key={campo.id}>
         <span className="icono-campo-perfil">
           <Icono size={20} stroke={1.8} />
         </span>

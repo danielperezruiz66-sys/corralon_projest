@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
   IconBrandWhatsapp,
-  IconDownload,
   IconEye,
   IconLoader2,
   IconMail,
@@ -13,12 +12,10 @@ import {
   IconShoppingCart,
   IconX,
 } from '@tabler/icons-react'
-import { pedirTodas } from '../api/catalogos'
 import { pedir } from '../api/client'
 import Encabezado from '../components/Encabezado.jsx'
 import FormularioCliente from '../components/clientes/FormularioCliente.jsx'
 import useDebounce from '../hooks/useDebounce'
-import { descargarCsv } from '../utils/csv'
 import { formatearFechaHora, formatearMoneda } from '../utils/formato'
 import '../styles/Clientes.css'
 import '../styles/Filtros.css'
@@ -77,7 +74,6 @@ export default function Clientes() {
   const [refresco, setRefresco] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [actualizando, setActualizando] = useState(false)
-  const [exportando, setExportando] = useState(false)
   const [error, setError] = useState('')
   const [modalAbierto, setModalAbierto] = useState(
     () => searchParams.get('nuevo') === '1',
@@ -284,68 +280,6 @@ export default function Clientes() {
     setCargandoResumen(false)
   }
 
-  async function exportar() {
-    setExportando(true)
-    try {
-      const parametros = new URLSearchParams()
-      if (busqueda) {
-        parametros.set('search', busqueda)
-      }
-      if (estado) {
-        parametros.set('estado', estado)
-      }
-
-      const todos = await pedirTodas(
-        `/clientes/?${parametros.toString()}`,
-      )
-      if (todos.length === 0) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin resultados',
-          text: 'No hay clientes para exportar con los filtros actuales.',
-          confirmButtonColor: '#4a9da8',
-        })
-        return
-      }
-
-      const filas = todos.map((cliente) => [
-        cliente.id,
-        nombreCliente(cliente),
-        cliente.tipo_documento_detalle || '',
-        cliente.dni || '',
-        cliente.telefono || '',
-        cliente.email || '',
-        cliente.condicion_iva_detalle || '',
-        cliente.direccion || '',
-        cliente.estado ? 'Activo' : 'Inactivo',
-      ])
-      descargarCsv(
-        `clientes-${new Date().toISOString().slice(0, 10)}.csv`,
-        [
-          'N.º de cliente',
-          'Cliente',
-          'Tipo de documento',
-          'Documento',
-          'Teléfono',
-          'Email',
-          'Condición IVA',
-          'Dirección',
-          'Estado',
-        ],
-        filas,
-      )
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo exportar',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    } finally {
-      setExportando(false)
-    }
-  }
-
   return (
     <>
       <Encabezado
@@ -387,15 +321,6 @@ export default function Clientes() {
             </form>
 
             <div className="comercial-acciones-barra">
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                onClick={exportar}
-                disabled={exportando}
-              >
-                <IconDownload size={18} />
-                {exportando ? 'Exportando…' : 'Exportar CSV'}
-              </button>
               <button
                 type="button"
                 className="boton-comercial-primario"

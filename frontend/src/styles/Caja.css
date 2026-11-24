@@ -380,6 +380,7 @@ CAJA - APERTURA, CIERRE E HISTORIAL
 }
 
 .caja-modulo .tabla-cajas-fisicas {
+  width: 100%;
   min-width: 640px;
 }
 
@@ -521,13 +522,11 @@ CAJA - APERTURA, CIERRE E HISTORIAL
 .caja-modulo .tabla-cajas-fisicas th:nth-child(2),
 .caja-modulo .tabla-cajas-fisicas td:nth-child(2) {
   width: 30%;
-  text-align: center;
 }
 
 .caja-modulo .tabla-cajas-fisicas th:nth-child(3),
 .caja-modulo .tabla-cajas-fisicas td:nth-child(3) {
   width: 20%;
-  text-align: center;
 }
 
 .caja-modulo .tabla-cajas-fisicas td:nth-child(1) {

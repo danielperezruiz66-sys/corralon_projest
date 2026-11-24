@@ -1061,6 +1061,7 @@ class CajaViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.CajaSerializer
     permission_classes = [PermisoPorRol]
     roles_escritura = GESTION
+    http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
     filterset_fields = ['sucursal', 'estado']
     search_fields = ['sucursal__nombre']
     ordering_fields = ['sucursal__nombre', 'numero_caja', 'estado']

@@ -36,7 +36,7 @@ const CAMPOS_SOLO_LECTURA = [
   { id: 'dni', etiqueta: 'DNI', Icono: IconId },
   { id: 'legajo', etiqueta: 'Legajo', Icono: IconHash },
   { id: 'rol', etiqueta: 'Rol principal', Icono: IconShieldCheck },
-  { id: 'roles', etiqueta: 'Roles activos', Icono: IconShieldCheck, ancho: true },
+  { id: 'roles', etiqueta: 'Roles activos', Icono: IconShieldCheck },
 ];
 
 const VALIDACIONES = {
@@ -126,6 +126,11 @@ function Perfil() {
     }));
   };
 
+  const cancelarEdicion = () => {
+    setValoresPersonales(datosGuardados);
+    setErrores({});
+  };
+
   const valorPara = (id) => {
     if (id === 'nombre') return datos?.empleado?.nombre ?? '';
     if (id === 'apellido') return datos?.empleado?.apellido ?? '';
@@ -138,13 +143,10 @@ function Perfil() {
     return '';
   };
 
-  const renderCampo = ({ id, etiqueta, Icono, ancho }, editable) => {
+  const renderCampo = ({ id, etiqueta, Icono }, editable) => {
     const mensaje = errores[id] ?? '';
     return (
-      <div
-        className={`campo-perfil-item ${ancho ? 'campo-perfil-ancho' : ''}`}
-        key={id}
-      >
+      <div className="campo-perfil-item" key={id}>
         <span className="icono-campo-perfil">
           <Icono size={20} stroke={1.8} />
         </span>
@@ -363,6 +365,14 @@ function Perfil() {
                 >
                   <IconDeviceFloppy size={18} stroke={1.9} />
                   {guardando ? 'Guardando…' : 'Guardar cambios'}
+                </button>
+                <button
+                  type="button"
+                  className="boton-secundario-perfil"
+                  onClick={cancelarEdicion}
+                  disabled={!hayCambios || guardando}
+                >
+                  Descartar cambios
                 </button>
                 {datos?.empleado && (
                   <button

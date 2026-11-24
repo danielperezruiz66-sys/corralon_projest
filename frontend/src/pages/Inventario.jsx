@@ -6,7 +6,6 @@ import {
   IconArrowsExchange,
   IconBox,
   IconBuildingWarehouse,
-  IconDownload,
   IconEye,
   IconLoader2,
   IconPackage,
@@ -34,7 +33,6 @@ import FormularioStock from '../components/inventario/FormularioStock.jsx'
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
-import { cantidadCsv, descargarCsv, numeroCsv } from '../utils/csv'
 import {
   formatearFechaHora,
   formatearMoneda,
@@ -89,7 +87,6 @@ export default function Inventario() {
   const [datos, setDatos] = useState(PAGINA_VACIA)
   const [cargando, setCargando] = useState(true)
   const [actualizando, setActualizando] = useState(false)
-  const [exportando, setExportando] = useState(false)
   const [error, setError] = useState('')
   const [refresco, setRefresco] = useState(0)
 
@@ -204,6 +201,10 @@ export default function Inventario() {
       })
       .catch((e) => {
         if (!vigente || e.name === 'AbortError') {
+          return
+        }
+        if (pagina > 1 && /invalid page|página inválida/i.test(e.message)) {
+          setPagina(1)
           return
         }
         setError(e.message)
@@ -524,105 +525,6 @@ export default function Inventario() {
     refrescarListado()
   }
 
-  async function exportar() {
-    setExportando(true)
-    try {
-      const parametros = new URLSearchParams()
-      if (busqueda) parametros.set('search', busqueda)
-      if (sucursalActiva) {
-        parametros.set('sucursal', sucursalActiva)
-      }
-
-      let encabezados = []
-      let filas = []
-
-      if (tab === 'productos') {
-        if (categoria) parametros.set('categoria', categoria)
-        if (marca) parametros.set('marca', marca)
-        if (unidad) parametros.set('unidad', unidad)
-        if (orden) parametros.set('ordering', orden)
-        const todos = await pedirTodas(`/productos/?${parametros}`)
-        encabezados = [
-          'Código',
-          'Producto',
-          'Categoría',
-          'Marca',
-          'Unidad',
-          'Precio venta',
-          'Costo máximo',
-          'Margen',
-          'Sucursales',
-          'Descripción',
-        ]
-        filas = todos.map((item) => [
-          item.codigo,
-          item.nombre,
-          item.categoria_detalle,
-          item.marca_detalle,
-          item.unidad_detalle,
-          numeroCsv(item.precio_unidad),
-          item.costo_max ? numeroCsv(item.costo_max) : '',
-          item.margen ? numeroCsv(item.margen) : '',
-          (item.sucursales_detalle || []).join(' / '),
-          item.descripcion || '',
-        ])
-      } else if (tab === 'stock') {
-        if (alerta) parametros.set('alerta', alerta)
-        const todos = await pedirTodas(`/stocks/?${parametros}`)
-        encabezados = [
-          'Producto',
-          'Sucursal',
-          'Cantidad',
-          'Mínimo',
-          'Negativo máximo',
-          'Alerta',
-        ]
-        filas = todos.map((item) => [
-          item.producto_detalle,
-          item.sucursal_detalle,
-          cantidadCsv(item.cantidad),
-          cantidadCsv(item.cant_min),
-          cantidadCsv(item.cant_negativa_max),
-          item.alerta,
-        ])
-      } else if (tab === 'depositos') {
-        const todos = await pedirTodas(`/depositos/?${parametros}`)
-        encabezados = ['Depósito', 'Sucursal', 'Predeterminado', 'Descripción']
-        filas = todos.map((item) => [
-          item.nombre,
-          item.sucursal_detalle || '',
-          item.es_predeterminado ? 'Sí' : 'No',
-          item.descripcion || '',
-        ])
-      }
-
-      if (filas.length === 0) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin resultados',
-          text: 'No hay datos para exportar con los filtros actuales.',
-          confirmButtonColor: '#4a9da8',
-        })
-        return
-      }
-      descargarCsv(
-        `${tab}-${new Date().toISOString().slice(0, 10)}.csv`,
-        encabezados,
-        filas,
-      )
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo exportar',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    } finally {
-      setExportando(false)
-    }
-  }
-
-  const mostrarBotonExportar = tab !== 'catalogos'
   const mostrarNuevoProducto = tab === 'productos' && puedeProducto
   const mostrarNuevoDeposito = tab === 'depositos' && puedeStock
   const mostrarCargaStock = tab === 'stock' && puedeStock
@@ -669,17 +571,6 @@ export default function Inventario() {
               </form>
 
               <div className="comercial-acciones-barra">
-                {mostrarBotonExportar && (
-                  <button
-                    type="button"
-                    className="boton-comercial-secundario"
-                    onClick={exportar}
-                    disabled={exportando}
-                  >
-                    <IconDownload size={18} />
-                    {exportando ? 'Exportando…' : 'Exportar CSV'}
-                  </button>
-                )}
                 {mostrarCargaStock && (
                   <button
                     type="button"

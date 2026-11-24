@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom'
 import Swal from 'sweetalert2'
 import {
   IconCash,
-  IconDownload,
   IconEye,
   IconLoader2,
   IconPencil,
@@ -24,7 +23,6 @@ import FormularioCierreSeccion from '../components/caja/FormularioCierreSeccion.
 import { useAuth } from '../context/auth-context'
 import { useSucursal } from '../context/sucursal-context'
 import useDebounce from '../hooks/useDebounce'
-import { descargarCsv, numeroCsv } from '../utils/csv'
 import {
   formatearFecha,
   formatearFechaHora,
@@ -78,7 +76,7 @@ function FechaHoraCelda({ valor }) {
 }
 
 export default function Caja() {
-  const { user, puedeEscribir } = useAuth()
+  const { puedeEscribir } = useAuth()
   const { sucursalActiva } = useSucursal()
   const puedeOperar = puedeEscribir(['AD', 'GE', 'CA'])
   const puedeGestionar = puedeEscribir(['AD', 'GE'])
@@ -99,7 +97,6 @@ export default function Caja() {
 
   const [cargando, setCargando] = useState(true)
   const [actualizando, setActualizando] = useState(false)
-  const [exportando, setExportando] = useState(false)
   const [error, setError] = useState('')
   const [refresco, setRefresco] = useState(0)
 
@@ -311,11 +308,6 @@ export default function Caja() {
     refrescar()
   }
 
-  function esDueño(seccion) {
-    const id = user?.empleado?.id
-    return Boolean(id) && Number(seccion.empleado) === Number(id)
-  }
-
   async function pausarSeccion(seccion) {
     const resultado = await Swal.fire({
       title: `¿Pausar la sección #${seccion.id}?`,
@@ -358,7 +350,9 @@ export default function Caja() {
       Swal.fire({
         icon: 'error',
         title: 'No se pudo pausar la sección',
-        text: e.message,
+        text: `La sección #${seccion.id} sigue como estaba. ${
+          e.message || 'Revisá el estado de la caja y volvé a intentarlo.'
+        }`,
         confirmButtonColor: '#4a9da8',
       })
     }
@@ -367,10 +361,10 @@ export default function Caja() {
   async function reanudarSeccion(seccion) {
     const resultado = await Swal.fire({
       title: `¿Reanudar la sección #${seccion.id}?`,
-      text: 'Poné tu contraseña para volver a abrir la caja.',
+      text: 'Ingresá la contraseña del empleado que abrió la sección o la del administrador.',
       icon: 'question',
       input: 'password',
-      inputLabel: 'Tu contraseña *',
+      inputLabel: 'Contraseña del dueño o del admin *',
       inputAttributes: { autocapitalize: 'off', autocomplete: 'current-password' },
       showCancelButton: true,
       confirmButtonColor: '#4a9da8',
@@ -404,7 +398,10 @@ export default function Caja() {
       Swal.fire({
         icon: 'error',
         title: 'No se pudo reanudar la sección',
-        text: e.message,
+        text: `La sección #${seccion.id} sigue en pausa. ${
+          e.message ||
+          'Confirmá la contraseña del dueño o del admin y que la sección siga en pausa.'
+        }`,
         confirmButtonColor: '#4a9da8',
       })
     }
@@ -419,67 +416,6 @@ export default function Caja() {
       showConfirmButton: false,
     })
     refrescar()
-  }
-
-  async function exportar() {
-    setExportando(true)
-    try {
-      const parametros = new URLSearchParams()
-      if (busqueda) parametros.set('search', busqueda)
-      if (estado) parametros.set('estado', estado)
-      const todos = await pedirTodas(
-        `/movimientos-caja/?${parametros.toString()}`,
-      )
-
-      if (todos.length === 0) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Sin resultados',
-          text: 'No hay movimientos de caja para exportar.',
-          confirmButtonColor: '#4a9da8',
-        })
-        return
-      }
-
-      descargarCsv(
-        `movimientos-caja-${new Date().toISOString().slice(0, 10)}.csv`,
-        [
-          'Caja física',
-          'Sección',
-          'Empleado',
-          'Apertura',
-          'Cierre',
-          'Monto inicial',
-          'Monto teorico',
-          'Monto final',
-          'Diferencia',
-          'Estado',
-        ],
-        todos.map((item) => [
-          sinSucursal(item.caja_detalle, item.sucursal_detalle),
-          item.id,
-          item.empleado_detalle,
-          item.fecha_hora_apertura ?? '',
-          item.fecha_hora_cierre ?? '',
-          numeroCsv(item.monto_inicial),
-          item.monto_teorico === null ? '' : numeroCsv(item.monto_teorico),
-          item.monto_final === null ? '' : numeroCsv(item.monto_final),
-          item.monto_final === null || item.monto_teorico === null
-            ? ''
-            : numeroCsv(Number(item.monto_final) - Number(item.monto_teorico)),
-          item.estado_detalle,
-        ]),
-      )
-    } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo exportar',
-        text: e.message,
-        confirmButtonColor: '#4a9da8',
-      })
-    } finally {
-      setExportando(false)
-    }
   }
 
   const cajasDisponibles = sucursalActiva
@@ -535,17 +471,6 @@ export default function Caja() {
               )}
             </form>
 
-            <div className="comercial-acciones-barra">
-              <button
-                type="button"
-                className="boton-comercial-secundario"
-                onClick={exportar}
-                disabled={exportando}
-              >
-                <IconDownload size={18} />
-                {exportando ? 'Exportando…' : 'Exportar CSV'}
-              </button>
-            </div>
           </section>
 
           <section className="filtros-tabs filtros-pills">
@@ -662,7 +587,29 @@ export default function Caja() {
                       <IconEye size={17} />
                       Ver
                     </button>
-                    {puedeOperar && (
+                    {puedeOperar && seccion.estado === 'AB' && (
+                      <button
+                        type="button"
+                        className="boton-comercial-secundario"
+                        onClick={() => pausarSeccion(seccion)}
+                        title="Pausar seccion"
+                      >
+                        <IconPlayerPause size={17} />
+                        Pausar
+                      </button>
+                    )}
+                    {puedeOperar && seccion.estado === 'PA' && (
+                      <button
+                        type="button"
+                        className="boton-comercial-secundario"
+                        onClick={() => reanudarSeccion(seccion)}
+                        title="Reanudar seccion"
+                      >
+                        <IconPlayerPlay size={17} />
+                        Reanudar
+                      </button>
+                    )}
+                    {puedeOperar && seccion.estado === 'AB' && (
                       <button
                         type="button"
                         className="boton-comercial-primario"
@@ -718,10 +665,13 @@ export default function Caja() {
                     </tr>
                   )}
                   {datos.results.map((item) => {
+                    const cerrada = item.estado === 'CE' || item.estado === 'AU'
                     const diferencia =
-                      item.monto_final === null || item.monto_teorico === null
-                        ? null
-                        : Number(item.monto_final) - Number(item.monto_teorico)
+                      cerrada &&
+                      item.monto_final !== null &&
+                      item.monto_teorico !== null
+                        ? Number(item.monto_final) - Number(item.monto_teorico)
+                        : null
                     return (
                       <tr key={item.id}>
                         <td className="mono">#{item.id}</td>
@@ -797,7 +747,7 @@ export default function Caja() {
                                 <IconPlayerPause size={17} />
                               </button>
                             )}
-                            {item.estado === 'PA' && esDueño(item) && (
+                            {puedeOperar && item.estado === 'PA' && (
                               <button
                                 type="button"
                                 className="boton-icono boton-icono-exito"
@@ -941,7 +891,7 @@ export default function Caja() {
           seccion={detalleSeccion}
           puedeAuditar={puedeGestionar}
           puedePausar={puedeOperar}
-          puedeReanudar={esDueño(detalleSeccion)}
+          puedeReanudar={puedeOperar && detalleSeccion.estado === 'PA'}
           onPausar={pausarSeccion}
           onReanudar={reanudarSeccion}
           onCerrar={() => setDetalleSeccion(null)}
