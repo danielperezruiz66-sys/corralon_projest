@@ -142,6 +142,8 @@ Reglas fijas:
   `pagado_real`; `monto_sistema`/`monto_real` quedan como neto). El efectivo
   usa un solo “real contado”; los métodos no efectivos usan “real cobrado” y
   “real pagado”. Una diferencia genera nota inborrable en `observaciones`.
+- El cierre muestra siempre Efectivo y solo los métodos no efectivos que
+  tuvieron cobros o pagos en la jornada; el resto no se lista.
 - Monto inicial sugerido = efectivo del último cierre de esa caja; si difiere,
   `observaciones_apertura` es obligatoria.
 

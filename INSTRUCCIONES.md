@@ -1,13 +1,13 @@
 # INSTRUCCIONES
 
-Guía para instalar, ejecutar y cargar los datos de prueba de **Corralón Fer-Cons**.
+Guía para instalar, ejecutar y cargar los datos de prueba de **Corralón
+Fer-Cons**. Arquitectura y reglas de negocio en `AGENTS.md`; credenciales en
+`contraseñas.md`.
 
 El repositorio tiene dos partes independientes:
 
 - `backend/` → API Django + PostgreSQL.
 - `frontend/` → React + Vite.
-
-Para arquitectura, modelos y reglas de negocio, ver `AGENTS.md`.
 
 ## 1. Requisitos
 
@@ -55,12 +55,14 @@ pip install -r backend/requirements.txt
 cp .env.example .env
 ```
 
-> Si PowerShell bloquea la activación:
-> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+Editá `.env` (en la raíz) y configurá al menos `SECRET_KEY` y
+`DB_PASSWORD`. Por defecto el proyecto usa la base `corralon_bd`, usuario
+`postgres` y puerto **5433**. Si tu PostgreSQL usa el puerto estándar, cambiá
+`DB_PORT=5432`.
 
-Editá `.env` (en la raíz) y configurá al menos `DB_PASSWORD`. Por defecto el
-proyecto usa la base `corralon_bd`, usuario `postgres` y puerto **5433**. Si tu
-PostgreSQL usa el puerto estándar, cambiá `DB_PORT=5432`.
+`CORS_ALLOWED_ORIGINS` es opcional: por defecto permite `localhost` y
+`127.0.0.1` en los puertos 5175, 5173 y 4173. Si el frontend usa otro origen,
+agregalo ahí.
 
 ### 2.3 Crear la base de datos
 
@@ -82,17 +84,17 @@ python manage.py migrate
 python manage.py seed_data --reset
 ```
 
-`--reset` **borra los datos de negocio actuales** y genera un entorno completo:
+`--reset` **borra los datos de negocio actuales** y genera el entorno demo:
 
-- 2 sucursales en Salta: **Salta Capital** y **Campo Quijano**.
-- 2 depósitos y 2 cajas físicas (`Caja 1` y `Caja 2`) habilitadas en ambas
-  sucursales. Abren secciones simultáneamente en las dos.
-- 4 empleados por sucursal (Administrador, Cajero, Vendedor y Encargado de
-  depósito).
+- 1 sucursal: **Salta Capital**.
+- 2 depósitos y 2 cajas físicas (`Caja 1` y `Caja 2`); el seed las deja
+  abiertas.
+- 6 usuarios: `admin` (superuser) y los 5 empleados demo con sus roles.
 - 30 productos con categoría, marca, unidad, precio de venta, costo y stock.
-- 6 meses de compras y ventas (240 ventas y 72 compras por defecto).
+- 6 meses de compras y ventas (238 ventas y 72 compras por defecto).
 
-Para una carga más liviana:
+El comando imprime las credenciales generadas; también están en
+`contraseñas.md`. Para una carga más liviana:
 
 ```bash
 python manage.py seed_data --reset --ventas 50 --compras 20
@@ -119,27 +121,26 @@ npm install
 npm run dev
 ```
 
-Aplicación disponible en **http://localhost:5173/**.
+Vite muestra el puerto en la terminal (5173 por defecto; el equipo suele usar
+**5175**). Vite redirige `/api` a `http://localhost:8000`, así que el backend
+debe estar corriendo. Para usar otra URL, definí `VITE_API_URL`.
 
-Vite redirige `/api` a `http://localhost:8000`, así que el backend debe estar
-corriendo. Para usar otra URL, definí `VITE_API_URL`.
+## 4. Iniciar sesión
 
-## 4. Usuarios de prueba
+Abrí `http://localhost:<puerto>/login`. El login acepta **usuario o legajo** y
+la contraseña. La tabla completa está en `contraseñas.md`.
 
-El login acepta **usuario o legajo**. Todos los usuarios de sucursal usan la
-contraseña `test1234`.
+| Usuario | Contraseña | Legajo | Rol |
+|---|---|---|---|
+| `admin` | `admin1234` | — | Superuser |
+| `gerente.salta` | `test1234` | 0009 | Gerente |
+| `admin.salta` | `test1234` | 0001 | Administrador |
+| `cajero.salta` | `test1234` | 0002 | Cajero |
+| `vendedor.salta` | `test1234` | 0003 | Vendedor |
+| `deposito.salta` | `test1234` | 0004 | Depósito |
 
-| Usuario | Rol | Legajo |
-|---|---|---|
-| `admin` / `admin1234` | Superusuario | — |
-| `admin.salta` | Administrador | 0001 |
-| `cajero.salta` | Cajero | 0002 |
-| `vendedor.salta` | Vendedor | 0003 |
-| `deposito.salta` | Encargado de depósito | 0004 |
-| `admin.quijano` | Administrador | 0005 |
-| `cajero.quijano` | Cajero | 0006 |
-| `vendedor.quijano` | Vendedor | 0007 |
-| `deposito.quijano` | Encargado de depósito | 0008 |
+> Al cambiar una contraseña, la política exige letra + número + símbolo. El
+> `test1234` es solo la clave del seed.
 
 ## 5. Comandos útiles
 
@@ -149,7 +150,7 @@ Desde `backend/`:
 |---|---|
 | Verificar configuración | `python manage.py check` |
 | Aplicar migraciones | `python manage.py migrate` |
-| Correr los tests | `python manage.py test app` |
+| Correr los tests | `python manage.py test app` (313 tests) |
 | Cargar datos de prueba | `python manage.py seed_data --reset` |
 | Cancelar ventas vencidas | `python manage.py cancelar_ventas_vencidas --minutos 30` |
 
@@ -173,10 +174,17 @@ cd ../frontend
 npm install
 ```
 
+Si querés volver a los datos demo, recién ahí:
+
+```bash
+cd backend
+python manage.py seed_data --reset
+```
+
 ## 7. Cancelación de ventas vencidas (manual)
 
 Las ventas pendientes sin pagos **no se anulan automáticamente** tras
-`VENTAS_MINUTOS_PARA_CONFIRMAR` (30 minutos). Se muestran como **alerta** en el
+`VENTAS_MINUTOS_PARA_CONFIRMAR` (30 minutos). Se muestran como alerta en el
 dashboard y en el módulo de ventas; el stock sigue reservado hasta que se
 anulan manualmente.
 
