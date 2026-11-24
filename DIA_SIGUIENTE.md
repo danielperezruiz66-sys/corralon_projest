@@ -2,60 +2,42 @@
 
 > Único lugar de pendientes. Contexto y reglas en `AGENTS.md`; instalación en
 > `INSTRUCCIONES.md`; credenciales demo en `contraseñas.md`.
-> Se trabaja módulo por módulo, sin fases cerradas: al terminar uno se corrige,
-> se verifica y se actualizan estos pendientes.
 
-## Contexto al cierre — 2026-11-23
+## Estado auditado — 2026-11-24
 
-- Filtros de fecha de Ventas y Compras unificados en una sola tarjeta, con
-  topes de fecha, aviso de ajuste y rango inválido sin datos viejos.
-- QA E2E de Ventas: pestañas, presets y búsqueda; alta sin cliente; cliente
-  rápido con documento inválido/duplicado; cantidades y stock; cobro parcial
-  y total; idempotencia con doble clic; anulación con restauración de stock,
-  Inventario y Actividad.
-- Backend: consumidor final obligatorio sin cliente, mensaje de documento
-  duplicado y tests (263 OK). Frontend: lint 0 warnings y build OK.
-- Compras: filtros de pago y entrega separados; alta rápida de proveedor con
-  validación en vivo de CUIT, nombre, razón social, teléfono y email, más
-  duplicados; compra con validación de cantidades/costos, pagos idempotentes,
-  recepción, anulación y permisos por rol verificados contra stock, lotes y
-  Actividad. Backend de proveedores: 19 tests OK.
-- Inventario: validación en vivo en producto, catálogos, stock, depósitos,
-  carga/ajuste de stock, lotes y movimientos; duplicados bloqueados en
-  categorías, marcas, unidades, código y nombre+marca de producto y nombre de
-  depósito por sucursal; filtros de productos en la URL. Se quitaron los CSV y
-  se agregó comprobante interno imprimible en el detalle de venta/compra.
-- Unidades: `permite_decimales` en base, formulario que obliga a elegir entero o
-  decimales y validaciones de cantidades usando el flag de la unidad.
-- Proveedores · Productos y costos: búsqueda, paginación, asociación, alta
-  rápida, regla de margen, duplicados y edición verificados; corregida la
-  validación del código de proveedor (máximo 30, caracteres permitidos) en
-  frontend y backend. Sin errores 500; solo 400 controlados en duplicados.
-- Caja: renombrado visual de “sección” a “movimiento”; corregido el buscador
-  por caja (`Caja 2` y `2`), el duplicado de caja física con mensaje claro y
-  validación en vivo, el cierre con validación en vivo de contado y contraseña,
-  la apertura con mensajes en español y validación en vivo, la tabla de
-  movimientos compacta sin scroll horizontal, “Limpiar filtros”, tildes
-  visibles y etiquetas de Ventas/Compras/sidebar alineadas a “movimiento”.
-  QA forzada de apertura/cierre, pausa, auditoría y cajas físicas.
-- Caja: el estado de una caja física no se puede cambiar mientras tenga un
-  movimiento abierto o en pausa; se valida en API y se bloquea en la UI.
-- Backend: migraciones 0006 (CUIT 3–13) y 0007 (unicidad de catálogo/stock);
-  suite completa 277 tests OK. Frontend: lint 0 warnings y build OK.
+- Auditoría integral en vivo sobre todos los módulos: validaciones `400`
+  controladas, sin `500`, sin fuga de hashes y XSS escapado. Suite backend
+  actualizada; agregado `test_seguridad_roles` para roles, sucursal y caja.
+- Endurecido: lectura por rol (`roles_lectura`), `GE` ya no asigna ni edita el
+  rol `AD`, `is_staff` no se cambia por API, alcance por sucursal en ventas,
+  compras, caja, stock, depósitos y empleados, y la caja en pausa bloquea ventas
+  y pagos. `/api/token/` y `/api/token/refresh/` tienen límite por IP.
+- La caja pasa a ser de la sucursal: `/api/movimientos-caja/abiertas/` permite
+  que vendedor y depósito operen contra la caja abierta por el cajero.
+- Sesión en `sessionStorage`: se mantiene con la pestaña abierta y se descarta
+  al cerrar el navegador. Cada usuario cambia su contraseña desde Perfil con la
+  actual; solo `AD` cambia la de terceros.
+- Los pagos guardan la caja donde se cobraron (`movimiento_caja`): el saldo de
+  una venta/compra parcial se puede pagar aunque su caja original esté cerrada
+  y cae en el arqueo de la caja nueva. Probado contra la base demo y con tests.
+- Login: autofill de Chrome neutralizado con sombra interior y contraste de
+  íconos/campo ajustado. Corregido el `cargar` inexistente de Perfil.
 
-## Próximo módulo: Caja
+## Caja
 
-- [ ] Completar QA de reanudación con un movimiento `PA` real; hoy no hay datos
-      en pausa.
-- [ ] Verificar permisos finos de Caja con `CA`, `AD/GE` y roles de consulta en
-      la UI y la API.
+- [ ] Completar QA de pausa/reanudación con un movimiento `PA` real; hoy no
+      hay datos en pausa.
+- [ ] Probar en vivo el flujo vendedor/depósito contra la caja abierta por el
+      cajero y confirmar que el cierre incluye esas ventas.
+- [ ] Agregar selector de caja en el modal de cobro/pago cuando hay varias
+      cajas abiertas; hoy la API pide `movimiento_caja` y la UI no lo ofrece.
 - [ ] Definir si una diferencia de cierre distinta de cero exige observación
       obligatoria; hoy genera la nota automática y la observación es opcional.
 
 ## Ventas
 
 - [ ] Confirmar que la alerta de vencidas del Dashboard enruta a
-      `/ventas?alerta=vencida`. “Por vencer” ya no existe en la UI.
+      `/ventas?alerta=vencida` (hoy no hay ventas vencidas para probarlo).
 
 ## Compras
 
@@ -67,8 +49,7 @@
 ## Inventario
 
 - [ ] Definir si un producto debe poder desactivarse desde la UI. Hoy no hay
-      acción de baja y el `DELETE` de la API se bloquea si tiene stock o
-      historial (`protegido`).
+      acción de baja y el `DELETE` de la API se bloquea por las asociaciones.
 
 ## Proveedores
 
@@ -81,7 +62,6 @@
 - [ ] Proveedores.
 - [ ] Empleados.
 - [ ] Perfil y Actividad.
-- [ ] Menú/encabezado y navegación general.
 - [ ] En cada módulo revisado: cache con `useCacheModulo`, refresco en segundo
       plano, filtros/atajos correctos y coherencia con la API.
 - [ ] QA visual final con `admin`, `gerente.salta`, `cajero.salta`,
@@ -89,21 +69,23 @@
 
 ## Dashboard
 
-- [ ] Verificar las 4 tarjetas (hoy, últimos 7 días, mes calendario, parciales).
 - [ ] Verificar alertas: vencidas, stock negativo/bajo y compras por recibir;
       enrutamientos a las tarjetas secundarias y desde allí a los módulos.
 - [ ] Verificar cache en memoria (15 s + foco de ventana) y el refresco al
       volver desde otro módulo.
+- [ ] Omitir desde la API los bloques del dashboard que el rol no puede ver.
 
 ## Backend
 
 - [ ] Revisar en Compras el mismo N+1 de `movimiento_caja__caja__sucursal`
       que se corrigió en el listado de Ventas.
-
 - [ ] Reversión de pagos para poder anular ventas `PC`/`CO` y compras pagadas.
 - [ ] Dashboard V2: top productos, formas de pago, ventas por sucursal,
       diferencias de caja y actividad reciente.
-- [ ] Omitir desde la API los bloques del dashboard que el rol no puede ver.
+- [ ] Revisar el límite de login por IP en la nube: si varios locales comparten
+      salida NAT, evaluar límite por usuario (`django-axes`) además del de IP.
+- [ ] Probar que una pestaña duplicada no pierda la sesión al rotar el refresh
+      (hoy cada pestaña tiene su propio `sessionStorage`).
 
 ## Documentación
 

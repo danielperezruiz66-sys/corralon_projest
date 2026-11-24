@@ -68,8 +68,9 @@ Reglas fijas:
 - `Deposito.es_predeterminado`: uno por sucursal; la compra sin depósito usa
   el central. El nombre del depósito es único por sucursal (sin distinguir
   mayúsculas).
-- `GET /api/stocks/` sin `?sucursal=` muestra todas las sucursales (lectura
-  estratégica). Operar (vender, ajustar, recibir) sigue atado a la sucursal.
+- `GET /api/stocks/` sin `?sucursal=` devuelve las sucursales permitidas del
+  usuario (superuser/`AD`, todas). Operar (vender, ajustar, recibir) sigue atado
+  a la sucursal.
 - Ajuste detallado por lote: `POST /api/stocks/{id}/ajustar/`.
 
 ### Catálogo
@@ -98,6 +99,10 @@ Reglas fijas:
 - Solo `PE` sin pagos vence a los 30 min (`VENTAS_MINUTOS_PARA_CONFIRMAR`) y
   puede anularse manualmente. `PC`/`CO` no vencen y requieren reversión de pagos
   para anular (pendiente).
+- Cada pago guarda la caja donde se cobró (`MetodoPagoXVenta.movimiento_caja`).
+  El saldo de una venta `PC` se puede cobrar aunque su caja original esté
+  cerrada: se imputa a la caja abierta del usuario o a la única abierta de la
+  sucursal; si hay varias, el payload indica `movimiento_caja`.
 - La alerta de vencimiento se muestra a `AD/GE/CA`.
 - `Venta.cliente_venta` es el nombre libre opcional del consumidor final.
 
@@ -122,9 +127,13 @@ Reglas fijas:
   `AD/GE` pueden auditar.
 - El estado de una `Caja` (activa/inactiva/mantenimiento) solo se puede cambiar
   cuando no tiene movimientos `AB`/`PA`.
-- Solo `CA` abre en sucursales asignadas; `AD/GE` en cualquiera y pueden abrir
-  a nombre de otro empleado habilitado (queda auditado).
-- En pausa no se venden, cobran ni arquear; primero se reanuda.
+- Cada uno abre en sus sucursales asignadas; superuser/`AD` en cualquiera.
+  `AD/GE` pueden abrir a nombre de otro empleado habilitado (queda auditado).
+- La caja es de la sucursal, no de la persona: `GET /api/movimientos-caja/abiertas/`
+  devuelve las cajas `AB` de las sucursales permitidas y cualquier rol operativo
+  puede vender o comprar contra ellas. El movimiento conserva quién lo abrió.
+- En pausa no se venden, cobran, pagan ni arquear; primero se reanuda. El pago
+  de compras también exige caja `AB`.
 - `DetalleCierreCaja` guarda sistema vs. real por método. Al cerrar, “Contado”
   arranca en el teórico; una diferencia genera nota inborrable en
   `observaciones`.
@@ -146,10 +155,14 @@ Reglas fijas:
 | Perfil / Actividad | ✔ | ✔ | perfil | perfil | perfil |
 
 Cobrar/confirmar/anular ventas: `AD/GE/CA`. Pagar/anular compras: `AD/GE`.
-`is_superuser` y `AD` pueden todo. Sin rol = solo lectura. Un empleado
-suspendido/inactivo no accede (login y API). El cambio de contraseña de un
-empleado es solo `AD` y exige `password_admin`. En caja, `CA` y roles no gestión
-solo ven sus propios movimientos; `GE` ve los de sus sucursales.
+`is_superuser` y `AD` pueden todo, aunque el superusuario no tenga rol. El
+resto de roles solo lee los módulos de la tabla: `roles_lectura` se declara por
+viewset en la API (sin rol no accede a ningún módulo operativo). Un empleado
+suspendido/inactivo no accede (login y API). Cambiar la contraseña de otro
+empleado es solo `AD` y exige `password_admin`; cada usuario cambia la propia
+desde Perfil con `password_actual`. `GE` no puede asignar `AD`, ni editar o
+quitar ese rol. En caja, `CA` y roles no gestión solo ven sus propios
+movimientos; `GE` ve los de sus sucursales.
 
 ### Auditoría e idempotencia
 
@@ -198,11 +211,24 @@ caja y pagos se escriben mediante acciones/servicios.
 
 Los pagos no permiten pagar de más, pagar documentos anulados ni usar métodos
 inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
+También exigen una caja `AB` y guardan en qué caja se cobró o pagó, para que el
+arqueo sume el dinero en la caja correcta aunque el documento sea de otra caja.
+El teórico (`calcular_teorico`) agrupa por `pago.movimiento_caja`; los pagos
+históricos sin ese dato caen en la caja original del documento.
 
 ## 5. API y permisos
 
-- JWT: `POST /api/token/` (usuario o legajo) y `/api/token/refresh/`.
+- JWT: `POST /api/token/` (usuario o legajo) y `/api/token/refresh/`. Ambos
+  tienen límite por IP (`DEFAULT_THROTTLE_RATES`: `token` 20/min, `refresh`
+  60/min) para frenar la fuerza bruta.
 - Paginación 20; filtros DjangoFilter + Search + Ordering.
+- Lectura por rol: cada viewset declara `roles_lectura`; sin el atributo la
+  lectura queda abierta a autenticados (catálogos de referencia). Sin rol no
+  accede a los módulos operativos. `superuser`/`AD` ven todo.
+- Sucursal: las lecturas y escrituras de ventas, compras, cajas, movimientos,
+  stock, depósitos, detalles y empleados se limitan a las sucursales asignadas;
+  un `?sucursal=` ajeno devuelve 403 y el superuser/`AD` no se limita
+  (`services/acceso.py`).
 - Errores: `400 {"detail": "...", "codigo": "..."}` con `stock_insuficiente`,
   `error_de_negocio`, `validacion`, `no_encontrado`, `protegido` o
   `duplicado`.
@@ -213,13 +239,14 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
   `ventas.pendientes` (`PE`) de `ventas.parciales` (`PC`).
 - Escrituras clave:
   - `POST /api/ventas/`, `/{id}/cobrar/`, `/{id}/confirmar/`, `/{id}/cancelar/`.
+    `cobrar` acepta `movimiento_caja` opcional para elegir la caja del cobro.
   - `PATCH /api/stocks/{id}/` (mínimos) y `POST /api/stocks/{id}/ajustar/`.
   - `POST /api/detalles-stock/{id}/mover/`.
   - `POST /api/compras/`, `/{id}/en-camino/`, `/{id}/recibir/`, `/{id}/pagar/`,
-    `/{id}/anular/`.
+    `/{id}/anular/`. `pagar` acepta `movimiento_caja` opcional.
   - `POST /api/movimientos-caja/`, `/{id}/cerrar/`, `/{id}/pausar/`,
     `/{id}/reanudar/`, `/{id}/auditar/`, `/{id}/teorico/`, `/mia/`,
-    `/sugerencia/`.
+    `/abiertas/`, `/sugerencia/`.
   - `POST /api/empleados/`, `/{id}/cambiar-password/`.
 - `Usuario` exige `IsAdminUser`; contraseña write-only. `Producto` acepta
   `sucursales` y sincroniza `ProductoXSucursal`.
@@ -235,11 +262,18 @@ inactivos; `registrar_pagos_*` guarda varios métodos en una sola transacción.
   (`es_central`) o la única asignada, y la usa solo para operar (caja, ventas,
   compras, altas). Los listados y el dashboard no envían `?sucursal=`. El
   backend conserva el soporte multi-sucursal para una etapa futura.
-- Tokens en `localStorage` (`corralon.acceso` / `corralon.refresco`); ante 401,
+- Tokens en `sessionStorage` (`corralon.acceso` / `corralon.refresco`): la
+  sesión se mantiene con la pestaña abierta y se descarta al cerrarla. Ante 401,
   `pedir()` renueva y reintenta una vez.
 - Módulos: Dashboard, Ventas, Compras, Clientes, Inventario, Proveedores, Caja,
   Empleados, Perfil, Configuración (solo `AD`) y Actividad. Facturación muestra
   mantenimiento.
+- Perfil: solo `AD` edita datos personales y contraseñas de terceros; cualquier
+  usuario cambia su propia contraseña confirmando la actual y la sesión se
+  cierra para volver a ingresar.
+- Ventas y compras usan las cajas abiertas de la sucursal
+  (`/api/movimientos-caja/abiertas/`), no solo la del usuario: la caja pertenece
+  al local y el movimiento registra quién la abrió.
 - **Cache en memoria + actualización en segundo plano**: patrón obligatorio en
   cada módulo que se revise, implementado en `hooks/useCacheModulo.js`. Se
   cachea la última respuesta por usuario y filtros (y sucursal cuando aplique);
