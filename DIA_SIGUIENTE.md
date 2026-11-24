@@ -5,9 +5,10 @@
 
 ## Estado auditado — 2026-11-24
 
-- Auditoría integral en vivo sobre todos los módulos: validaciones `400`
-  controladas, sin `500`, sin fuga de hashes y XSS escapado. Suite backend
-  actualizada; agregado `test_seguridad_roles` para roles, sucursal y caja.
+- Auditoría funcional de reglas de negocio sobre todos los módulos:
+  validaciones `400` controladas, sin `500`, sin fuga de hashes y XSS escapado.
+  Suite backend actualizada; agregado `test_seguridad_roles` para roles,
+  sucursal y caja. La QA visual módulo por módulo sigue pendiente.
 - Endurecido: lectura por rol (`roles_lectura`), `GE` ya no asigna ni edita el
   rol `AD`, `is_staff` no se cambia por API, alcance por sucursal en ventas,
   compras, caja, stock, depósitos y empleados, y la caja en pausa bloquea ventas
@@ -22,6 +23,9 @@
   y cae en el arqueo de la caja nueva. Probado contra la base demo y con tests.
 - Login: autofill de Chrome neutralizado con sombra interior y contraste de
   íconos/campo ajustado. Corregido el `cargar` inexistente de Perfil.
+- Verificado en Chrome (Vite en `:5175`): login, dashboard de cajero y cobro de
+  una venta parcial sin errores de consola. La prueba de cobro dejó un pago de
+  $1 sobre la venta demo #718, imputado a la caja abierta #799.
 
 ## Caja
 

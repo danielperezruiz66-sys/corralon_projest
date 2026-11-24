@@ -3,7 +3,7 @@
 > Contexto permanente y reglas del proyecto. Al empezar una sesión, leer
 > `DIA_SIGUIENTE.md`. Reglas de documentación en §10.
 
-**Última actualización:** 2026-11-22
+**Última actualización:** 2026-11-24
 
 ## 1. Stack
 
@@ -11,18 +11,21 @@
   Python 3.14. Venv en la raíz (`venv/`).
 - `frontend/`: React 19 + Vite 8 + JavaScript (sin TypeScript) + Tailwind 4,
   React Router 7, Tabler Icons, SweetAlert2 y react-hook-form. Node 20+.
-- API en `http://localhost:8000`; Vite en `http://localhost:5173`.
+- API en `http://localhost:8000`; Vite en `http://localhost:5175` (el equipo
+  usa ese puerto; el default de Vite es 5173).
 - `.env` en la raíz (no se commitea); plantilla en `.env.example`.
 - Entorno de desarrollo: Windows + WSL Ubuntu (Warp). El `venv/` actual
   usa ejecutables Windows (`../venv/Scripts/python.exe`) o su equivalente en
   WSL; OpenCode tiene activos los MCPs `context7`, `sequential-thinking` y
   `chrome-devtools` (conectado al Chrome de Windows) y la skill `django-react-base`.
 
-Estado: backend consolidado (35 modelos, 34 viewsets, suite en `app.tests`),
-una sola sucursal operativa por empresa. Frontend con Dashboard, Ventas,
-Compras, Clientes, Inventario, Proveedores, Caja, Empleados, Perfil,
-Configuración y Actividad. Falta la revisión/QA visual módulo por módulo y las
-métricas del Dashboard V2. Facturación ARCA está bloqueada.
+Estado: backend consolidado (35 modelos, 34 viewsets, 302 tests en `app.tests`),
+una sola sucursal operativa por empresa. Lectura y escritura limitadas por rol y
+sucursal; la caja es de la sucursal y los pagos parciales se imputan a la caja
+donde se cobran. Frontend con Dashboard, Ventas, Compras, Clientes, Inventario,
+Proveedores, Caja, Empleados, Perfil, Configuración y Actividad. Falta la
+revisión/QA visual módulo por módulo y las métricas del Dashboard V2.
+Facturación ARCA está bloqueada.
 
 ## 2. Estructura
 
@@ -32,11 +35,11 @@ backend/
 └── app/                    # ÚNICA app Django
     ├── models.py           # un solo archivo, 35 modelos por dominio
     ├── services/           # stock, caja, ventas, compras, pagos,
-    │                       # proveedores, empleados
+    │                       # proveedores, empleados, acceso
     ├── management/commands/# seed_data, cancelar_ventas_vencidas
-    ├── migrations/         # 0001 esquema + 0002/0003 estado Parcial
-    │                       # + 0004/0005 unicidad del catálogo
-    ├── tests/              # suite en app.tests (259 tests)
+    ├── migrations/         # 0001 esquema + 0002-0010 reglas de negocio
+    │                       # + 0011 caja de los pagos
+    ├── tests/              # suite en app.tests (302 tests)
     ├── permissions.py  backends.py  exceptions.py
     └── serializers.py  views.py  urls.py
 frontend/src/
@@ -203,6 +206,7 @@ La lógica vive en `backend/app/services/`; las vistas validan y delegan.
 | `compras.py` | `registrar_compra`, `anular_compra`, `marcar_en_camino`, `recibir_compra` |
 | `pagos.py` | `registrar_pago_venta`, `registrar_pagos_venta`, `registrar_pago_compra`, `registrar_pagos_compra` |
 | `proveedores.py` | `asociar_productos` |
+| `acceso.py` | `sucursales_permitidas`, `sucursal_permitida`, `filtrar_por_sucursal` |
 
 `Stock`, `DetalleVenta`, `Factura`, `DetalleCompra` y `MovimientoCaja` no se
 editan con `PUT`/`PATCH`/`DELETE` general. `DetalleStock` solo permite editar
@@ -248,8 +252,9 @@ históricos sin ese dato caen en la caja original del documento.
     `/{id}/reanudar/`, `/{id}/auditar/`, `/{id}/teorico/`, `/mia/`,
     `/abiertas/`, `/sugerencia/`.
   - `POST /api/empleados/`, `/{id}/cambiar-password/`.
-- `Usuario` exige `IsAdminUser`; contraseña write-only. `Producto` acepta
-  `sucursales` y sincroniza `ProductoXSucursal`.
+- `Usuario` exige `IsAdminUser`; contraseña write-only y `is_staff` de solo
+  lectura (se otorga desde el admin de Django). `Producto` acepta `sucursales`
+  y sincroniza `ProductoXSucursal`.
 - `GET/PATCH /api/empresas/` es solo para `AD`/superuser (`SoloAdministrador`);
   alimenta el módulo Configuración.
 
@@ -279,8 +284,8 @@ históricos sin ese dato caen en la caja original del documento.
   cachea la última respuesta por usuario y filtros (y sucursal cuando aplique);
   se muestra al volver o cambiar de pestaña y se refresca al enfocar la ventana
   (e Inicio además cada 15 s). Tras escribir se invalida el prefijo del módulo y
-  se recarga. Inicio y Ventas ya lo usan; al iniciar sesión se precarga la
-  primera página de Ventas (`api/ventas.js`) para que el módulo abra al
+  se recarga. Todos los módulos de datos lo usan; al iniciar sesión se precarga
+  la primera página de Ventas (`api/ventas.js`) para que el módulo abra al
   instante.
 - **Regla obligatoria**: todo módulo, página, listado o formulario, incluidos los
   nuevos (Perfil, Configuración, Facturación, Actividad), debe implementarse con
@@ -326,7 +331,7 @@ cd backend
 ../venv/Scripts/python.exe manage.py check
 ../venv/Scripts/python.exe manage.py makemigrations --check --dry-run
 ../venv/Scripts/python.exe manage.py migrate
-../venv/Scripts/python.exe manage.py test app              # 259 tests
+../venv/Scripts/python.exe manage.py test app              # 302 tests
 ../venv/Scripts/python.exe manage.py seed_data [--reset] [--ventas 240] [--compras 72]
 ../venv/Scripts/python.exe manage.py cancelar_ventas_vencidas [--minutos 30]
 
@@ -343,7 +348,7 @@ sucursal (Salta Capital), `admin`/`admin1234`, empleados demo
 El barrido de vencidas es manual; no programar tarea.
 
 - Verificación visual y E2E con MCP `chrome-devtools`: con Django (`:8000`)
-  y Vite (`:5173`) levantados, probar el flujo modificado en Chrome real,
+  y Vite (`:5175`) levantados, probar el flujo modificado en Chrome real,
   verificando ausencia de errores en consola, respuestas HTTP esperadas
   (`200`/`201`/`400` controlado) y validación reactiva en inputs.
 
