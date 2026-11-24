@@ -21,6 +21,7 @@
 - Los pagos guardan la caja donde se cobraron (`movimiento_caja`): el saldo de
   una venta/compra parcial se puede pagar aunque su caja original esté cerrada
   y cae en el arqueo de la caja nueva. Probado contra la base demo y con tests.
+  Los modales de cobro/pago permiten elegir la caja entre las abiertas.
 - Login: autofill de Chrome neutralizado con sombra interior y contraste de
   íconos/campo ajustado. Corregido el `cargar` inexistente de Perfil.
 - Verificado en Chrome (Vite en `:5175`): login, dashboard de cajero y cobro de
@@ -33,8 +34,6 @@
       hay datos en pausa.
 - [ ] Probar en vivo el flujo vendedor/depósito contra la caja abierta por el
       cajero y confirmar que el cierre incluye esas ventas.
-- [ ] Agregar selector de caja en el modal de cobro/pago cuando hay varias
-      cajas abiertas; hoy la API pide `movimiento_caja` y la UI no lo ofrece.
 - [ ] Definir si una diferencia de cierre distinta de cero exige observación
       obligatoria; hoy genera la nota automática y la observación es opcional.
 

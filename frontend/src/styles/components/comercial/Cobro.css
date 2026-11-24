@@ -77,6 +77,16 @@
   line-height: 1.4;
 }
 
+.cobro-selector-caja {
+  margin-bottom: 1rem;
+}
+
+.cobro-selector-ayuda {
+  color: rgba(15, 42, 48, 0.6);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .cobro-pagos-lista {
   display: flex;
   flex-direction: column;

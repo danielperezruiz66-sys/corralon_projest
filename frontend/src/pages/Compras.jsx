@@ -157,6 +157,9 @@ export default function Compras() {
   const [pago, setPago] = useState(null)
   const [metodos, setMetodos] = useState([])
   const [pagosPago, setPagosPago] = useState([])
+  const [movimientosAbiertos, setMovimientosAbiertos] = useState([])
+  const [movimientoPago, setMovimientoPago] = useState('')
+  const [cargandoCajas, setCargandoCajas] = useState(false)
   const [pagando, setPagando] = useState(false)
   const [modalAbierto, setModalAbierto] = useState(
     () => searchParams.get('nueva') === '1',
@@ -425,6 +428,29 @@ export default function Compras() {
     setPago(compra)
     setClavePago(nuevaClave())
     setPagosPago([nuevoPago('', saldoCompra(compra).toFixed(2))])
+    setMovimientoPago('')
+    setMovimientosAbiertos([])
+    setCargandoCajas(true)
+
+    pedir('/movimientos-caja/abiertas/')
+      .then((respuesta) => {
+        const abiertas = Array.isArray(respuesta) ? respuesta : []
+        setMovimientosAbiertos(abiertas)
+        const original = abiertas.find(
+          (movimiento) => movimiento.id === compra.movimiento_caja,
+        )
+        const propia = abiertas.find(
+          (movimiento) => movimiento.empleado === user?.empleado?.id,
+        )
+        const elegida = original ?? propia ?? abiertas[0]
+        setMovimientoPago(elegida ? String(elegida.id) : '')
+      })
+      .catch(() => {
+        setMovimientosAbiertos([])
+        setMovimientoPago('')
+      })
+      .finally(() => setCargandoCajas(false))
+
     if (metodos.length > 0) {
       return
     }
@@ -468,6 +494,9 @@ export default function Compras() {
         metodo_pago: Number(item.metodo),
         monto_pagado: montoPago(item.monto).toFixed(2),
       })),
+    }
+    if (movimientoPago) {
+      cuerpo.movimiento_caja = Number(movimientoPago)
     }
     try {
       const actualizada = await pedir(`/compras/${pago.id}/pagar/`, {
@@ -1143,6 +1172,38 @@ export default function Compras() {
               Podés combinar varios métodos de pago. La compra queda Pagada
               cuando los pagos cubren el total.
             </p>
+
+            <label className="campo-comercial cobro-selector-caja">
+              <span>Caja donde se paga *</span>
+              <select
+                value={movimientoPago}
+                onChange={(evento) => setMovimientoPago(evento.target.value)}
+                disabled={cargandoCajas}
+                className={!movimientoPago ? 'input-error' : ''}
+              >
+                <option value="">
+                  {cargandoCajas ? 'Cargando cajas…' : 'Seleccioná una caja'}
+                </option>
+                {movimientosAbiertos.map((movimiento) => (
+                  <option key={movimiento.id} value={movimiento.id}>
+                    {`Movimiento #${movimiento.id} · ${movimiento.caja_detalle}${
+                      movimiento.sucursal_detalle
+                        ? ` · ${movimiento.sucursal_detalle}`
+                        : ''
+                    }${
+                      movimiento.empleado_detalle
+                        ? ` · ${movimiento.empleado_detalle}`
+                        : ''
+                    }`}
+                  </option>
+                ))}
+              </select>
+              <small className="cobro-selector-ayuda">
+                {!cargandoCajas && movimientosAbiertos.length === 0
+                  ? 'No hay cajas abiertas: abrí una caja para pagar.'
+                  : 'El pago se imputa a esta caja para el arqueo.'}
+              </small>
+            </label>
 
             <div className="cobro-pagos-lista">
               {pagosPago.map((item, indice) => (

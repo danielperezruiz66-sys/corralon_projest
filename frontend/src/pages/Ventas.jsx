@@ -133,6 +133,9 @@ export default function Ventas() {
   const [claveCobro, setClaveCobro] = useState('')
   const [metodos, setMetodos] = useState([])
   const [pagosCobro, setPagosCobro] = useState([])
+  const [movimientosAbiertos, setMovimientosAbiertos] = useState([])
+  const [movimientoCobro, setMovimientoCobro] = useState('')
+  const [cargandoCajas, setCargandoCajas] = useState(false)
   const [cobrando, setCobrando] = useState(false)
   const [modalAbierto, setModalAbierto] = useState(
     () =>
@@ -367,6 +370,28 @@ export default function Ventas() {
     setClaveCobro(nuevaClave())
     setCobro(venta)
     setDetalle(null)
+    setMovimientoCobro('')
+    setMovimientosAbiertos([])
+    setCargandoCajas(true)
+
+    pedir('/movimientos-caja/abiertas/')
+      .then((respuesta) => {
+        const abiertas = Array.isArray(respuesta) ? respuesta : []
+        setMovimientosAbiertos(abiertas)
+        const original = abiertas.find(
+          (movimiento) => movimiento.id === venta.movimiento_caja,
+        )
+        const propia = abiertas.find(
+          (movimiento) => movimiento.empleado === user?.empleado?.id,
+        )
+        const elegida = original ?? propia ?? abiertas[0]
+        setMovimientoCobro(elegida ? String(elegida.id) : '')
+      })
+      .catch(() => {
+        setMovimientosAbiertos([])
+        setMovimientoCobro('')
+      })
+      .finally(() => setCargandoCajas(false))
   }
 
   async function registrarCobro() {
@@ -403,15 +428,19 @@ export default function Ventas() {
 
     setCobrando(true)
     try {
+      const cuerpo = {
+        clave: claveCobro,
+        pagos: pagosCobro.map((pago) => ({
+          metodo_pago: Number(pago.metodo),
+          monto_pagado: montoPago(pago.monto).toFixed(2),
+        })),
+      }
+      if (movimientoCobro) {
+        cuerpo.movimiento_caja = Number(movimientoCobro)
+      }
       const respuesta = await pedir(`/ventas/${cobro.id}/cobrar/`, {
         method: 'POST',
-        body: JSON.stringify({
-          clave: claveCobro,
-          pagos: pagosCobro.map((pago) => ({
-            metodo_pago: Number(pago.metodo),
-            monto_pagado: montoPago(pago.monto).toFixed(2),
-          })),
-        }),
+        body: JSON.stringify(cuerpo),
       })
 
       const quedaSaldo = respuesta.estado === 'PC'
@@ -1036,6 +1065,38 @@ export default function Ventas() {
               saldo, la venta se confirma automáticamente; si no, queda
               parcial.
             </p>
+
+            <label className="campo-comercial cobro-selector-caja">
+              <span>Caja donde se cobra *</span>
+              <select
+                value={movimientoCobro}
+                onChange={(evento) => setMovimientoCobro(evento.target.value)}
+                disabled={cargandoCajas}
+                className={!movimientoCobro ? 'input-error' : ''}
+              >
+                <option value="">
+                  {cargandoCajas ? 'Cargando cajas…' : 'Seleccioná una caja'}
+                </option>
+                {movimientosAbiertos.map((movimiento) => (
+                  <option key={movimiento.id} value={movimiento.id}>
+                    {`Movimiento #${movimiento.id} · ${movimiento.caja_detalle}${
+                      movimiento.sucursal_detalle
+                        ? ` · ${movimiento.sucursal_detalle}`
+                        : ''
+                    }${
+                      movimiento.empleado_detalle
+                        ? ` · ${movimiento.empleado_detalle}`
+                        : ''
+                    }`}
+                  </option>
+                ))}
+              </select>
+              <small className="cobro-selector-ayuda">
+                {!cargandoCajas && movimientosAbiertos.length === 0
+                  ? 'No hay cajas abiertas: abrí una caja para cobrar.'
+                  : 'El cobro se imputa a esta caja para el arqueo.'}
+              </small>
+            </label>
 
             <div className="cobro-pagos-lista">
               {pagosCobro.map((pago, indice) => (

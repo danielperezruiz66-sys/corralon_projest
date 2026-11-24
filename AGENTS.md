@@ -278,7 +278,8 @@ históricos sin ese dato caen en la caja original del documento.
   cierra para volver a ingresar.
 - Ventas y compras usan las cajas abiertas de la sucursal
   (`/api/movimientos-caja/abiertas/`), no solo la del usuario: la caja pertenece
-  al local y el movimiento registra quién la abrió.
+  al local y el movimiento registra quién la abrió. Los modales de cobro y pago
+  muestran un selector con esas cajas y envían `movimiento_caja`.
 - **Cache en memoria + actualización en segundo plano**: patrón obligatorio en
   cada módulo que se revise, implementado en `hooks/useCacheModulo.js`. Se
   cachea la última respuesta por usuario y filtros (y sucursal cuando aplique);
