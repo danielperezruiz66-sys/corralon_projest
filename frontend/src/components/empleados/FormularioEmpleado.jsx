@@ -110,7 +110,12 @@ function inicialValores(empleado) {
   }
 }
 
-export default function FormularioEmpleado({ empleado, onCerrar, onGuardado }) {
+export default function FormularioEmpleado({
+  empleado,
+  puedeAsignarAdmin = false,
+  onCerrar,
+  onGuardado,
+}) {
   const esAlta = !empleado || !empleado.id
   const { sucursalActiva } = useSucursal()
   const [valores, setValores] = useState(() => inicialValores(empleado))
@@ -137,7 +142,13 @@ export default function FormularioEmpleado({ empleado, onCerrar, onGuardado }) {
           return
         }
         setRoles(
-          rolesData.filter((rol) => rol.codigo !== null && rol.codigo !== ''),
+          rolesData.filter(
+            (rol) =>
+              rol.codigo !== null &&
+              rol.codigo !== '' &&
+              // Solo un administrador puede otorgar el rol AD.
+              (rol.codigo !== 'AD' || puedeAsignarAdmin),
+          ),
         )
         setCargando(false)
       })
@@ -151,7 +162,7 @@ export default function FormularioEmpleado({ empleado, onCerrar, onGuardado }) {
     return () => {
       vigente = false
     }
-  }, [])
+  }, [puedeAsignarAdmin])
 
   function setValor(campo, valor) {
     setValores((actuales) => ({ ...actuales, [campo]: valor }))

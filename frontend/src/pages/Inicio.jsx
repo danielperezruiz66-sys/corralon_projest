@@ -420,6 +420,7 @@ export default function Inicio() {
             {bloques.ventas && (
               <>
                 <TarjetaKpi
+                  tono="kpi-hoy"
                   icono={IconCurrencyDollar}
                   etiqueta="Ventas de hoy"
                   valor={formatearMoneda(ventas.hoy.monto)}
@@ -432,6 +433,7 @@ export default function Inicio() {
                   }
                 />
                 <TarjetaKpi
+                  tono="kpi-7d"
                   icono={IconChartBar}
                   etiqueta="Ventas de los últimos 7 días"
                   valor={formatearMoneda(ventas.ultimos_7_dias.monto)}
@@ -456,6 +458,7 @@ export default function Inicio() {
                   }
                 />
                 <TarjetaKpi
+                  tono="kpi-mes"
                   icono={IconCalendar}
                   etiqueta="Ventas del mes"
                   valor={formatearMoneda(ventas.mes.monto)}
@@ -468,6 +471,7 @@ export default function Inicio() {
                   }
                 />
                 <TarjetaKpi
+                  tono="kpi-parciales"
                   icono={IconShoppingCart}
                   etiqueta="Parciales"
                   valor={formatearNumero(ventas.parciales.cantidad)}
@@ -477,7 +481,6 @@ export default function Inicio() {
                       pendiente
                     </span>
                   }
-                  tono={ventas.parciales.cantidad > 0 ? 'kpi-aviso' : ''}
                 />
               </>
             )}

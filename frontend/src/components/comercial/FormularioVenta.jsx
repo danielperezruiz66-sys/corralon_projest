@@ -137,7 +137,7 @@ export default function FormularioVenta({ modo = 'venta', clienteInicial = '', o
   useEffect(() => {
     let vigente = true
 
-    pedirTodas('/movimientos-caja/?estado=AB')
+    pedirTodas('/movimientos-caja/abiertas/')
       .then((seccionesData) => {
         if (!vigente) {
           return

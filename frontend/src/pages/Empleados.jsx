@@ -354,6 +354,7 @@ export default function Empleados() {
       {empleadoEditando !== null && (
         <FormularioEmpleado
           empleado={empleadoEditando}
+          puedeAsignarAdmin={esAdministrador}
           onCerrar={() => setEmpleadoEditando(null)}
           onGuardado={empleadoGuardado}
         />

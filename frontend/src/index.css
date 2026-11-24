@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Abel", system-ui, sans-serif;
+  --font-sans: "Barlow Semi Condensed", system-ui, sans-serif;
   --color-login: #326f7a;
   --color-campo: #5ba8b0;
   --color-oscuro: #0f2a30;

@@ -869,6 +869,7 @@ export default function Compras() {
       {modalAbierto && (
         <FormularioCompra
           puedeGestionar={puedeGestionar}
+          puedeEditarProveedores={puedeEscribir(['AD', 'GE', 'ED'])}
           onCerrar={() => setModalAbierto(false)}
           onGuardado={() => actualizarListado()}
         />

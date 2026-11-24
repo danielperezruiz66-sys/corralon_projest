@@ -4,7 +4,7 @@ import {
   iniciarSesion,
   obtenerPerfil,
 } from '../api/auth'
-import { tieneSesion } from '../api/client'
+import { EVENTO_SESION_EXPIRADA, tieneSesion } from '../api/client'
 import { precargarListadoVentas } from '../api/ventas'
 import { AuthContext } from './auth-context'
 
@@ -63,6 +63,17 @@ export function AuthProvider({ children }) {
     return () => {
       vigente = false
     }
+  }, [])
+
+  useEffect(() => {
+    const alExpirarSesion = () => {
+      borrarSesion()
+      setPerfil(null)
+      setCargando(false)
+    }
+    window.addEventListener(EVENTO_SESION_EXPIRADA, alExpirarSesion)
+    return () =>
+      window.removeEventListener(EVENTO_SESION_EXPIRADA, alExpirarSesion)
   }, [])
 
   const login = useCallback(async (usuario, password) => {

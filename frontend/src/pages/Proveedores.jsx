@@ -362,20 +362,30 @@ export default function Proveedores() {
                       <td>{item.contacto || '—'}</td>
                       <td>{item.email_prov || '—'}</td>
                       <td>
-                        <button
-                          type="button"
-                          className={`inventario-estado ${
-                            item.estado_prov ? 'activo' : 'inactivo'
-                          }`}
-                          onClick={() => alternarEstado(item)}
-                          title={
-                            item.estado_prov
-                              ? 'Marcar como inactivo'
-                              : 'Marcar como activo'
-                          }
-                        >
-                          {item.estado_prov ? 'Activo' : 'Inactivo'}
-                        </button>
+                        {puedeEditar ? (
+                          <button
+                            type="button"
+                            className={`inventario-estado ${
+                              item.estado_prov ? 'activo' : 'inactivo'
+                            }`}
+                            onClick={() => alternarEstado(item)}
+                            title={
+                              item.estado_prov
+                                ? 'Marcar como inactivo'
+                                : 'Marcar como activo'
+                            }
+                          >
+                            {item.estado_prov ? 'Activo' : 'Inactivo'}
+                          </button>
+                        ) : (
+                          <span
+                            className={`inventario-estado ${
+                              item.estado_prov ? 'activo' : 'inactivo'
+                            }`}
+                          >
+                            {item.estado_prov ? 'Activo' : 'Inactivo'}
+                          </span>
+                        )}
                       </td>
                       <td>
                         <div className="acciones-fila">

@@ -76,6 +76,39 @@
   color: #991b1b;
 }
 
+.actividad button.kpi-tarjeta {
+  width: 100%;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.actividad button.kpi-tarjeta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(15, 42, 48, 0.12);
+}
+
+.actividad button.kpi-tarjeta[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--color-sidebar), 0 10px 24px rgba(15, 42, 48, 0.06);
+}
+
+.actividad button.kpi-crear[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px #166534, 0 10px 24px rgba(15, 42, 48, 0.06);
+}
+
+.actividad button.kpi-editar[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--color-login), 0 10px 24px rgba(15, 42, 48, 0.06);
+}
+
+.actividad button.kpi-eliminar[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px #991b1b, 0 10px 24px rgba(15, 42, 48, 0.06);
+}
+
 .actividad .comercial-panel {
   padding: 0;
   overflow: hidden;

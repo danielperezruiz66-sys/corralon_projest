@@ -219,9 +219,10 @@ DASHBOARD DE INICIO - FER-CONS
 
 .kpi-etiqueta {
   margin: 0;
-  color: rgba(15, 42, 48, 0.65);
+  color: rgba(15, 42, 48, 0.8);
   font-size: 0.85rem;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -239,8 +240,9 @@ DASHBOARD DE INICIO - FER-CONS
   flex-direction: column;
   gap: 0.15rem;
   margin: 0.25rem 0 0;
-  color: rgba(15, 42, 48, 0.6);
+  color: rgba(15, 42, 48, 0.72);
   font-size: 0.85rem;
+  font-weight: 500;
 }
 
 .kpi-comparacion {
@@ -274,10 +276,39 @@ DASHBOARD DE INICIO - FER-CONS
   font-weight: 600;
 }
 
+.kpi-hoy {
+  border-left-color: #0284c7;
+}
+
+.kpi-hoy .kpi-icono {
+  background-color: #e0f2fe;
+  color: #0284c7;
+}
+
+.kpi-7d {
+  border-left-color: #15803d;
+}
+
+.kpi-7d .kpi-icono {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+
+.kpi-mes {
+  border-left-color: #7c3aed;
+}
+
+.kpi-mes .kpi-icono {
+  background-color: #ede9fe;
+  color: #7c3aed;
+}
+
+.kpi-parciales,
 .kpi-aviso {
   border-left-color: var(--color-aviso);
 }
 
+.kpi-parciales .kpi-icono,
 .kpi-aviso .kpi-icono {
   background-color: #fef3c7;
   color: var(--color-aviso);

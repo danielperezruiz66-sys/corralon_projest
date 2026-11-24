@@ -19,7 +19,8 @@ const COMPROBANTES_POR_PAGINA = 10
 
 export default function Facturacion() {
   const { user, puedeEscribir } = useAuth()
-  const puedeVerEmisor = puedeEscribir(['AD', 'GE'])
+  // Los datos del emisor salen de /empresas/, que es solo para AD.
+  const puedeVerEmisor = puedeEscribir(['AD'])
   const [paginaFacturas, setPaginaFacturas] = useState(1)
 
   const consultar = useCallback(async () => {

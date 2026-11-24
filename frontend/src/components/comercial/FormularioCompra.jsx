@@ -39,6 +39,7 @@ export default function FormularioCompra({
   proveedorInicialDetalle = null,
   productoInicialId = '',
   puedeGestionar = true,
+  puedeEditarProveedores = true,
   onCerrar,
   onGuardado,
 }) {
@@ -83,7 +84,7 @@ export default function FormularioCompra({
   useEffect(() => {
     let vigente = true
 
-    pedirTodas('/movimientos-caja/?estado=AB')
+    pedirTodas('/movimientos-caja/abiertas/')
       .then((seccionesData) => {
         if (!vigente) {
           return
@@ -633,7 +634,11 @@ export default function FormularioCompra({
                   item.cuit ? `CUIT ${item.cuit}` : ''
                 }
                 placeholder="Buscar por nombre o CUIT"
-                onCrear={() => setProveedorRapido(true)}
+                onCrear={
+                  puedeEditarProveedores
+                    ? () => setProveedorRapido(true)
+                    : undefined
+                }
                 tituloCrear="Nuevo proveedor"
                 error={Boolean(errores.proveedor)}
                 mensajeError={errores.proveedor}
@@ -699,7 +704,8 @@ export default function FormularioCompra({
 
             {proveedor &&
               !cargandoProveedor &&
-              productosDelProveedor.length > 0 && (
+              productosDelProveedor.length > 0 &&
+              puedeEditarProveedores && (
                 <div className="productos-proveedor-acciones">
                   <button
                     type="button"
@@ -730,17 +736,20 @@ export default function FormularioCompra({
               productosDelProveedor.length === 0 && (
                 <div className="comercial-nota comercial-nota-acciones">
                   <p>
-                    Este proveedor no tiene productos asociados. Asociá al
-                    menos uno para poder cargar la compra.
+                    {puedeEditarProveedores
+                      ? 'Este proveedor no tiene productos asociados. Asociá al menos uno para poder cargar la compra.'
+                      : 'Este proveedor no tiene productos asociados. Pedile a administración que cargue sus productos y costos.'}
                   </p>
-                  <button
-                    type="button"
-                    className="boton-comercial-secundario"
-                    onClick={() => setProductosProveedorAbierto(true)}
-                  >
-                    <IconPackage size={17} />
-                    Asociar productos
-                  </button>
+                  {puedeEditarProveedores && (
+                    <button
+                      type="button"
+                      className="boton-comercial-secundario"
+                      onClick={() => setProductosProveedorAbierto(true)}
+                    >
+                      <IconPackage size={17} />
+                      Asociar productos
+                    </button>
+                  )}
                 </div>
               )}
 

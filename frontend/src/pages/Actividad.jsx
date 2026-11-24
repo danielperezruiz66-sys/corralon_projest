@@ -77,6 +77,15 @@ export default function Actividad() {
     return p
   }, [busqueda, accion, usuario, fechaDesde, fechaHasta])
 
+  const filtrosResumen = useCallback(() => {
+    const p = new URLSearchParams()
+    if (busqueda) p.set('search', busqueda)
+    if (usuario) p.set('usuario', usuario)
+    if (fechaDesde) p.set('fecha_desde', fechaDesde)
+    if (fechaHasta) p.set('fecha_hasta', fechaHasta)
+    return p
+  }, [busqueda, usuario, fechaDesde, fechaHasta])
+
   const parametros = useCallback(() => {
     const p = filtrosComunes()
     p.set('page', String(pagina))
@@ -94,8 +103,8 @@ export default function Actividad() {
   )
   const consultarResumen = useCallback(
     ({ signal } = {}) =>
-      pedir(`/actividad/resumen/?${filtrosComunes().toString()}`, { signal }),
-    [filtrosComunes],
+      pedir(`/actividad/resumen/?${filtrosResumen().toString()}`, { signal }),
+    [filtrosResumen],
   )
   const consultarEmpleados = useCallback(
     () =>
@@ -116,7 +125,7 @@ export default function Actividad() {
     inicial: PAGINA_VACIA,
   })
   const { datos: resumen } = useCacheModulo({
-    clave: `actividad-resumen|${user?.id ?? ''}|${filtrosComunes().toString()}`,
+    clave: `actividad-resumen|${user?.id ?? ''}|${filtrosResumen().toString()}`,
     consultar: consultarResumen,
     inicial: RESUMEN_VACIO,
   })
@@ -127,6 +136,9 @@ export default function Actividad() {
   })
 
   const buscando = texto.trim() !== busqueda || actualizando
+  const hayFiltros = Boolean(
+    texto || accion || usuario || fechaDesde || fechaHasta,
+  )
 
   function irAPagina(numero) {
     setPagina(numero)
@@ -134,6 +146,15 @@ export default function Actividad() {
 
   function cambiarAccion(nueva) {
     setAccion((actual) => (actual === nueva ? '' : nueva))
+    setPagina(1)
+  }
+
+  function limpiarTodo() {
+    setTexto('')
+    setAccion('')
+    setUsuario('')
+    setFechaDesde('')
+    setFechaHasta('')
     setPagina(1)
   }
 
@@ -191,21 +212,69 @@ export default function Actividad() {
 
           </section>
 
-          <section className="filtros-tabs filtros-pills">
-            {ACCIONES.map((opcion) => (
-              <button
-                key={opcion.id || 'todas'}
-                type="button"
-                className={
-                  accion === opcion.id
-                    ? `activo ${opcion.color}`
-                    : opcion.color
-                }
-                onClick={() => cambiarAccion(opcion.id)}
-              >
-                {opcion.etiqueta}
-              </button>
-            ))}
+          <section className="dashboard-kpis actividad-kpis">
+            <button
+              type="button"
+              className="kpi-tarjeta"
+              onClick={() => cambiarAccion('')}
+              aria-pressed={accion === ''}
+            >
+              <span className="kpi-icono">
+                <IconListDetails size={26} stroke={1.75} />
+              </span>
+              <div className="kpi-contenido">
+                <p className="kpi-etiqueta">Total de registros</p>
+                <p className="kpi-valor">{formatearNumero(totalRegistros)}</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="kpi-tarjeta kpi-crear"
+              onClick={() => cambiarAccion('CREAR')}
+              aria-pressed={accion === 'CREAR'}
+            >
+              <span className="kpi-icono">
+                <IconPlus size={26} stroke={1.75} />
+              </span>
+              <div className="kpi-contenido">
+                <p className="kpi-etiqueta">Creaciones</p>
+                <p className="kpi-valor">
+                  {formatearNumero(porAccion.CREAR || 0)}
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="kpi-tarjeta kpi-editar"
+              onClick={() => cambiarAccion('EDITAR')}
+              aria-pressed={accion === 'EDITAR'}
+            >
+              <span className="kpi-icono">
+                <IconPencil size={26} stroke={1.75} />
+              </span>
+              <div className="kpi-contenido">
+                <p className="kpi-etiqueta">Ediciones</p>
+                <p className="kpi-valor">
+                  {formatearNumero(porAccion.EDITAR || 0)}
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="kpi-tarjeta kpi-eliminar"
+              onClick={() => cambiarAccion('ELIMINAR')}
+              aria-pressed={accion === 'ELIMINAR'}
+            >
+              <span className="kpi-icono">
+                <IconTrash size={26} stroke={1.75} />
+              </span>
+              <div className="kpi-contenido">
+                <p className="kpi-etiqueta">Eliminaciones</p>
+                <p className="kpi-valor">
+                  {formatearNumero(porAccion.ELIMINAR || 0)}
+                </p>
+              </div>
+            </button>
           </section>
 
           <section className="filtros-campos filtros-campos-inline">
@@ -216,7 +285,7 @@ export default function Actividad() {
                 onChange={(e) => {
                   setUsuario(e.target.value)
                   setPagina(1)
-                              }}
+                }}
               >
                 <option value="">Todos</option>
                 {empleados.map((emp) => (
@@ -234,7 +303,7 @@ export default function Actividad() {
                 onChange={(e) => {
                   setFechaDesde(e.target.value)
                   setPagina(1)
-                              }}
+                }}
               />
             </label>
             <label className="campo-comercial">
@@ -245,49 +314,22 @@ export default function Actividad() {
                 onChange={(e) => {
                   setFechaHasta(e.target.value)
                   setPagina(1)
-                              }}
+                }}
               />
             </label>
           </section>
-        </section>
 
-        <section className="dashboard-kpis actividad-kpis">
-          <article className="kpi-tarjeta">
-            <span className="kpi-icono">
-              <IconListDetails size={26} stroke={1.75} />
-            </span>
-            <div className="kpi-contenido">
-              <p className="kpi-etiqueta">Total de registros</p>
-              <p className="kpi-valor">{formatearNumero(totalRegistros)}</p>
+          {hayFiltros && (
+            <div className="filtros-pie">
+              <button
+                type="button"
+                className="boton-comercial-secundario"
+                onClick={limpiarTodo}
+              >
+                Limpiar filtros
+              </button>
             </div>
-          </article>
-          <article className="kpi-tarjeta kpi-crear">
-            <span className="kpi-icono">
-              <IconPlus size={26} stroke={1.75} />
-            </span>
-            <div className="kpi-contenido">
-              <p className="kpi-etiqueta">Creaciones</p>
-              <p className="kpi-valor">{formatearNumero(porAccion.CREAR || 0)}</p>
-            </div>
-          </article>
-          <article className="kpi-tarjeta kpi-editar">
-            <span className="kpi-icono">
-              <IconPencil size={26} stroke={1.75} />
-            </span>
-            <div className="kpi-contenido">
-              <p className="kpi-etiqueta">Ediciones</p>
-              <p className="kpi-valor">{formatearNumero(porAccion.EDITAR || 0)}</p>
-            </div>
-          </article>
-          <article className="kpi-tarjeta kpi-eliminar">
-            <span className="kpi-icono">
-              <IconTrash size={26} stroke={1.75} />
-            </span>
-            <div className="kpi-contenido">
-              <p className="kpi-etiqueta">Eliminaciones</p>
-              <p className="kpi-valor">{formatearNumero(porAccion.ELIMINAR || 0)}</p>
-            </div>
-          </article>
+          )}
         </section>
 
         {error && <p className="comercial-error">{error}</p>}

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import {
   IconDeviceFloppy,
@@ -21,6 +22,7 @@ import { useAuth } from '../context/auth-context';
 import { iniciales } from '../utils/formato';
 import {
   validarEmail,
+  validarFuerzaPassword,
   validarNombre,
   validarTelefono,
 } from '../utils/validaciones';
@@ -48,15 +50,16 @@ const VALIDACIONES = {
 };
 
 function Perfil() {
-  const { user, codigos } = useAuth();
+  const { user, codigos, logout } = useAuth();
+  const navigate = useNavigate();
   const [edicion, setEdicion] = useState(null);
   const [errores, setErrores] = useState({});
   const [guardando, setGuardando] = useState(false);
   const [modalPassword, setModalPassword] = useState(false);
   const [clavesPassword, setClavesPassword] = useState({
-    password_admin: '',
+    password_actual: '',
     password: '',
-    password2: '',
+    password_confirmacion: '',
   });
   const [erroresPassword, setErroresPassword] = useState({});
   const [guardandoPassword, setGuardandoPassword] = useState(false);
@@ -227,7 +230,11 @@ function Perfil() {
   };
 
   const abrirModalPassword = () => {
-    setClavesPassword({ password_admin: '', password: '', password2: '' });
+    setClavesPassword({
+      password_actual: '',
+      password: '',
+      password_confirmacion: '',
+    });
     setErroresPassword({});
     setModalPassword(true);
   };
@@ -248,14 +255,15 @@ function Perfil() {
       return;
     }
     const nuevosErrores = {};
-    if (!clavesPassword.password_admin) {
-      nuevosErrores.password_admin = 'Ingresá tu contraseña actual.';
+    if (!clavesPassword.password_actual) {
+      nuevosErrores.password_actual = 'Ingresá tu contraseña actual.';
     }
-    if (clavesPassword.password.length < 8) {
-      nuevosErrores.password = 'La contraseña debe tener al menos 8 caracteres.';
+    const fuerza = validarFuerzaPassword(clavesPassword.password);
+    if (fuerza) {
+      nuevosErrores.password = fuerza;
     }
-    if (clavesPassword.password !== clavesPassword.password2) {
-      nuevosErrores.password2 = 'Las contraseñas no coinciden.';
+    if (clavesPassword.password !== clavesPassword.password_confirmacion) {
+      nuevosErrores.password_confirmacion = 'Las contraseñas no coinciden.';
     }
     setErroresPassword(nuevosErrores);
     if (Object.keys(nuevosErrores).length > 0) {
@@ -267,22 +275,27 @@ function Perfil() {
       await pedir(`/empleados/${datos.empleado.id}/cambiar-password/`, {
         method: 'POST',
         body: {
-          password_admin: clavesPassword.password_admin,
+          password_actual: clavesPassword.password_actual,
           password: clavesPassword.password,
-          password2: clavesPassword.password2,
+          password_confirmacion: clavesPassword.password_confirmacion,
         },
       });
       cerrarModalPassword();
+      // El backend invalida los refresh tokens del empleado: se cierra la
+      // sesión y se pide ingresar con la contraseña nueva.
+      logout();
+      navigate('/login', { replace: true });
       Swal.fire({
         icon: 'success',
         title: 'Contraseña actualizada',
-        text: 'Se cerraron tus sesiones activas.',
+        text: 'Ingresá nuevamente con tu contraseña nueva.',
       });
     } catch (err) {
       const detalles = err?.campos ?? {};
       setErroresPassword({
         ...detalles,
-        password_admin: detalles.password_admin ?? detalles.password_actual ?? '',
+        password_actual:
+          detalles.password_actual ?? detalles.password_admin ?? '',
       });
     } finally {
       setGuardandoPassword(false);
@@ -307,7 +320,11 @@ function Perfil() {
         <Encabezado titulo="Perfil" subtitulo="Datos de tu cuenta" />
         <div className="perfil-error">
           <span>{error}</span>
-          <button type="button" className="boton-secundario-perfil" onClick={cargar}>
+          <button
+            type="button"
+            className="boton-secundario-perfil"
+            onClick={() => refrescar(true)}
+          >
             Reintentar
           </button>
         </div>
@@ -352,7 +369,7 @@ function Perfil() {
           </div>
 
           <div className="contenedor-boton-guardar-perfil">
-            {esAdministrador ? (
+            {esAdministrador && (
               <>
                 <button
                   type="submit"
@@ -362,24 +379,26 @@ function Perfil() {
                   <IconDeviceFloppy size={18} stroke={1.9} />
                   {guardando ? 'Guardando…' : 'Guardar cambios'}
                 </button>
-                {datos?.empleado && (
-                  <button
-                    type="button"
-                    className="boton-cambiar-pass"
-                    onClick={abrirModalPassword}
-                  >
-                    <IconKey size={18} stroke={1.9} />
-                    Cambiar contraseña
-                  </button>
-                )}
                 {!hayCambios && !guardando && (
                   <span className="panel-actualizando">Sin cambios pendientes</span>
                 )}
               </>
-            ) : (
+            )}
+            {!esAdministrador && (
               <span className="aviso-lectura-perfil">
-                Solo un administrador puede modificar estos datos.
+                Un administrador gestiona tus datos personales. Podés cambiar
+                tu contraseña cuando quieras.
               </span>
+            )}
+            {datos?.empleado && (
+              <button
+                type="button"
+                className="boton-cambiar-pass"
+                onClick={abrirModalPassword}
+              >
+                <IconKey size={18} stroke={1.9} />
+                Cambiar contraseña
+              </button>
             )}
             {guardando && (
               <span className="panel-actualizando">
@@ -414,13 +433,13 @@ function Perfil() {
                   <span>Contraseña actual</span>
                   <input
                     type="password"
-                    value={clavesPassword.password_admin}
+                    value={clavesPassword.password_actual}
                     onChange={(evento) =>
-                      setClavePassword('password_admin', evento.target.value)
+                      setClavePassword('password_actual', evento.target.value)
                     }
                     autoComplete="current-password"
                   />
-                  <MensajeError>{erroresPassword.password_admin}</MensajeError>
+                  <MensajeError>{erroresPassword.password_actual}</MensajeError>
                 </div>
                 <div className="campo-modal-datos">
                   <span>Nueva contraseña</span>
@@ -438,13 +457,18 @@ function Perfil() {
                   <span>Repetir contraseña</span>
                   <input
                     type="password"
-                    value={clavesPassword.password2}
+                    value={clavesPassword.password_confirmacion}
                     onChange={(evento) =>
-                      setClavePassword('password2', evento.target.value)
+                      setClavePassword(
+                        'password_confirmacion',
+                        evento.target.value,
+                      )
                     }
                     autoComplete="new-password"
                   />
-                  <MensajeError>{erroresPassword.password2}</MensajeError>
+                  <MensajeError>
+                    {erroresPassword.password_confirmacion}
+                  </MensajeError>
                 </div>
               </div>
               <p className="nota-perfil">
